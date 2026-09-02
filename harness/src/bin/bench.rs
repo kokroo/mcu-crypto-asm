@@ -20,6 +20,17 @@ use nistp_mcu::{backend, p256, p384};
 
 use panic_semihosting as _;
 
+/// Emill's hand-optimised P-256 Montgomery multiply, wrapped in AAPCS by
+/// `third_party/emill/shim.S`. This is the reference implementation for P-256
+/// on Cortex-M4 — the thing to actually beat.
+#[cfg(emill)]
+extern "C" {
+    fn emill_p256_mulmod(out: *mut u32, a: *const u32, b: *const u32);
+}
+
+#[cfg(emill)]
+static mut EMILL_TICKS: u32 = 0;
+
 const DEMCR: *mut u32 = 0xE000_EDFC as *mut u32;
 const DWT_CTRL: *mut u32 = 0xE000_1000 as *mut u32;
 const DWT_CYCCNT: *mut u32 = 0xE000_1004 as *mut u32;
@@ -202,6 +213,39 @@ fn main() -> ! {
         fiat_p256_mul(black_box(&mut fo), black_box(&fa), black_box(&fb));
     });
 
+    // Emill: the hand-optimised P-256 reference.
+    #[cfg(emill)]
+    {
+        let mut eo = [0u32; 8];
+        // Cross-check first: an independent implementation agreeing on the
+        // result validates both, and catches any Montgomery-convention
+        // mismatch that would make the timing comparison meaningless.
+        unsafe {
+            emill_p256_mulmod(
+                eo.as_mut_ptr(),
+                a256.as_mont_limbs().as_ptr(),
+                b256.as_mont_limbs().as_ptr(),
+            );
+        }
+        let ours = a256.mul(&p256::FIELD, &b256);
+        if &eo == ours.as_mont_limbs() {
+            let emill = bench!("Emill P256_mulmod (asm)", ITERS, {
+                unsafe {
+                    emill_p256_mulmod(
+                        black_box(eo.as_mut_ptr()),
+                        black_box(a256.as_mont_limbs().as_ptr()),
+                        black_box(b256.as_mont_limbs().as_ptr()),
+                    );
+                }
+            });
+            unsafe { EMILL_TICKS = emill };
+        } else {
+            hprintln!("  Emill P256_mulmod: RESULT MISMATCH - not comparable");
+            hprintln!("    ours  {:08x?}", ours.as_mont_limbs());
+            hprintln!("    emill {:08x?}", eo);
+        }
+    }
+
     // --- P-384 ---
     hprintln!("P-384 modular multiplication:");
     let a384 = p384::from_int(&[
@@ -225,9 +269,27 @@ fn main() -> ! {
     });
 
     hprintln!("");
-    hprintln!("speedup vs fiat-crypto:");
+    hprintln!("vs fiat-crypto (what RustCrypto p256/p384 ship):");
     report("P-256", fiat256, ours256);
     report("P-384", fiat384, ours384);
+
+    #[cfg(emill)]
+    unsafe {
+        if EMILL_TICKS != 0 {
+            hprintln!("");
+            hprintln!("vs Emill P256-Cortex-M4 (hand-optimised P-256 reference):");
+            if EMILL_TICKS <= ours256 {
+                let h = (ours256 as u64 * 100) / EMILL_TICKS as u64;
+                hprintln!(
+                    "  P-256: Emill is {}.{:02}x FASTER than us ({} vs {} ticks)",
+                    h / 100, h % 100, EMILL_TICKS, ours256
+                );
+            } else {
+                report("P-256", EMILL_TICKS, ours256);
+            }
+            hprintln!("  P-384: no comparison exists - Emill implements P-256 only");
+        }
+    }
 
     debug::exit(debug::EXIT_SUCCESS);
     loop {}

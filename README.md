@@ -25,12 +25,33 @@ arithmetic that the RustCrypto `p256`/`p384` crates vendor internally, so
 `fiat_p256_mul` is *the same operation* as our `mul_mont` — a true head-to-head
 rather than a comparison across abstraction levels.
 
-| operation | fiat-crypto | nistp-mcu | speedup |
-|---|---|---|---|
-| P-256 modular multiply | 32925 | 19050 | **1.72×** |
-| P-384 modular multiply | 57125 | 38650 | **1.47×** |
+| operation | fiat-crypto | nistp-mcu | Emill | verdict |
+|---|---|---|---|---|
+| P-256 modular multiply | 32925 | 19050 | **4750** | **Emill wins, 4.01× over us** |
+| P-384 modular multiply | 57125 | **38650** | n/a | **we win, 1.47×** |
 
 *Ticks per 1000 operations, QEMU `mps2-an386` with `-icount shift=0`.*
+All three agree on the result — the benchmark cross-checks Emill's output
+against ours before timing anything, so this compares identical work.
+
+### Read this before using it
+
+**On Cortex-M4, use Emill for P-256.** He is 4× faster and this crate does not
+change that. The measured reason is memory traffic: our CIOS inner step is four
+instructions (`ldr`, `ldr`, `umaal`, `str`) where his is essentially one,
+because he keeps the accumulator in registers — using the **FPU registers as
+scratch** (`vldm r1,{s8-s15}`) to escape Cortex-M4's register pressure — while
+we spill `t[]` to the stack. Closing that gap is a restructuring job, not a
+tweak, and it is the main open work item.
+
+Where this crate is actually the best option available:
+
+- **P-384 on any MCU** — 1.47× faster than fiat-crypto, and there is no
+  hand-optimised P-384 to compete with. This is the real gap it fills.
+- **Xtensa LX7 (ESP32-S2/S3)** — the only optimised implementation, on a chip
+  with no ECC accelerator at all.
+- **Anywhere you want one implementation across arches**, with the portable
+  backend as the fallback.
 
 ⚠️ **These are instruction-proportional, not hardware cycles.** QEMU's mps2
 machines do not implement DWT CYCCNT, so the harness falls back to SysTick, which
@@ -121,13 +142,11 @@ and each harness confirmed to fail — so a green run means something.
 - **Hardware cycle counts.** The bench boards (nRF52840 Cortex-M4 + ESP32-S3,
   both on J-Link) were in use; nothing has been flashed. The same benchmark
   binary reports exact DWT CYCCNT cycles when run there.
-- **Emill head-to-head.** His `P256_mulmod` is a non-AAPCS internal symbol
-  (inputs in r1/r2, result returned in r0–r7, clobbers everything) so it needs a
-  hand-written shim. Worth doing, and **he is expected to win on P-256**: his
-  code uses the FPU registers as extra scratch (`vldm r1,{s8-s15}`) to escape
-  Cortex-M4's register pressure, where this generic CIOS spills `t[]` to the
-  stack. That is the top optimisation lead here. P-384 has no equivalent to
-  compare against.
+- **Register-resident accumulator (the big one).** Now measured: Emill is 4.01×
+  faster on P-256 purely because his accumulator never touches memory. Getting
+  close needs `t[]` held in registers, which on Cortex-M4 means using the FPU
+  bank as scratch the way he does. Until then, P-256 users on Cortex-M4 should
+  use his library.
 - **Point arithmetic / ECDH / ECDSA.** This crate is the field layer only.
 - **Squaring** currently routes through `mul_mont`; a dedicated routine skips
   ~half the partial products.
