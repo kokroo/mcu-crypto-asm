@@ -51,7 +51,7 @@ const CM4_SRC: &str = include_str!("../asm/cortex_m4.S");
 /// `it`-block conditional forms.
 const CM4_ALLOWED: &[&str] = &[
     "ldr", "str", "umaal", "eor", "and", "orr", "mov", "mov.w", "add", "adds", "adc.w", "sub",
-    "subs", "sbc", "sbcs", "push", "pop", "bne",
+    "subs", "sbc", "sbcs", "push", "pop", "bne", "mvn", "movw", "movt",
 ];
 
 #[test]

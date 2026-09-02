@@ -20,6 +20,9 @@ nistp_mul_mont_8:
 	sub	sp, sp, #40
 	mov	r4, sp
 	mov	r11, #0			@ permanent zero, for carry-only adds
+	@ modulus limbs live in registers: 0x00000000->r11, 0x00000001->r12, 0xffffffff->lr
+	mov	r12, #1
+	mvn	lr, #0			@ 0xffffffff
 	@ t = 0
 	mov	r7, #0
 	str	r7, [r4, #0]
@@ -75,36 +78,28 @@ nistp_mul_mont_8:
 	str	r7, [r4, #36]	@ t[9] = carry
 	ldr	r5, [r4, #0]		@ m = t[0]  (n0inv == 1)
 	mov	r6, #0
-	ldr	r8, [r3, #0]
 	ldr	r7, [r4, #0]
-	umaal	r7, r6, r5, r8		@ low word cancels; keep C only
-	ldr	r8, [r3, #4]
+	umaal	r7, r6, r5, lr		@ low word cancels; keep C only
 	ldr	r7, [r4, #4]
-	umaal	r7, r6, r5, r8
+	umaal	r7, r6, r5, lr		@ p[1] = 0xffffffff
 	str	r7, [r4, #0]	@ t[0] = t[1] + m*p[1] + C
-	ldr	r8, [r3, #8]
 	ldr	r7, [r4, #8]
-	umaal	r7, r6, r5, r8
+	umaal	r7, r6, r5, lr		@ p[2] = 0xffffffff
 	str	r7, [r4, #4]	@ t[1] = t[2] + m*p[2] + C
-	ldr	r8, [r3, #12]
 	ldr	r7, [r4, #12]
-	umaal	r7, r6, r5, r8
+	umaal	r7, r6, r5, r11		@ p[3] = 0x00000000
 	str	r7, [r4, #8]	@ t[2] = t[3] + m*p[3] + C
-	ldr	r8, [r3, #16]
 	ldr	r7, [r4, #16]
-	umaal	r7, r6, r5, r8
+	umaal	r7, r6, r5, r11		@ p[4] = 0x00000000
 	str	r7, [r4, #12]	@ t[3] = t[4] + m*p[4] + C
-	ldr	r8, [r3, #20]
 	ldr	r7, [r4, #20]
-	umaal	r7, r6, r5, r8
+	umaal	r7, r6, r5, r11		@ p[5] = 0x00000000
 	str	r7, [r4, #16]	@ t[4] = t[5] + m*p[5] + C
-	ldr	r8, [r3, #24]
 	ldr	r7, [r4, #24]
-	umaal	r7, r6, r5, r8
+	umaal	r7, r6, r5, r12		@ p[6] = 0x00000001
 	str	r7, [r4, #20]	@ t[5] = t[6] + m*p[6] + C
-	ldr	r8, [r3, #28]
 	ldr	r7, [r4, #28]
-	umaal	r7, r6, r5, r8
+	umaal	r7, r6, r5, lr		@ p[7] = 0xffffffff
 	str	r7, [r4, #24]	@ t[6] = t[7] + m*p[7] + C
 	ldr	r7, [r4, #32]
 	adds	r7, r7, r6
@@ -215,6 +210,9 @@ nistp_mul_mont_12:
 	sub	sp, sp, #56
 	mov	r4, sp
 	mov	r11, #0			@ permanent zero, for carry-only adds
+	@ modulus limbs live in registers: 0x00000000->r11, 0xfffffffe->r12, 0xffffffff->lr
+	mvn	r12, #1			@ 0xfffffffe
+	mvn	lr, #0			@ 0xffffffff
 	@ t = 0
 	mov	r7, #0
 	str	r7, [r4, #0]
@@ -290,52 +288,40 @@ nistp_mul_mont_12:
 	str	r7, [r4, #52]	@ t[13] = carry
 	ldr	r5, [r4, #0]		@ m = t[0]  (n0inv == 1)
 	mov	r6, #0
-	ldr	r8, [r3, #0]
 	ldr	r7, [r4, #0]
-	umaal	r7, r6, r5, r8		@ low word cancels; keep C only
-	ldr	r8, [r3, #4]
+	umaal	r7, r6, r5, lr		@ low word cancels; keep C only
 	ldr	r7, [r4, #4]
-	umaal	r7, r6, r5, r8
+	umaal	r7, r6, r5, r11		@ p[1] = 0x00000000
 	str	r7, [r4, #0]	@ t[0] = t[1] + m*p[1] + C
-	ldr	r8, [r3, #8]
 	ldr	r7, [r4, #8]
-	umaal	r7, r6, r5, r8
+	umaal	r7, r6, r5, r11		@ p[2] = 0x00000000
 	str	r7, [r4, #4]	@ t[1] = t[2] + m*p[2] + C
-	ldr	r8, [r3, #12]
 	ldr	r7, [r4, #12]
-	umaal	r7, r6, r5, r8
+	umaal	r7, r6, r5, lr		@ p[3] = 0xffffffff
 	str	r7, [r4, #8]	@ t[2] = t[3] + m*p[3] + C
-	ldr	r8, [r3, #16]
 	ldr	r7, [r4, #16]
-	umaal	r7, r6, r5, r8
+	umaal	r7, r6, r5, r12		@ p[4] = 0xfffffffe
 	str	r7, [r4, #12]	@ t[3] = t[4] + m*p[4] + C
-	ldr	r8, [r3, #20]
 	ldr	r7, [r4, #20]
-	umaal	r7, r6, r5, r8
+	umaal	r7, r6, r5, lr		@ p[5] = 0xffffffff
 	str	r7, [r4, #16]	@ t[4] = t[5] + m*p[5] + C
-	ldr	r8, [r3, #24]
 	ldr	r7, [r4, #24]
-	umaal	r7, r6, r5, r8
+	umaal	r7, r6, r5, lr		@ p[6] = 0xffffffff
 	str	r7, [r4, #20]	@ t[5] = t[6] + m*p[6] + C
-	ldr	r8, [r3, #28]
 	ldr	r7, [r4, #28]
-	umaal	r7, r6, r5, r8
+	umaal	r7, r6, r5, lr		@ p[7] = 0xffffffff
 	str	r7, [r4, #24]	@ t[6] = t[7] + m*p[7] + C
-	ldr	r8, [r3, #32]
 	ldr	r7, [r4, #32]
-	umaal	r7, r6, r5, r8
+	umaal	r7, r6, r5, lr		@ p[8] = 0xffffffff
 	str	r7, [r4, #28]	@ t[7] = t[8] + m*p[8] + C
-	ldr	r8, [r3, #36]
 	ldr	r7, [r4, #36]
-	umaal	r7, r6, r5, r8
+	umaal	r7, r6, r5, lr		@ p[9] = 0xffffffff
 	str	r7, [r4, #32]	@ t[8] = t[9] + m*p[9] + C
-	ldr	r8, [r3, #40]
 	ldr	r7, [r4, #40]
-	umaal	r7, r6, r5, r8
+	umaal	r7, r6, r5, lr		@ p[10] = 0xffffffff
 	str	r7, [r4, #36]	@ t[9] = t[10] + m*p[10] + C
-	ldr	r8, [r3, #44]
 	ldr	r7, [r4, #44]
-	umaal	r7, r6, r5, r8
+	umaal	r7, r6, r5, lr		@ p[11] = 0xffffffff
 	str	r7, [r4, #40]	@ t[10] = t[11] + m*p[11] + C
 	ldr	r7, [r4, #48]
 	adds	r7, r7, r6

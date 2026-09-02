@@ -27,8 +27,8 @@ rather than a comparison across abstraction levels.
 
 | operation | fiat-crypto | nistp-mcu | Emill | verdict |
 |---|---|---|---|---|
-| P-256 modular multiply | 32925 | 19050 | **4750** | **Emill wins, 4.01× over us** |
-| P-384 modular multiply | 57125 | **38650** | n/a | **we win, 1.47×** |
+| P-256 modular multiply | 32926 | 17501 | **4750** | **Emill wins, 3.68× over us** |
+| P-384 modular multiply | 57125 | **35100** | n/a | **we win, 1.62×** |
 
 *Ticks per 1000 operations, QEMU `mps2-an386` with `-icount shift=0`.*
 All three agree on the result — the benchmark cross-checks Emill's output
@@ -36,7 +36,7 @@ against ours before timing anything, so this compares identical work.
 
 ### Read this before using it
 
-**On Cortex-M4, use Emill for P-256.** He is 4× faster and this crate does not
+**On Cortex-M4, use Emill for P-256.** He is 3.7× faster and this crate does not
 change that. The measured reason is memory traffic: our CIOS inner step is four
 instructions (`ldr`, `ldr`, `umaal`, `str`) where his is essentially one,
 because he keeps the accumulator in registers — using the **FPU registers as
@@ -46,7 +46,7 @@ tweak, and it is the main open work item.
 
 Where this crate is actually the best option available:
 
-- **P-384 on any MCU** — 1.47× faster than fiat-crypto, and there is no
+- **P-384 on any MCU** — 1.62× faster than fiat-crypto, and there is no
   hand-optimised P-384 to compete with. This is the real gap it fills.
 - **Xtensa LX7 (ESP32-S2/S3)** — the only optimised implementation, on a chip
   with no ECC accelerator at all.
@@ -95,6 +95,13 @@ Performance on a 32-bit MCU is decided almost entirely by one operation, so the
 assembly surface is deliberately tiny: `mul_mont` and nothing else. Everything
 above the field layer stays portable Rust.
 
+**The modulus is a constant, so treat it like one.** Each NIST prime has only
+three distinct limb values. On Cortex-M4 they are held in registers (`mvn r12,#0`
+etc.), removing one `ldr` from every reduction step — n² loads per multiply. On
+Xtensa, where a full step costs 11 instructions, limbs equal to 0 or 1 skip the
+product entirely (5 and 8 instructions respectively). Together this moved P-256
+from 1.72× to 1.88× and P-384 from 1.47× to 1.62×.
+
 **Montgomery CIOS, and one lucky fact.** Both NIST primes satisfy
 `p ≡ -1 (mod 2^32)`, so `n0' = -p⁻¹ mod 2^32 == 1` and the per-word reduction
 multiplier `m = t[0] * n0'` collapses to `m = t[0]` — no multiply at all.
@@ -129,7 +136,7 @@ silent carry bugs happen.
 | | correctness | speed |
 |---|---|---|
 | portable (host) | ✅ vs `num-bigint`, incl. carry edge cases | — |
-| Cortex-M4 (QEMU `mps2-an386`) | ✅ 16 KAT + 500 differential / curve | ✅ 1.72× / 1.47× vs fiat-crypto |
+| Cortex-M4 (QEMU `mps2-an386`) | ✅ 128 KAT + 500 differential / curve | ✅ 1.88× / 1.62× vs fiat-crypto |
 | Cortex-M7 (QEMU `mps2-an500`) | ✅ same binary, all pass | — |
 | Xtensa LX7 (QEMU `esp32s3`) | ✅ 128 vectors / curve | ⏳ pending |
 | real hardware | ⏳ pending | ⏳ pending |
@@ -142,7 +149,7 @@ and each harness confirmed to fail — so a green run means something.
 - **Hardware cycle counts.** The bench boards (nRF52840 Cortex-M4 + ESP32-S3,
   both on J-Link) were in use; nothing has been flashed. The same benchmark
   binary reports exact DWT CYCCNT cycles when run there.
-- **Register-resident accumulator (the big one).** Now measured: Emill is 4.01×
+- **Register-resident accumulator (the big one).** Now measured: Emill is 3.68×
   faster on P-256 purely because his accumulator never touches memory. Getting
   close needs `t[]` held in registers, which on Cortex-M4 means using the FPU
   bank as scratch the way he does. Until then, P-256 users on Cortex-M4 should

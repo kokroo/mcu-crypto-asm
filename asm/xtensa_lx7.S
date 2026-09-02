@@ -146,7 +146,7 @@ nistp_mul_mont_8:
 	saltu	a12, a15, a9
 	add	a11, a11, a12
 	mov	a8, a11			# keep only the carry
-	l32i	a10, a5, 4		# p[1]
+	l32i	a10, a5, 4		# p[1] = 0xffffffff
 	l32i	a9, a6, 4		# t[1]
 	mull	a15, a10, a7
 	muluh	a11, a10, a7
@@ -158,7 +158,7 @@ nistp_mul_mont_8:
 	add	a11, a11, a12
 	mov	a8, a11
 	s32i	a15, a6, 0	# t[0]
-	l32i	a10, a5, 8		# p[2]
+	l32i	a10, a5, 8		# p[2] = 0xffffffff
 	l32i	a9, a6, 8		# t[2]
 	mull	a15, a10, a7
 	muluh	a11, a10, a7
@@ -170,55 +170,26 @@ nistp_mul_mont_8:
 	add	a11, a11, a12
 	mov	a8, a11
 	s32i	a15, a6, 4	# t[1]
-	l32i	a10, a5, 12		# p[3]
-	l32i	a9, a6, 12		# t[3]
-	mull	a15, a10, a7
-	muluh	a11, a10, a7
-	add	a15, a15, a9
+	l32i	a9, a6, 12		# t[3], p[3] == 0
+	add	a15, a9, a8
+	saltu	a8, a15, a9		# C = carry out
+	s32i	a15, a6, 8	# t[2] = t[3] + C
+	l32i	a9, a6, 16		# t[4], p[4] == 0
+	add	a15, a9, a8
+	saltu	a8, a15, a9		# C = carry out
+	s32i	a15, a6, 12	# t[3] = t[4] + C
+	l32i	a9, a6, 20		# t[5], p[5] == 0
+	add	a15, a9, a8
+	saltu	a8, a15, a9		# C = carry out
+	s32i	a15, a6, 16	# t[4] = t[5] + C
+	l32i	a9, a6, 24		# t[6], p[6] == 1
+	add	a15, a9, a7		# + m
 	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11
-	s32i	a15, a6, 8	# t[2]
-	l32i	a10, a5, 16		# p[4]
-	l32i	a9, a6, 16		# t[4]
-	mull	a15, a10, a7
-	muluh	a11, a10, a7
-	add	a15, a15, a9
-	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11
-	s32i	a15, a6, 12	# t[3]
-	l32i	a10, a5, 20		# p[5]
-	l32i	a9, a6, 20		# t[5]
-	mull	a15, a10, a7
-	muluh	a11, a10, a7
-	add	a15, a15, a9
-	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11
-	s32i	a15, a6, 16	# t[4]
-	l32i	a10, a5, 24		# p[6]
-	l32i	a9, a6, 24		# t[6]
-	mull	a15, a10, a7
-	muluh	a11, a10, a7
-	add	a15, a15, a9
-	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11
+	add	a15, a15, a8		# + C
+	saltu	a14, a15, a8
+	add	a8, a12, a14		# C = carry out (<= 1)
 	s32i	a15, a6, 20	# t[5]
-	l32i	a10, a5, 28		# p[7]
+	l32i	a10, a5, 28		# p[7] = 0xffffffff
 	l32i	a9, a6, 28		# t[7]
 	mull	a15, a10, a7
 	muluh	a11, a10, a7
@@ -547,31 +518,15 @@ nistp_mul_mont_12:
 	saltu	a12, a15, a9
 	add	a11, a11, a12
 	mov	a8, a11			# keep only the carry
-	l32i	a10, a5, 4		# p[1]
-	l32i	a9, a6, 4		# t[1]
-	mull	a15, a10, a7
-	muluh	a11, a10, a7
-	add	a15, a15, a9
-	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11
-	s32i	a15, a6, 0	# t[0]
-	l32i	a10, a5, 8		# p[2]
-	l32i	a9, a6, 8		# t[2]
-	mull	a15, a10, a7
-	muluh	a11, a10, a7
-	add	a15, a15, a9
-	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11
-	s32i	a15, a6, 4	# t[1]
-	l32i	a10, a5, 12		# p[3]
+	l32i	a9, a6, 4		# t[1], p[1] == 0
+	add	a15, a9, a8
+	saltu	a8, a15, a9		# C = carry out
+	s32i	a15, a6, 0	# t[0] = t[1] + C
+	l32i	a9, a6, 8		# t[2], p[2] == 0
+	add	a15, a9, a8
+	saltu	a8, a15, a9		# C = carry out
+	s32i	a15, a6, 4	# t[1] = t[2] + C
+	l32i	a10, a5, 12		# p[3] = 0xffffffff
 	l32i	a9, a6, 12		# t[3]
 	mull	a15, a10, a7
 	muluh	a11, a10, a7
@@ -583,7 +538,7 @@ nistp_mul_mont_12:
 	add	a11, a11, a12
 	mov	a8, a11
 	s32i	a15, a6, 8	# t[2]
-	l32i	a10, a5, 16		# p[4]
+	l32i	a10, a5, 16		# p[4] = 0xfffffffe
 	l32i	a9, a6, 16		# t[4]
 	mull	a15, a10, a7
 	muluh	a11, a10, a7
@@ -595,7 +550,7 @@ nistp_mul_mont_12:
 	add	a11, a11, a12
 	mov	a8, a11
 	s32i	a15, a6, 12	# t[3]
-	l32i	a10, a5, 20		# p[5]
+	l32i	a10, a5, 20		# p[5] = 0xffffffff
 	l32i	a9, a6, 20		# t[5]
 	mull	a15, a10, a7
 	muluh	a11, a10, a7
@@ -607,7 +562,7 @@ nistp_mul_mont_12:
 	add	a11, a11, a12
 	mov	a8, a11
 	s32i	a15, a6, 16	# t[4]
-	l32i	a10, a5, 24		# p[6]
+	l32i	a10, a5, 24		# p[6] = 0xffffffff
 	l32i	a9, a6, 24		# t[6]
 	mull	a15, a10, a7
 	muluh	a11, a10, a7
@@ -619,7 +574,7 @@ nistp_mul_mont_12:
 	add	a11, a11, a12
 	mov	a8, a11
 	s32i	a15, a6, 20	# t[5]
-	l32i	a10, a5, 28		# p[7]
+	l32i	a10, a5, 28		# p[7] = 0xffffffff
 	l32i	a9, a6, 28		# t[7]
 	mull	a15, a10, a7
 	muluh	a11, a10, a7
@@ -631,7 +586,7 @@ nistp_mul_mont_12:
 	add	a11, a11, a12
 	mov	a8, a11
 	s32i	a15, a6, 24	# t[6]
-	l32i	a10, a5, 32		# p[8]
+	l32i	a10, a5, 32		# p[8] = 0xffffffff
 	l32i	a9, a6, 32		# t[8]
 	mull	a15, a10, a7
 	muluh	a11, a10, a7
@@ -643,7 +598,7 @@ nistp_mul_mont_12:
 	add	a11, a11, a12
 	mov	a8, a11
 	s32i	a15, a6, 28	# t[7]
-	l32i	a10, a5, 36		# p[9]
+	l32i	a10, a5, 36		# p[9] = 0xffffffff
 	l32i	a9, a6, 36		# t[9]
 	mull	a15, a10, a7
 	muluh	a11, a10, a7
@@ -655,7 +610,7 @@ nistp_mul_mont_12:
 	add	a11, a11, a12
 	mov	a8, a11
 	s32i	a15, a6, 32	# t[8]
-	l32i	a10, a5, 40		# p[10]
+	l32i	a10, a5, 40		# p[10] = 0xffffffff
 	l32i	a9, a6, 40		# t[10]
 	mull	a15, a10, a7
 	muluh	a11, a10, a7
@@ -667,7 +622,7 @@ nistp_mul_mont_12:
 	add	a11, a11, a12
 	mov	a8, a11
 	s32i	a15, a6, 36	# t[9]
-	l32i	a10, a5, 44		# p[11]
+	l32i	a10, a5, 44		# p[11] = 0xffffffff
 	l32i	a9, a6, 44		# t[11]
 	mull	a15, a10, a7
 	muluh	a11, a10, a7
