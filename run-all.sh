@@ -3,6 +3,9 @@
 # constant-time, and Xtensa LX7 correctness. Non-zero exit on any failure.
 set -uo pipefail
 cd "$(dirname "$0")"
+# cargo lives here on a non-login shell; without this every cargo step
+# silently "fails" with command not found while the QEMU steps still pass.
+export PATH="$HOME/.cargo/bin:$PATH"
 fail=0
 run() { echo; echo "=== $1 ==="; shift; "$@" || { echo "FAILED"; fail=1; }; }
 
