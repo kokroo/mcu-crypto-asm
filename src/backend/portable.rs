@@ -1,0 +1,126 @@
+//! Portable 32-bit Montgomery arithmetic (CIOS).
+//!
+//! This is the reference implementation: every assembly backend is
+//! differential-tested against it, and it is the fallback on architectures
+//! with no hand-written backend.
+//!
+//! Everything here is constant time with respect to the *values* of the
+//! operands. Loop trip counts depend only on the limb count, which is a
+//! compile-time property of the curve, never a secret.
+
+/// Coarsely Integrated Operand Scanning Montgomery multiply.
+///
+/// Computes `out = a * b * R^-1 mod p`, where `R = 2^(32*n)`.
+///
+/// `n0inv` is `-p^-1 mod 2^32`. For both P-256 and P-384 the low word of `p`
+/// is `0xFFFFFFFF`, i.e. `p ≡ -1 (mod 2^32)`, so `p^-1 ≡ -1` and `n0inv == 1`.
+/// The assembly backends hard-code that and drop the multiply entirely.
+///
+/// Requires `a.len() == b.len() == p.len() == out.len()` and `len <= 14`.
+#[inline]
+pub fn mul_mont(a: &[u32], b: &[u32], p: &[u32], n0inv: u32, out: &mut [u32]) {
+    let n = a.len();
+    debug_assert!(n <= 14 && b.len() == n && p.len() == n && out.len() == n);
+
+    // t needs n + 2 words of headroom.
+    let mut t = [0u32; 16];
+
+    for i in 0..n {
+        // --- t += a * b[i] ---
+        let bi = b[i] as u64;
+        let mut c: u32 = 0;
+        for j in 0..n {
+            // The single operation the whole design is built around:
+            //   (c, t[j]) = t[j] + a[j]*b[i] + c
+            // Cannot overflow 64 bits: (2^32-1)^2 + 2(2^32-1) = 2^64-1.
+            // On Cortex-M4 this is one UMAAL. On Xtensa it is eight ops.
+            let x = (a[j] as u64) * bi + (t[j] as u64) + (c as u64);
+            t[j] = x as u32;
+            c = (x >> 32) as u32;
+        }
+        let x = (t[n] as u64) + (c as u64);
+        t[n] = x as u32;
+        t[n + 1] = (x >> 32) as u32;
+
+        // --- Montgomery reduce one word ---
+        let m = t[0].wrapping_mul(n0inv);
+        // Discard the low word: by construction t[0] + m*p[0] ≡ 0 mod 2^32.
+        let x = (m as u64) * (p[0] as u64) + (t[0] as u64);
+        c = (x >> 32) as u32;
+        for j in 1..n {
+            let x = (m as u64) * (p[j] as u64) + (t[j] as u64) + (c as u64);
+            t[j - 1] = x as u32;
+            c = (x >> 32) as u32;
+        }
+        let x = (t[n] as u64) + (c as u64);
+        t[n - 1] = x as u32;
+        t[n] = t[n + 1].wrapping_add((x >> 32) as u32);
+    }
+
+    // CIOS leaves t < 2p, so the extra word is 0 or 1 and one conditional
+    // subtraction suffices.
+    cond_sub_p(&t[..n], t[n], p, out);
+}
+
+/// `out = (hi:t) - p` if that does not go negative, else `out = t`.
+/// Branchless and index-independent: both results are computed, one selected.
+#[inline]
+fn cond_sub_p(t: &[u32], hi: u32, p: &[u32], out: &mut [u32]) {
+    let n = t.len();
+    let mut diff = [0u32; 16];
+
+    let mut borrow = 0u32;
+    for j in 0..n {
+        let (r1, b1) = t[j].overflowing_sub(p[j]);
+        let (r2, b2) = r1.overflowing_sub(borrow);
+        diff[j] = r2;
+        borrow = (b1 as u32) | (b2 as u32);
+    }
+
+    // If hi < borrow the subtraction underflowed overall => keep t.
+    // hi is 0 or 1, borrow is 0 or 1, so this is a plain comparison.
+    let underflow = (hi < borrow) as u32;
+    let mask = underflow.wrapping_sub(1); // 0 => 0xFFFFFFFF (take diff)
+
+    for j in 0..n {
+        out[j] = (diff[j] & mask) | (t[j] & !mask);
+    }
+}
+
+/// `out = a + b mod p`
+#[inline]
+pub fn add_mod(a: &[u32], b: &[u32], p: &[u32], out: &mut [u32]) {
+    let n = a.len();
+    let mut t = [0u32; 16];
+    let mut carry = 0u32;
+    for j in 0..n {
+        let (r1, c1) = a[j].overflowing_add(b[j]);
+        let (r2, c2) = r1.overflowing_add(carry);
+        t[j] = r2;
+        carry = (c1 as u32) | (c2 as u32);
+    }
+    cond_sub_p(&t[..n], carry, p, out);
+}
+
+/// `out = a - b mod p`
+#[inline]
+pub fn sub_mod(a: &[u32], b: &[u32], p: &[u32], out: &mut [u32]) {
+    let n = a.len();
+    let mut t = [0u32; 16];
+    let mut borrow = 0u32;
+    for j in 0..n {
+        let (r1, b1) = a[j].overflowing_sub(b[j]);
+        let (r2, b2) = r1.overflowing_sub(borrow);
+        t[j] = r2;
+        borrow = (b1 as u32) | (b2 as u32);
+    }
+    // If it went negative, add p back. Mask is all-ones exactly when borrow=1.
+    let mask = borrow.wrapping_neg();
+    let mut carry = 0u32;
+    for j in 0..n {
+        let (r1, c1) = t[j].overflowing_add(p[j] & mask);
+        let (r2, c2) = r1.overflowing_add(carry);
+        out[j] = r2;
+        carry = (c1 as u32) | (c2 as u32);
+    }
+}

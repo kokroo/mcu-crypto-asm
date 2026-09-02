@@ -1,0 +1,22 @@
+[package]
+name = "nistp-harness"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Standalone workspace: this crate only ever builds for a bare-metal target,
+# and must not drag the host-testable library into a cross-compile.
+[workspace]
+
+[dependencies]
+nistp-mcu = { path = ".." }
+cortex-m = "0.7"
+cortex-m-rt = "0.7"
+cortex-m-semihosting = "0.5"
+panic-semihosting = { version = "0.6", features = ["exit"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+debug = true
