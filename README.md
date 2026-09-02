@@ -89,6 +89,33 @@ The control group is what makes this meaningful: it shows the 1-tick variation i
 SysTick quantisation, present even for identical inputs, and not operand
 dependence.
 
+## Beyond the field layer
+
+Point arithmetic and ECDH are implemented, so this can actually be registered
+as an `embassy-crypto-driver` once the ECC traits return upstream (they landed
+2026-08-29 and were removed 2026-09-01, which currently blocks the STM32 PKA
+hardware driver too — it has nothing to register against either).
+
+- **Complete formulas.** Points use homogeneous projective coordinates with the
+  Renes–Costello–Batina complete addition formulas for `a = -3`. One formula,
+  no exceptions: correct for `P+Q`, `P+P`, `P+(-P)` and the identity. There is
+  deliberately **no separate doubling routine** — the classic way to leak a
+  scalar is a special case that only fires when the accumulator happens to
+  equal the input point.
+- **Scalar multiplication** is double-and-add-always with a branchless select,
+  so every bit costs one doubling and one addition regardless of its value.
+- **ECDH validates its inputs.** `shared_secret` rejects peer points that are
+  not on the curve — skipping that check is the invalid-curve attack, which
+  recovers a private key from a handful of exchanges. Scalars must be in
+  `[1, n)`, and coordinates must be reduced mod p.
+
+Validated against an independent oracle: `gen/gen_point_vectors.py` computes
+`k*G` with plain **affine** arithmetic and explicit special cases — a different
+algorithm from the projective formulas under test, so a transcription error
+cannot be mirrored in both. Vectors include `k = n` (the identity) and
+`k = n-1` (`-G`). The SEC1 byte encoding is pinned separately, because two
+sides agreeing proves consistency, not correctness.
+
 ## Design
 
 Performance on a 32-bit MCU is decided almost entirely by one operation, so the
@@ -154,7 +181,7 @@ and each harness confirmed to fail — so a green run means something.
   close needs `t[]` held in registers, which on Cortex-M4 means using the FPU
   bank as scratch the way he does. Until then, P-256 users on Cortex-M4 should
   use his library.
-- **Point arithmetic / ECDH / ECDSA.** This crate is the field layer only.
+- **ECDSA.** ECDH is done; signing/verification still to come.
 - **Squaring** currently routes through `mul_mont`; a dedicated routine skips
   ~half the partial products.
 

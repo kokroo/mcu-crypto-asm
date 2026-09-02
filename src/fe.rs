@@ -103,6 +103,54 @@ impl<const N: usize> Fe<N> {
         Self { v: out }
     }
 
+    /// Modular inverse, `self^(p-2) mod p` (Fermat's little theorem).
+    ///
+    /// Returns zero for a zero input, which has no inverse — callers that care
+    /// must check separately.
+    ///
+    /// Constant time **with respect to `self`**: the exponent is `p - 2`, a
+    /// public compile-time constant, so branching on its bits leaks nothing
+    /// about the value being inverted. Every squaring and multiplication is
+    /// itself constant time.
+    ///
+    /// A binary chain costs ~1.5·(32N) multiplications. An addition chain
+    /// tuned per prime would be meaningfully faster; inversion happens once
+    /// per scalar multiplication, so it is not the bottleneck yet.
+    pub fn invert(&self, f: &Params) -> Self {
+        debug_assert_eq!(f.n, N);
+
+        // exp = p - 2. Both NIST primes have low word 0xFFFFFFFF, so this
+        // cannot borrow past the first limb, but do it properly anyway.
+        let mut exp = [0u32; N];
+        let mut borrow = 2u32;
+        for i in 0..N {
+            let (v, b) = f.p[i].overflowing_sub(borrow);
+            exp[i] = v;
+            borrow = b as u32;
+        }
+
+        let mut result = Self::from_mont_limbs({
+            let mut one = [0u32; N];
+            one.copy_from_slice(f.one);
+            one
+        });
+
+        // Square-and-multiply, most significant bit first.
+        let mut started = false;
+        for i in (0..N).rev() {
+            for bit in (0..32).rev() {
+                if started {
+                    result = result.sqr(f);
+                }
+                if (exp[i] >> bit) & 1 == 1 {
+                    result = if started { result.mul(f, self) } else { *self };
+                    started = true;
+                }
+            }
+        }
+        result
+    }
+
     /// Constant-time equality.
     #[inline]
     pub fn ct_eq(&self, rhs: &Self) -> bool {

@@ -30,7 +30,10 @@ pub mod backend;
 pub mod params;
 
 mod fe;
+mod point;
+pub mod ecdh;
 pub use fe::{Fe, Params};
+pub use point::{CurveParams, Point};
 
 /// P-256 (secp256r1) field arithmetic.
 pub mod p256 {
@@ -50,6 +53,18 @@ pub mod p256 {
 
     /// A P-256 field element in Montgomery form.
     pub type FeP256 = Fe<{ c::N }>;
+
+    /// A point on P-256.
+    pub type PointP256 = crate::Point<{ c::N }>;
+
+    /// Curve parameters for P-256.
+    pub const CURVE: crate::CurveParams = crate::CurveParams {
+        field: FIELD,
+        b_mont: &c::B_MONT,
+        gx_mont: &c::GX_MONT,
+        gy_mont: &c::GY_MONT,
+        order: &c::ORDER,
+    };
 
     /// Construct a field element from a plain (non-Montgomery) integer.
     pub fn from_int(limbs: &[u32; N]) -> FeP256 {
@@ -75,6 +90,18 @@ pub mod p384 {
 
     /// A P-384 field element in Montgomery form.
     pub type FeP384 = Fe<{ c::N }>;
+
+    /// A point on P-384.
+    pub type PointP384 = crate::Point<{ c::N }>;
+
+    /// Curve parameters for P-384.
+    pub const CURVE: crate::CurveParams = crate::CurveParams {
+        field: FIELD,
+        b_mont: &c::B_MONT,
+        gx_mont: &c::GX_MONT,
+        gy_mont: &c::GY_MONT,
+        order: &c::ORDER,
+    };
 
     /// Construct a field element from a plain (non-Montgomery) integer.
     pub fn from_int(limbs: &[u32; N]) -> FeP384 {
