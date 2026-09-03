@@ -359,7 +359,13 @@ impl<const N: usize> Point<N> {
             for (j, entry) in table.iter().enumerate() {
                 let dd = (j as u32) ^ digit;
                 let nz = dd | dd.wrapping_neg();
-                let mask = ((nz >> 31) & 1).wrapping_sub(1);
+                // LOAD BEARING. Without this, LLVM proves exactly one mask is
+                // all-ones and compiles the scan into an EARLY-EXIT SEARCH:
+                // `beq` to the matching entry, `bne` to loop. The iteration
+                // count then *is* the secret digit. Verified by instruction
+                // trace: digit 0 and digit 15 executed disjoint PC ranges;
+                // with the barrier they execute byte-identical traces.
+                let mask = core::hint::black_box(((nz >> 31) & 1).wrapping_sub(1));
                 for t in 0..N {
                     px[t] |= entry.0[t] & mask;
                     py[t] |= entry.1[t] & mask;
@@ -371,10 +377,12 @@ impl<const N: usize> Point<N> {
             // (0 : 1 : 0). Storing (0, 0) instead would yield (0 : 0 : 0),
             // which is not a point and which the complete formulas do not
             // rescue -- that mistake produced wrong results, not a crash.
-            let is_zero = {
+            // Also load bearing: otherwise LLVM branches on this to choose
+            // between "copy Montgomery one" and "zero the array".
+            let is_zero = core::hint::black_box({
                 let nz = digit | digit.wrapping_neg();
                 ((nz >> 31) & 1).wrapping_sub(1) // all-ones iff digit == 0
-            };
+            });
             let mut z = [0u32; N];
             z.copy_from_slice(c.field.one);
             for t in 0..N {
@@ -403,6 +411,48 @@ impl<const N: usize> Point<N> {
             acc = acc.add(c, &sel);
         }
         acc
+    }
+
+    /// One comb table scan, isolated, for instruction tracing.
+    ///
+    /// `#[inline(never)]` so it occupies a distinct PC range that a QEMU
+    /// execution trace can be filtered to.
+    ///
+    /// Not part of the supported API.
+    #[doc(hidden)]
+    #[inline(never)]
+    pub fn comb_scan_diag(c: &CurveParams, table: &[([u32; N], [u32; N])], digit: u32) -> Self {
+        let mut px = [0u32; N];
+        let mut py = [0u32; N];
+        for (j, entry) in table.iter().take(16).enumerate() {
+            let dd = (j as u32) ^ digit;
+            let nz = dd | dd.wrapping_neg();
+            // Opaque: LLVM can otherwise prove exactly one mask is all-ones
+            // and compile this scan into a SWITCH on the secret digit, with
+            // specialised code per value. Confirmed by instruction trace --
+            // digit 0 and digit 15 executed disjoint PC ranges.
+            let mask = core::hint::black_box(((nz >> 31) & 1).wrapping_sub(1));
+            for q in 0..N {
+                px[q] |= entry.0[q] & mask;
+                py[q] |= entry.1[q] & mask;
+            }
+        }
+        // Opaque for the same reason as the scan mask: otherwise LLVM
+        // branches on it to pick between "copy one" and "zero the array".
+        let is_zero = core::hint::black_box({
+            let nz = digit | digit.wrapping_neg();
+            ((nz >> 31) & 1).wrapping_sub(1)
+        });
+        let mut z = [0u32; N];
+        z.copy_from_slice(c.field.one);
+        for q in 0..N {
+            z[q] &= !is_zero;
+        }
+        Self {
+            x: Fe::from_mont_limbs(px),
+            y: Fe::from_mont_limbs(py),
+            z: Fe::from_mont_limbs(z),
+        }
     }
 
     /// Diagnostic-only comb with selectable ablations, for localising the
@@ -452,16 +502,16 @@ impl<const N: usize> Point<N> {
                     for (j, entry) in tt.iter().enumerate() {
                         let dd = (j as u32) ^ digit;
                         let nz = dd | dd.wrapping_neg();
-                        let mask = ((nz >> 31) & 1).wrapping_sub(1);
+                        let mask = core::hint::black_box(((nz >> 31) & 1).wrapping_sub(1));
                         for q in 0..N {
                             px[q] |= entry.0[q] & mask;
                             py[q] |= entry.1[q] & mask;
                         }
                     }
-                    let is_zero = {
+                    let is_zero = core::hint::black_box({
                         let nz = digit | digit.wrapping_neg();
                         ((nz >> 31) & 1).wrapping_sub(1)
-                    };
+                    });
                     let mut z = [0u32; N];
                     z.copy_from_slice(c.field.one);
                     for q in 0..N {

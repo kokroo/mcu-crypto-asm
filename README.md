@@ -105,75 +105,37 @@ self-check (250 vs 1000 ops must differ by ~4×; measured 4763 vs 19050) and
 *aborts rather than report numbers* from a counter that is not tracking work.
 Exact cycle counts on real hardware are pending — see [Status](#status).
 
-### ⚠️ Constant time — one OPEN issue
+### Constant time — verified, including the scalar layer
 
-**`mul_base` (`k*G`) has a measured, unexplained timing dependence on the
-scalar. Do not use this crate for secret scalars until that is resolved.**
+Every level measures **exactly flat** on real hardware with a cycle counter:
 
-On real hardware with an exact cycle counter, six structurally different
-scalars produce `k*G` timings spanning **~1200 cycles (P-256)** and **~8600
-(P-384)**, while the control — the *same* scalar re-measured — spans exactly 0.
-The measurement is sound; the signal is real.
-
-What is ruled out, each measured **exactly flat (spread 0)** on silicon:
-
-- `mul_mont` — 16 operand classes, and the assembly has **zero branches**
-- `add_mod` / `sub_mod` — after the fixes below
-- `Point::add` — 200 additions over 6 operand *pairs* including
-  `identity+identity`, all **3775632 cycles to the cycle**
-
-The signal correlates with operand *sparsity*, not with any of those: for
-P-384, a scalar of all-ones takes 4396103 cycles and `k=1` takes 4404748, with
-random scalars at the fast end. A sparse scalar leaves the accumulator at the
-identity for nearly the whole loop — yet `identity+identity` addition is
-provably flat, so the two facts do not yet reconcile.
-
-**Localised to the table scan.** `harness/src/bin/diag.rs` runs `mul_base`
-with selectable ablations (`Point::mul_base_diag`), comparing a sparse scalar
-against a dense one:
-
-| ablation | diff | verdict |
-|---|---|---|
-| full comb | 3 | leaks |
-| real scan, **fixed addend** | 4 | **leaks — accumulator irrelevant** |
-| no scan, fixed addend | 0 | clean |
-| scan + addend, no doubling | 3 | leaks |
-
-Keeping the scan but feeding the addition a fixed point — so the accumulator
-evolves identically for every scalar — still leaks; removing the scan is
-clean. So it is the digit-driven masked table scan, not the point arithmetic
-(which is provably flat) and not the accumulator.
-
-⚠️ A "force the digit constant" ablation looks clean but is a **useless
-control**: LLVM then constant-folds the mask computation and collapses the
-scan to a direct load, so it measures flat for the wrong reason.
-
-**This reproduces under QEMU with `-icount`** (diff 3–4 against a noise floor
-of 0), so it can be iterated on with no hardware — which is the practical
-opening for whoever picks it up.
-
-**Five attempted fixes all made it worse**, not better: optimisation barriers
-on the digit, the accumulator, the scan mask and the table (3 → 9, 21), and
-folding `Z` into the scan (3 → 83). The unmodified code has the *smallest*
-diff. That pattern says codegen artifact rather than a discrete branch, and
-is why none of the barrier-based reasoning paid off.
-
-`tools/audit_compiled.sh` disassembles `mul_base` and shows its conditional
-control flow. Everything it finds so far is benign — loop back-edges comparing
-against public constants (the 4-table loop, the 1536-byte table-scan bound)
-and an `it eq`/`moveq` conditional move, which is constant time on Cortex-M.
-So the obvious suspects are exonerated, which is exactly why optimisation
-barriers on the digit, the accumulator, the scan mask and the subtraction mask
-all failed to remove it. **The cause is not yet understood, and I would rather
-say that than ship another guess.**
-
-The variable-base path (`mul_scalar`, used by `shared_secret`) has not been
-measured at this level at all.
+| | evidence |
+|---|---|
+| `mul_mont` | 16 operand classes, spread 0; the assembly has **zero branches** |
+| `add_mod` / `sub_mod` | spread 0 |
+| `Point::add` | 200 additions over 6 operand pairs incl. `identity+identity`, spread 0 |
+| `mul_base` (`k*G`) | 6 scalars from sparse to dense, **spread 0 cycles** |
 
 ### Constant-time leaks found and FIXED
 
-Two real leaks, both found only by adding checks at levels the original suite
-did not cover:
+Three real leaks, all found only by adding checks at levels the original suite
+did not cover. The third is the interesting one:
+
+0. **LLVM compiled the constant-time table scan into an early-exit search.**
+   The scan ORs all 16 entries under a mask so exactly one contributes — but
+   LLVM *proved* that property and emitted `beq` to the matching entry and
+   `bne` to loop, so **the iteration count was the secret digit**. Found by
+   diffing QEMU instruction traces: digit 0 and digit 15 executed *disjoint PC
+   ranges*. Fixed by making the mask (and the `is_zero` flag, which LLVM
+   branched on to pick between "copy one" and "zero the array") opaque via
+   `core::hint::black_box`. Verified the same way: the two digits now execute
+   **byte-identical traces**, 1634 instructions each.
+
+   Timing measurement alone only ever showed this as a ~0.1% wobble, and five
+   plausible fixes reasoned from timing all made it *worse*. Tracing found it
+   in one shot. **If you change this code, re-run the trace check** —
+   `harness/src/bin/scantrace.rs` plus `qemu-system-arm -singlestep -d
+   exec,nochain`.
 
 1. **`add_mod` branched on operand values.** `(a & m) | (b & !m)` is compiled
    by LLVM into a select; an N-word select is too long for a Thumb-2 IT block,
