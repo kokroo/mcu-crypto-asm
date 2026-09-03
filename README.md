@@ -105,7 +105,55 @@ self-check (250 vs 1000 ops must differ by ~4×; measured 4763 vs 19050) and
 *aborts rather than report numbers* from a counter that is not tracking work.
 Exact cycle counts on real hardware are pending — see [Status](#status).
 
-### Constant time
+### ⚠️ Constant time — one OPEN issue
+
+**`mul_base` (`k*G`) has a measured, unexplained timing dependence on the
+scalar. Do not use this crate for secret scalars until that is resolved.**
+
+On real hardware with an exact cycle counter, six structurally different
+scalars produce `k*G` timings spanning **~1200 cycles (P-256)** and **~8600
+(P-384)**, while the control — the *same* scalar re-measured — spans exactly 0.
+The measurement is sound; the signal is real.
+
+What is already ruled out, each measured flat (spread 0) on silicon:
+
+- `mul_mont` — 16 operand classes, and the assembly has **zero branches**
+- `add_mod` / `sub_mod` — after the fixes below
+- `Point::add` — 200 additions across 6 structurally different points,
+  including the identity
+
+So the residual signal is in the comb-specific code (the masked table scan or
+its inlining context), not in the arithmetic beneath it. Adding optimisation
+barriers to the digit, the accumulator, and the masks did not remove it, so
+the "LLVM re-specialises under inlining" hypothesis is unproven.
+
+The variable-base path (`mul_scalar`, used by `shared_secret`) has not been
+measured at this level at all.
+
+### Constant-time leaks found and FIXED
+
+Two real leaks, both found only by adding checks at levels the original suite
+did not cover:
+
+1. **`add_mod` branched on operand values.** `(a & m) | (b & !m)` is compiled
+   by LLVM into a select; an N-word select is too long for a Thumb-2 IT block,
+   so it became a real branch — 8 cycles, depending on whether the conditional
+   subtraction fired. `sub_mod`, which has no two-way select, was clean.
+   Fixed by subtracting a *masked modulus* instead of selecting, plus an
+   optimisation barrier on the mask (LLVM reconstructs the conditional
+   otherwise). Costs ~28% on `add_mod`; that is the price of constant time.
+
+2. **Choosing the addition formula on a secret digit.** Selecting between the
+   mixed and general formulas with `if digit == 0` branches on the scalar, and
+   they cost different numbers of multiplications. Caught during review, not
+   by a test.
+
+The mixed-addition optimisation (~8%) is currently **disabled**: it was removed
+while hunting the leak above, and the leak persisted without it, so it is not
+implicated — but it should not be restored until the comb signal is understood
+and the path can be measured clean.
+
+### Constant time — what is verified
 
 Two independent lines of evidence:
 

@@ -78,12 +78,18 @@ fn cond_sub_p(t: &[u32], hi: u32, p: &[u32], out: &mut [u32]) {
     }
 
     // If hi < borrow the subtraction underflowed overall => keep t.
-    // hi is 0 or 1, borrow is 0 or 1, so this is a plain comparison.
-    let underflow = (hi < borrow) as u32;
+    //
+    // NOT `(hi < borrow) as u32`: LLVM compiles that comparison to a BRANCH,
+    // which made add/sub take 6 cycles longer depending on whether the
+    // conditional subtraction fired — a real, measured timing leak, since
+    // whether it fires depends on the operand values. Both are small, so the
+    // borrow-out of `hi - borrow` is the same predicate with no branch.
+    let underflow = hi.wrapping_sub(borrow) >> 31;
     let mask = underflow.wrapping_sub(1); // 0 => 0xFFFFFFFF (take diff)
 
+    let mask = core::hint::black_box(mask);
     for j in 0..n {
-        out[j] = (diff[j] & mask) | (t[j] & !mask);
+        out[j] = t[j] ^ ((t[j] ^ diff[j]) & mask);
     }
 }
 
@@ -165,7 +171,8 @@ pub fn sub_mod_n<const N: usize>(a: &[u32; N], b: &[u32; N], p: &[u32], out: &mu
         borrow = d >> 32; // arithmetic shift: 0 or -1
     }
     // Went negative? Add p back. Mask is all-ones exactly when borrow == -1.
-    let mask = borrow as u32;
+    // Same barrier rationale as `cond_sub_p_n`.
+    let mask = core::hint::black_box(borrow as u32);
     let mut carry = 0u64;
     for j in 0..N {
         let s = t[j] as u64 + (p[j] & mask) as u64 + carry;
@@ -174,20 +181,39 @@ pub fn sub_mod_n<const N: usize>(a: &[u32; N], b: &[u32; N], p: &[u32], out: &mu
     }
 }
 
-/// Branchless `out = (hi:t) - p` if that does not go negative, else `t`.
+/// `out = (hi:t) - p` when that does not go negative, else `out = t`.
+///
+/// Deliberately has NO two-way select. LLVM compiles `(a & m) | (b & !m)` into
+/// a select, and an N-word select is too long for a Thumb-2 IT block, so it
+/// becomes a real branch on a mask derived from the operands — a measured
+/// 8-cycle leak. Rewriting in XOR form did not help; LLVM reconstructs the
+/// select. Instead this subtracts a MASKED modulus, the same shape as
+/// `sub_mod_n`, which measured clean and needs no optimisation barrier:
+///
+///     out = t - (p & mask)
+///
+/// The modulus is subtracted twice-over in cost (once to test, once to
+/// apply), which is still cheaper than a barrier around the select.
 #[inline(always)]
 fn cond_sub_p_n<const N: usize>(t: &[u32; N], hi: u32, p: &[u32], out: &mut [u32; N]) {
-    let mut diff = [0u32; N];
+    // Does t - p go negative?
     let mut borrow = 0i64;
     for j in 0..N {
         let d = t[j] as i64 - p[j] as i64 + borrow;
-        diff[j] = d as u32;
         borrow = d >> 32;
     }
-    let borrow = (borrow as u32) & 1; // 0 or 1
-    let underflow = (hi < borrow) as u32;
-    let mask = underflow.wrapping_sub(1); // 0 => take diff
+    let borrow = (borrow as u32) & 1;
+    // hi is the overflow word (0 or 1). Underflow overall iff hi < borrow.
+    let underflow = hi.wrapping_sub(borrow) >> 31;
+    // Subtract exactly when there was no underflow. The barrier is load
+    // bearing: LLVM knows this mask is 0-or-all-ones and will turn the masked
+    // subtraction back into a CONDITIONAL one, reintroducing the branch.
+    let mask = core::hint::black_box((underflow ^ 1).wrapping_neg());
+
+    let mut borrow2 = 0i64;
     for j in 0..N {
-        out[j] = (diff[j] & mask) | (t[j] & !mask);
+        let d = t[j] as i64 - (p[j] & mask) as i64 + borrow2;
+        out[j] = d as u32;
+        borrow2 = d >> 32;
     }
 }

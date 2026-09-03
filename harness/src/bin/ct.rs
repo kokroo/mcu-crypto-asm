@@ -18,7 +18,7 @@
 use core::hint::black_box;
 use cortex_m_rt::entry;
 use cortex_m_semihosting::{debug, hprintln};
-use nistp_mcu::{backend, p256, p384, Fe, Params};
+use nistp_mcu::{backend, p256, p384, Fe, Params, Point};
 
 use panic_semihosting as _;
 
@@ -64,6 +64,32 @@ fn ticks() -> u32 {
 }
 
 const REPS: u32 = 1000;
+
+/// Measure add/sub for one input pair. The original field check only covered
+/// `mul`, so a data-dependent conditional subtraction in add/sub was invisible
+/// to it.
+fn measure_addsub<const N: usize>(f: &Params, a: &Fe<N>, b: &Fe<N>) -> u32 {
+    for _ in 0..16 {
+        black_box(black_box(a).add(f, black_box(b)));
+    }
+    let s = ticks();
+    for _ in 0..REPS {
+        black_box(black_box(a).add(f, black_box(b)));
+    }
+    ticks().wrapping_sub(s)
+}
+
+/// Same, sub only.
+fn measure_sub<const N: usize>(f: &Params, a: &Fe<N>, b: &Fe<N>) -> u32 {
+    for _ in 0..16 {
+        black_box(black_box(a).sub(f, black_box(b)));
+    }
+    let s = ticks();
+    for _ in 0..REPS {
+        black_box(black_box(a).sub(f, black_box(b)));
+    }
+    ticks().wrapping_sub(s)
+}
 
 /// Measure one input pair.
 fn measure<const N: usize>(f: &Params, a: &Fe<N>, b: &Fe<N>) -> u32 {
@@ -152,6 +178,27 @@ fn check_curve<const N: usize>(f: &Params, name: &str) -> u32 {
         if c > cmax { cmax = c; }
     }
 
+    // Same sweep, but timing add/sub instead of mul.
+    for (label, f2) in [
+        ("add", measure_addsub::<N> as fn(&Params, &Fe<N>, &Fe<N>) -> u32),
+        ("sub", measure_sub::<N> as fn(&Params, &Fe<N>, &Fe<N>) -> u32),
+    ] {
+        let mut lo = u32::MAX;
+        let mut hi2 = 0u32;
+        for (a, b) in inputs.iter() {
+            let fa = Fe::<N>::from_int(f, a);
+            let fb = Fe::<N>::from_int(f, b);
+            let t = f2(f, &fa, &fb);
+            if t < lo { lo = t; }
+            if t > hi2 { hi2 = t; }
+        }
+        if hi2 - lo > 0 {
+            hprintln!("  FAIL {} {}: spread {} ticks ({}..{})", name, label, hi2 - lo, lo, hi2);
+        } else {
+            hprintln!("  ok   {} {}: spread 0 ({} ticks)", name, label, lo);
+        }
+    }
+
     let data_spread = dmax - dmin;
     let noise_floor = cmax - cmin;
 
@@ -175,6 +222,106 @@ does not exceed the same-input noise floor {} tick(s)",
     }
 }
 
+/// Constant-time check at the SCALAR MULTIPLICATION level.
+///
+/// The field-level check below cannot see a leak in the point layer. This is
+/// the level at which a real leak nearly shipped: selecting between the mixed
+/// and general addition formulas with `if digit == 0` branches on the secret
+/// scalar, and the two cost different numbers of multiplications.
+///
+/// Scalars are chosen so that a digit-dependent branch would show up loudly:
+/// one with every comb digit zero, one with every digit set, and several in
+/// between. A control group re-measures the same scalar to establish the
+/// noise floor.
+fn check_scalar_mul<const N: usize>(
+    name: &str,
+    mul: fn(&[u32; N]) -> Point<N>,
+) -> u32 {
+    let mut scalars: [[u32; N]; 6] = [[0u32; N]; 6];
+    scalars[0] = [0x0000_0001; N]; // digits almost all zero
+    scalars[1] = [0xFFFF_FFFF; N]; // every digit set
+    scalars[2] = [0x0F0F_0F0F; N]; // alternating zero / non-zero digits
+    scalars[3] = [0x8888_8888; N];
+    scalars[4][0] = 1; // single bit
+    let mut rng = Rng(0x1234_5678_9ABC_DEF0);
+    for limb in scalars[5].iter_mut() {
+        *limb = rng.next_u32();
+    }
+
+    // Warm once so the first measurement is not an outlier.
+    black_box(mul(&scalars[5]));
+
+    let mut dmin = u32::MAX;
+    let mut dmax = 0u32;
+    let mut cmin = u32::MAX;
+    let mut cmax = 0u32;
+    for k in scalars.iter() {
+        let s = ticks();
+        black_box(mul(black_box(k)));
+        let t = ticks().wrapping_sub(s);
+        if t < dmin { dmin = t; }
+        if t > dmax { dmax = t; }
+
+        let s = ticks();
+        black_box(mul(black_box(&scalars[5])));
+        let cc = ticks().wrapping_sub(s);
+        if cc < cmin { cmin = cc; }
+        if cc > cmax { cmax = cc; }
+    }
+
+    let spread = dmax - dmin;
+    let noise = cmax - cmin;
+    if spread <= noise {
+        hprintln!(
+            "  ok   {}: {} scalars -- spread {} cycle(s) <= same-scalar noise {}",
+            name, scalars.len(), spread, noise
+        );
+        hprintln!("       (totals {}..{}, control {}..{})", dmin, dmax, cmin, cmax);
+        0
+    } else {
+        hprintln!(
+            "  FAIL {}: spread {} cycles EXCEEDS same-scalar noise {}",
+            name, spread, noise
+        );
+        hprintln!("       (totals {}..{}, control {}..{})", dmin, dmax, cmin, cmax);
+        1
+    }
+}
+
+/// Bisection: is the leak inside the point ADDITION (i.e. field ops behaving
+/// differently once inlined there), or in the comb's lookup/select?
+fn check_point_add() -> u32 {
+    let c = &p256::CURVE;
+    let g = Point::<{ p256::N }>::generator(c);
+    // Six structurally different points, including the identity and doublings.
+    let mut pts = [g; 6];
+    pts[0] = Point::<{ p256::N }>::identity(&c.field);
+    pts[1] = g;
+    pts[2] = g.add(c, &g);
+    pts[3] = pts[2].add(c, &g);
+    pts[4] = pts[3].add(c, &pts[2]);
+    pts[5] = pts[4].add(c, &pts[3]);
+
+    const R: u32 = 200;
+    let mut lo = u32::MAX;
+    let mut hi2 = 0u32;
+    for a in pts.iter() {
+        for _ in 0..8 { black_box(black_box(a).add(c, black_box(&pts[3]))); }
+        let s = ticks();
+        for _ in 0..R { black_box(black_box(a).add(c, black_box(&pts[3]))); }
+        let t = ticks().wrapping_sub(s);
+        if t < lo { lo = t; }
+        if t > hi2 { hi2 = t; }
+    }
+    if hi2 - lo > 0 {
+        hprintln!("  FAIL Point::add: spread {} ticks ({}..{})", hi2 - lo, lo, hi2);
+        1
+    } else {
+        hprintln!("  ok   Point::add: spread 0 ({} ticks / {} adds)", lo, R);
+        0
+    }
+}
+
 #[entry]
 fn main() -> ! {
     counter_init();
@@ -187,8 +334,18 @@ fn main() -> ! {
     hprintln!("");
 
     let mut fails = 0;
+    hprintln!("field arithmetic:");
     fails += check_curve::<{ p256::N }>(&p256::FIELD, "p256");
     fails += check_curve::<{ p384::N }>(&p384::FIELD, "p384");
+
+    hprintln!("");
+    hprintln!("point layer:");
+    fails += check_point_add();
+    hprintln!("");
+    hprintln!("scalar multiplication (the level a real leak nearly reached):");
+    fails += check_scalar_mul::<{ p256::N }>("p256 comb", p256::mul_base);
+    fails += check_scalar_mul::<{ p384::N }>("p384 comb", p384::mul_base);
+
 
     hprintln!("");
     if fails == 0 {

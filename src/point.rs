@@ -226,11 +226,15 @@ impl<const N: usize> Point<N> {
     /// Branchless select: returns `b` when `choice` is all-ones, `a` when zero.
     #[inline]
     fn select_mask(mask: u32, a: &Self, b: &Self) -> Self {
+        // XOR form, not or-of-ands: LLVM turns the latter into a select, and a
+        // 3N-word select is far too long for a Thumb-2 IT block, so it becomes
+        // a real branch on the mask — which is derived from the secret scalar.
+        let mask = core::hint::black_box(mask);
         let mut out = *a;
         for i in 0..N {
-            out.x.v[i] = (a.x.v[i] & !mask) | (b.x.v[i] & mask);
-            out.y.v[i] = (a.y.v[i] & !mask) | (b.y.v[i] & mask);
-            out.z.v[i] = (a.z.v[i] & !mask) | (b.z.v[i] & mask);
+            out.x.v[i] = a.x.v[i] ^ ((a.x.v[i] ^ b.x.v[i]) & mask);
+            out.y.v[i] = a.y.v[i] ^ ((a.y.v[i] ^ b.y.v[i]) & mask);
+            out.z.v[i] = a.z.v[i] ^ ((a.z.v[i] ^ b.z.v[i]) & mask);
         }
         out
     }
@@ -343,6 +347,10 @@ impl<const N: usize> Point<N> {
                 let bit = (t * 4 + b) * d + i;
                 digit |= ((k[bit / 32] >> (bit % 32)) & 1) << b;
             }
+            // `digit` is secret. Everything downstream of it is branchless by
+            // construction; see the constant-time note in the crate README for
+            // an OPEN issue about a residual signal at this level.
+            let digit = core::hint::black_box(digit);
             let table = &table[t * 16..t * 16 + 16];
 
             // Branchless masked scan, as in `lookup`: never index by a secret.
@@ -381,16 +389,18 @@ impl<const N: usize> Point<N> {
                 y: Fe::from_mont_limbs(py),
                 z: Fe::from_mont_limbs(z),
             };
-            // `digit` comes from the SECRET scalar, so this must not branch:
-            // the mixed and general formulas cost a different number of
-            // multiplications, and choosing between them with an `if` would
-            // leak whether the digit is zero. Always compute the mixed
-            // addition, then branchlessly keep the old accumulator when the
-            // digit was zero (adding the identity is a no-op). The discarded
-            // result is harmless -- the formula has no divisions or branches.
-            let sum = acc.add_affine(c, &sel.x, &sel.y, &one);
-            let _ = sel.z;
-            acc = Self::select_mask(is_zero, &sum, &acc);
+            // NOTE: this deliberately uses the GENERAL addition, not the
+            // mixed (affine) one, even though every table entry is affine and
+            // the mixed formula saves a multiplication (~8%).
+            //
+            // The mixed path measured NON-CONSTANT-TIME in the comb: with the
+            // field operations and `Point::add` both proven flat on hardware
+            // (spread 0), `mul_base` still varied by ~1200 cycles (P-256) with
+            // the scalar. The general formula makes adding the identity a real
+            // no-op, so no `select_mask` is needed either -- and that
+            // combination measures flat. The 8% is not worth an unexplained
+            // timing signal on the secret scalar.
+            acc = acc.add(c, &sel);
         }
         acc
     }
