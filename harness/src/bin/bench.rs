@@ -292,6 +292,25 @@ fn main() -> ! {
 
     // --- worst-case blocking per chunk, which is what an executor feels ---
     hprintln!("");
+    hprintln!("k*G via fixed-base comb (derive_public_key path):");
+    {
+        let k256 = [0x9e37_79b9u32, 0x7f4a_7c15, 0x1234_5678, 0x9abc_def0,
+                    0x0f1e_2d3c, 0x4b5a_6978, 0xdead_beef, 0x0badc0de];
+        let s0 = cyccnt();
+        black_box(p256::mul_base(black_box(&k256)));
+        let c = cyccnt().wrapping_sub(s0);
+        hprintln!("  P-256 comb  {:>10} cycles  ({} ms @ 64 MHz)", c, c / 64_000);
+
+        let k384 = [0x9e37_79b9u32, 0x7f4a_7c15, 0x1234_5678, 0x9abc_def0,
+                    0x0f1e_2d3c, 0x4b5a_6978, 0xdead_beef, 0x0badc0de,
+                    0x2468_ace0, 0x1357_bdf9, 0xfeed_face, 0x0123_4567];
+        let s0 = cyccnt();
+        black_box(p384::mul_base(black_box(&k384)));
+        let c = cyccnt().wrapping_sub(s0);
+        hprintln!("  P-384 comb  {:>10} cycles  ({} ms @ 64 MHz)", c, c / 64_000);
+    }
+
+    hprintln!("");
     hprintln!("resumable: longest single step (budget = 1 point op):");
     {
         let k256 = [0x9e37_79b9u32, 0x7f4a_7c15, 0x1234_5678, 0x9abc_def0,

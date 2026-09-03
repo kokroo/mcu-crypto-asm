@@ -27,6 +27,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 pub mod backend;
+pub mod comb_tables;
 pub mod params;
 
 mod fe;
@@ -35,7 +36,7 @@ pub mod scalar_mul;
 pub mod ecdh;
 pub use fe::{Fe, Params};
 pub use point::{CurveParams, Point};
-pub use scalar_mul::{mul_scalar_yielding, ScalarMul};
+pub use scalar_mul::{mul_base_yielding, mul_scalar_yielding, CombMul, ScalarMul};
 
 /// P-256 (secp256r1) field arithmetic.
 pub mod p256 {
@@ -71,6 +72,34 @@ pub mod p256 {
     /// Construct a field element from a plain (non-Montgomery) integer.
     pub fn from_int(limbs: &[u32; N]) -> FeP256 {
         Fe::from_int(&FIELD, limbs)
+    }
+
+    /// `k * G` via the compile-time comb table. Much faster than the general
+    /// [`crate::Point::mul_scalar`], but only valid for the base point.
+    pub fn mul_base(k: &[u32; N]) -> PointP256 {
+        crate::Point::mul_base(&CURVE, k, &crate::comb_tables::P256_COMB, COMB_D)
+    }
+
+    /// Bits per comb block for this curve.
+    pub const COMB_D: usize = crate::comb_tables::P256_COMB_D;
+
+    /// SEC1 public key from a private scalar.
+    pub fn derive_public_key(secret: &[u8], out: &mut [u8]) -> Result<(), crate::ecdh::Error> {
+        crate::ecdh::derive_public_key::<N>(
+            &CURVE, secret, out, &crate::comb_tables::P256_COMB, COMB_D,
+        )
+    }
+
+    /// SEC1 public key, yielding every `budget` point operations.
+    pub async fn derive_public_key_yielding(
+        secret: &[u8],
+        out: &mut [u8],
+        budget: u32,
+    ) -> Result<(), crate::ecdh::Error> {
+        crate::ecdh::derive_public_key_yielding::<N>(
+            &CURVE, secret, out, &crate::comb_tables::P256_COMB, COMB_D, budget,
+        )
+        .await
     }
 }
 
@@ -108,5 +137,33 @@ pub mod p384 {
     /// Construct a field element from a plain (non-Montgomery) integer.
     pub fn from_int(limbs: &[u32; N]) -> FeP384 {
         Fe::from_int(&FIELD, limbs)
+    }
+
+    /// `k * G` via the compile-time comb table. Much faster than the general
+    /// [`crate::Point::mul_scalar`], but only valid for the base point.
+    pub fn mul_base(k: &[u32; N]) -> PointP384 {
+        crate::Point::mul_base(&CURVE, k, &crate::comb_tables::P384_COMB, COMB_D)
+    }
+
+    /// Bits per comb block for this curve.
+    pub const COMB_D: usize = crate::comb_tables::P384_COMB_D;
+
+    /// SEC1 public key from a private scalar.
+    pub fn derive_public_key(secret: &[u8], out: &mut [u8]) -> Result<(), crate::ecdh::Error> {
+        crate::ecdh::derive_public_key::<N>(
+            &CURVE, secret, out, &crate::comb_tables::P384_COMB, COMB_D,
+        )
+    }
+
+    /// SEC1 public key, yielding every `budget` point operations.
+    pub async fn derive_public_key_yielding(
+        secret: &[u8],
+        out: &mut [u8],
+        budget: u32,
+    ) -> Result<(), crate::ecdh::Error> {
+        crate::ecdh::derive_public_key_yielding::<N>(
+            &CURVE, secret, out, &crate::comb_tables::P384_COMB, COMB_D, budget,
+        )
+        .await
     }
 }

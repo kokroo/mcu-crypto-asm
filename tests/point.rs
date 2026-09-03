@@ -69,3 +69,68 @@ fn complete_formulas_handle_exceptional_cases() {
         "G + G == 2G"
     );
 }
+
+/// The fixed-base comb must agree with the general scalar multiplication on
+/// the oracle vectors, and with `mul_scalar` on random scalars.
+#[test]
+fn p256_comb_matches_oracle() {
+    use nistp_mcu::p256;
+    for (i, (k, want_x, want_y, want_inf)) in vectors::P256_MUL_G.iter().enumerate() {
+        let r = p256::mul_base(k);
+        match r.to_affine(&p256::CURVE.field) {
+            None => assert!(*want_inf, "p256 comb case {i}: got identity"),
+            Some((x, y)) => {
+                assert!(!*want_inf, "p256 comb case {i}: expected identity");
+                assert_eq!(&x, want_x, "p256 comb case {i}: x");
+                assert_eq!(&y, want_y, "p256 comb case {i}: y");
+            }
+        }
+    }
+}
+
+#[test]
+fn p384_comb_matches_oracle() {
+    use nistp_mcu::p384;
+    for (i, (k, want_x, want_y, want_inf)) in vectors::P384_MUL_G.iter().enumerate() {
+        let r = p384::mul_base(k);
+        match r.to_affine(&p384::CURVE.field) {
+            None => assert!(*want_inf, "p384 comb case {i}: got identity"),
+            Some((x, y)) => {
+                assert!(!*want_inf, "p384 comb case {i}: expected identity");
+                assert_eq!(&x, want_x, "p384 comb case {i}: x");
+                assert_eq!(&y, want_y, "p384 comb case {i}: y");
+            }
+        }
+    }
+}
+
+/// Comb and general path must agree on arbitrary scalars, including ones with
+/// zero digits (which select the stored identity entry).
+#[test]
+fn comb_agrees_with_general_scalar_mul() {
+    use nistp_mcu::{p256, p384, Point};
+    let g = Point::<{ p256::N }>::generator(&p256::CURVE);
+    let mut st = 0x243F6A88u32;
+    for _ in 0..12 {
+        let mut k = [0u32; p256::N];
+        for limb in k.iter_mut() {
+            st = st.wrapping_mul(1664525).wrapping_add(1013904223);
+            *limb = st;
+        }
+        assert_eq!(
+            p256::mul_base(&k).to_affine(&p256::CURVE.field),
+            g.mul_scalar(&p256::CURVE, &k).to_affine(&p256::CURVE.field),
+            "p256 comb vs general disagreed on {k:08x?}"
+        );
+    }
+    // A scalar that is mostly zeros exercises the identity table entry.
+    let mut sparse = [0u32; p384::N];
+    sparse[0] = 0x0000_0003;
+    sparse[p384::N - 1] = 0x0100_0000;
+    let g4 = Point::<{ p384::N }>::generator(&p384::CURVE);
+    assert_eq!(
+        p384::mul_base(&sparse).to_affine(&p384::CURVE.field),
+        g4.mul_scalar(&p384::CURVE, &sparse).to_affine(&p384::CURVE.field),
+        "p384 comb vs general disagreed on a sparse scalar"
+    );
+}

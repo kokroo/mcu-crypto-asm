@@ -161,3 +161,77 @@ pub async fn mul_scalar_yielding<const N: usize>(
         YieldNow(false).await;
     }
 }
+
+/// A fixed-base (`k * G`) comb multiplication in progress.
+///
+/// Same contract as [`ScalarMul`], but for the compile-time comb table: one
+/// doubling and one addition per iteration, `D` iterations, no precompute
+/// phase. Roughly 2.6x less work than the variable-base path.
+pub struct CombMul<const N: usize> {
+    acc: Point<N>,
+    k: [u32; N],
+    table: &'static [([u32; N], [u32; N])],
+    d: usize,
+    /// Iterations remaining, counting down. 0 means finished.
+    i: usize,
+}
+
+impl<const N: usize> CombMul<N> {
+    /// Begin computing `k * G` with the given comb table.
+    pub fn new(k: &[u32; N], table: &'static [([u32; N], [u32; N])], d: usize) -> Self {
+        Self {
+            acc: Point {
+                x: crate::Fe::ZERO,
+                y: crate::Fe::ZERO,
+                z: crate::Fe::ZERO,
+            },
+            k: *k,
+            table,
+            d,
+            i: d,
+        }
+    }
+
+    /// Total point operations: two per iteration. Independent of the scalar.
+    pub fn total_ops(d: usize) -> u32 {
+        (d as u32) * 2
+    }
+
+    /// Perform at most `budget` comb iterations (each a doubling plus an
+    /// addition). Returns `Some(result)` once finished.
+    pub fn step(&mut self, c: &CurveParams, budget: u32) -> Option<Point<N>> {
+        if self.i == self.d {
+            self.acc = Point::identity(&c.field); // first call: real identity
+        }
+        let budget = budget.max(1);
+        for _ in 0..budget {
+            if self.i == 0 {
+                return Some(self.acc);
+            }
+            self.i -= 1;
+            self.acc = Point::comb_iteration(c, &self.acc, &self.k, self.table, self.d, self.i);
+        }
+        if self.i == 0 {
+            Some(self.acc)
+        } else {
+            None
+        }
+    }
+}
+
+/// `k * G` via the comb, yielding to the executor every `budget` iterations.
+pub async fn mul_base_yielding<const N: usize>(
+    c: &CurveParams,
+    k: &[u32; N],
+    table: &'static [([u32; N], [u32; N])],
+    d: usize,
+    budget: u32,
+) -> Point<N> {
+    let mut state = CombMul::new(k, table, d);
+    loop {
+        if let Some(result) = state.step(c, budget) {
+            return result;
+        }
+        YieldNow(false).await;
+    }
+}

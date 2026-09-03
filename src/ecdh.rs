@@ -13,6 +13,7 @@
 
 use crate::{mul_scalar_yielding, CurveParams, Fe, Point};
 
+
 /// Why an ECDH operation was refused.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
@@ -86,6 +87,8 @@ pub fn derive_public_key<const N: usize>(
     c: &CurveParams,
     secret: &[u8],
     out: &mut [u8],
+    comb: &[([u32; N], [u32; N])],
+    comb_d: usize,
 ) -> Result<(), Error> {
     if out.len() != 1 + 8 * N {
         return Err(Error::BadLength);
@@ -96,7 +99,8 @@ pub fn derive_public_key<const N: usize>(
         return Err(Error::BadScalar);
     }
 
-    let p = Point::<N>::generator(c).mul_scalar(c, &k);
+    // Fixed base: use the comb table, ~2.6x less work than the general path.
+    let p = Point::<N>::mul_base(c, &k, comb, comb_d);
     let (x, y) = p.to_affine(&c.field).ok_or(Error::BadPoint)?;
 
     out[0] = 0x04;
@@ -182,6 +186,8 @@ pub async fn derive_public_key_yielding<const N: usize>(
     c: &CurveParams,
     secret: &[u8],
     out: &mut [u8],
+    comb: &'static [([u32; N], [u32; N])],
+    comb_d: usize,
     budget: u32,
 ) -> Result<(), Error> {
     if out.len() != 1 + 8 * N {
@@ -192,8 +198,7 @@ pub async fn derive_public_key_yielding<const N: usize>(
     if !scalar_in_range(&k, c.order) {
         return Err(Error::BadScalar);
     }
-    let g = Point::<N>::generator(c);
-    let p = mul_scalar_yielding(c, &g, &k, budget).await;
+    let p = crate::mul_base_yielding(c, &k, comb, comb_d, budget).await;
     let (x, y) = p.to_affine(&c.field).ok_or(Error::BadPoint)?;
     out[0] = 0x04;
     limbs_to_be(&x, &mut out[1..1 + 4 * N]);

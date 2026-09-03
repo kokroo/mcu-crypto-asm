@@ -2,7 +2,12 @@
 
 use nistp_mcu::{ecdh, p256, p384, CurveParams};
 
-fn roundtrip<const N: usize>(c: &CurveParams, name: &str) {
+fn roundtrip<const N: usize>(
+    c: &CurveParams,
+    name: &str,
+    comb: &[([u32; N], [u32; N])],
+    comb_d: usize,
+) {
     let sk_a = {
         let mut b = vec![0u8; 4 * N];
         b[4 * N - 1] = 0x07;
@@ -18,8 +23,8 @@ fn roundtrip<const N: usize>(c: &CurveParams, name: &str) {
 
     let mut pk_a = vec![0u8; 1 + 8 * N];
     let mut pk_b = vec![0u8; 1 + 8 * N];
-    ecdh::derive_public_key::<N>(c, &sk_a, &mut pk_a).unwrap();
-    ecdh::derive_public_key::<N>(c, &sk_b, &mut pk_b).unwrap();
+    ecdh::derive_public_key::<N>(c, &sk_a, &mut pk_a, comb, comb_d).unwrap();
+    ecdh::derive_public_key::<N>(c, &sk_b, &mut pk_b, comb, comb_d).unwrap();
     assert_eq!(pk_a[0], 0x04, "{name}: SEC1 uncompressed tag");
 
     let mut ss_a = vec![0u8; 4 * N];
@@ -32,12 +37,12 @@ fn roundtrip<const N: usize>(c: &CurveParams, name: &str) {
 
 #[test]
 fn p256_ecdh_agrees() {
-    roundtrip::<{ p256::N }>(&p256::CURVE, "p256");
+    roundtrip::<{ p256::N }>(&p256::CURVE, "p256", &nistp_mcu::comb_tables::P256_COMB, p256::COMB_D);
 }
 
 #[test]
 fn p384_ecdh_agrees() {
-    roundtrip::<{ p384::N }>(&p384::CURVE, "p384");
+    roundtrip::<{ p384::N }>(&p384::CURVE, "p384", &nistp_mcu::comb_tables::P384_COMB, p384::COMB_D);
 }
 
 /// The invalid-curve attack: a point that is not on the curve must be refused,
@@ -50,7 +55,7 @@ fn rejects_point_not_on_curve() {
     sk[4 * N - 1] = 0x09;
 
     let mut pk = vec![0u8; 1 + 8 * N];
-    ecdh::derive_public_key::<N>(c, &sk, &mut pk).unwrap();
+    p256::derive_public_key(&sk, &mut pk).unwrap();
     // A valid key must be accepted...
     let mut out = vec![0u8; 4 * N];
     assert!(ecdh::shared_secret::<N>(c, &sk, &pk, &mut out).is_ok());
@@ -81,7 +86,7 @@ fn rejects_out_of_range_scalars() {
 
     let zero = vec![0u8; 4 * N];
     assert_eq!(
-        ecdh::derive_public_key::<N>(c, &zero, &mut out),
+        p256::derive_public_key(&zero, &mut out),
         Err(ecdh::Error::BadScalar),
         "zero scalar"
     );
@@ -93,7 +98,7 @@ fn rejects_out_of_range_scalars() {
         order_be[off..off + 4].copy_from_slice(&c.order[i].to_be_bytes());
     }
     assert_eq!(
-        ecdh::derive_public_key::<N>(c, &order_be, &mut out),
+        p256::derive_public_key(&order_be, &mut out),
         Err(ecdh::Error::BadScalar),
         "scalar == n"
     );
@@ -111,7 +116,7 @@ fn p256_public_key_encoding_matches_oracle() {
     sk[4 * N - 1] = 0x07;
 
     let mut pk = vec![0u8; 1 + 8 * N];
-    ecdh::derive_public_key::<N>(c, &sk, &mut pk).unwrap();
+    p256::derive_public_key(&sk, &mut pk).unwrap();
 
     let want: [u8; 65] = [0x04,0x42,0x97,0x19,0x03,0x75,0x09,0x96,0x49,0xfb,0x9d,0x03,0x3d,0x7d,0xa4,0x0a,0x89,0x3b,0x69,0x16,0x8b,0xae,0xb3,0x0b,0xc2,0xde,0xb8,0xfd,0xcf,0x51,0x24,0x66,0xbe,0xaf,0xfd,0x86,0xc8,0x63,0xba,0xa7,0x44,0xd9,0x07,0x61,0x9e,0xea,0xcc,0x34,0x98,0x73,0xbd,0xe5,0xd5,0x41,0x00,0x96,0x91,0x01,0x34,0x2b,0xd2,0x53,0x16,0xd2,0x0e];
     assert_eq!(pk.as_slice(), &want[..], "SEC1 encoding of k*G");

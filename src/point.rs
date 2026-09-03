@@ -13,7 +13,7 @@
 //!
 //! The identity is `(0 : 1 : 0)`.
 
-use crate::{Fe, Params};
+use crate::{comb_tables, Fe, Params};
 
 /// A point in homogeneous projective coordinates.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -206,6 +206,85 @@ impl<const N: usize> Point<N> {
             acc = acc.add(c, &sel);
         }
         acc
+    }
+
+    /// `k * G` using the compile-time comb table for this curve.
+    ///
+    /// One doubling and one addition per bit of a *block*, consuming one bit
+    /// from all four blocks at once, so `D` iterations instead of the runtime
+    /// window's `8N` nibbles: 128 point operations for P-256 against 334, and
+    /// 192 against 494 for P-384.
+    ///
+    /// Only valid for the generator — [`mul_scalar`](Self::mul_scalar) remains
+    /// the variable-base path (ECDH against a peer's key).
+    pub fn mul_base(c: &CurveParams, k: &[u32], table: &[([u32; N], [u32; N])], d: usize) -> Self {
+        debug_assert_eq!(k.len(), N);
+        debug_assert_eq!(table.len(), 16);
+
+        let mut acc = Self::identity(&c.field);
+        for i in (0..d).rev() {
+            acc = Self::comb_iteration(c, &acc, k, table, d, i);
+        }
+        acc
+    }
+
+    /// One comb iteration: double, then add the table entry selected by bit
+    /// `i` of each block. Shared by the blocking and resumable paths so they
+    /// cannot drift apart.
+    pub(crate) fn comb_iteration(
+        c: &CurveParams,
+        acc: &Self,
+        k: &[u32],
+        table: &[([u32; N], [u32; N])],
+        d: usize,
+        i: usize,
+    ) -> Self {
+        {
+            let acc = acc.add(c, acc);
+
+            // Gather bit `i` from each of the four blocks. Positions depend
+            // only on loop indices, never on the scalar's value.
+            let mut digit = 0u32;
+            for b in 0..4usize {
+                let bit = b * d + i;
+                digit |= ((k[bit / 32] >> (bit % 32)) & 1) << b;
+            }
+
+            // Branchless masked scan, as in `lookup`: never index by a secret.
+            let mut px = [0u32; N];
+            let mut py = [0u32; N];
+            for (j, entry) in table.iter().enumerate() {
+                let dd = (j as u32) ^ digit;
+                let nz = dd | dd.wrapping_neg();
+                let mask = ((nz >> 31) & 1).wrapping_sub(1);
+                for t in 0..N {
+                    px[t] |= entry.0[t] & mask;
+                    py[t] |= entry.1[t] & mask;
+                }
+            }
+
+            // digit == 0 selects the identity entry, which is stored as
+            // (0, 1); pairing it with Z = 0 gives the projective identity
+            // (0 : 1 : 0). Storing (0, 0) instead would yield (0 : 0 : 0),
+            // which is not a point and which the complete formulas do not
+            // rescue -- that mistake produced wrong results, not a crash.
+            let is_zero = {
+                let nz = digit | digit.wrapping_neg();
+                ((nz >> 31) & 1).wrapping_sub(1) // all-ones iff digit == 0
+            };
+            let mut z = [0u32; N];
+            z.copy_from_slice(c.field.one);
+            for t in 0..N {
+                z[t] &= !is_zero;
+            }
+
+            let sel = Self {
+                x: Fe::from_mont_limbs(px),
+                y: Fe::from_mont_limbs(py),
+                z: Fe::from_mont_limbs(z),
+            };
+            acc.add(c, &sel)
+        }
     }
 
     /// Convert to affine `(x, y)` as plain integers. Returns `None` for the
