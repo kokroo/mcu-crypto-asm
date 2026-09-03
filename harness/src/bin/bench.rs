@@ -246,6 +246,14 @@ fn main() -> ! {
         }
     }
 
+    hprintln!("field add/sub (portable Rust, no assembly):");
+    let _ = bench!("P-256 add_mod", ITERS, {
+        black_box(black_box(&a256).add(&p256::FIELD, black_box(&b256)));
+    });
+    let _ = bench!("P-256 sub_mod", ITERS, {
+        black_box(black_box(&a256).sub(&p256::FIELD, black_box(&b256)));
+    });
+
     // --- P-384 ---
     hprintln!("P-384 modular multiplication:");
     let a384 = p384::from_int(&[
@@ -308,6 +316,26 @@ fn main() -> ! {
         black_box(p384::mul_base(black_box(&k384)));
         let c = cyccnt().wrapping_sub(s0);
         hprintln!("  P-384 comb  {:>10} cycles  ({} ms @ 64 MHz)", c, c / 64_000);
+    }
+
+    // The real end-to-end operation: comb + the final inversion in to_affine.
+    hprintln!("");
+    hprintln!("derive_public_key (comb + to_affine inversion):");
+    {
+        let mut sk = [0u8; 48];
+        sk[0] = 0x11;
+        sk[31] = 0x07;
+        let mut pk = [0u8; 97];
+        let s0 = cyccnt();
+        p256::derive_public_key(black_box(&sk[..32]), black_box(&mut pk[..65])).unwrap();
+        let c = cyccnt().wrapping_sub(s0);
+        hprintln!("  P-256  {:>10} cycles  ({} ms @ 64 MHz)", c, c / 64_000);
+
+        sk[47] = 0x07;
+        let s0 = cyccnt();
+        p384::derive_public_key(black_box(&sk[..48]), black_box(&mut pk[..97])).unwrap();
+        let c = cyccnt().wrapping_sub(s0);
+        hprintln!("  P-384  {:>10} cycles  ({} ms @ 64 MHz)", c, c / 64_000);
     }
 
     hprintln!("");

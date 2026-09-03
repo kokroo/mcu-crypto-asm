@@ -147,6 +147,94 @@ impl<const N: usize> Point<N> {
         Self { x: x3, y: y3, z: z3 }
     }
 
+    /// Addition where `rhs` is affine (`Z2 == 1`), as every comb table entry
+    /// is. Identical to [`add`](Self::add) with `Z2` substituted, which turns
+    /// `t2 = z1*z2` into `t2 = z1` — one field multiplication saved out of 14
+    /// on the operation that dominates the comb.
+    ///
+    /// `y2 + Z2` and `x2 + Z2` become adds with Montgomery one, supplied by
+    /// the caller so it is not recomputed per call.
+    pub(crate) fn add_affine(&self, c: &CurveParams, x2: &Fe<N>, y2: &Fe<N>, one: &Fe<N>) -> Self {
+        let f = &c.field;
+        let mut b = [0u32; N];
+        b.copy_from_slice(c.b_mont);
+        let b = Fe::<N>::from_mont_limbs(b);
+
+        let (x1, y1, z1) = (&self.x, &self.y, &self.z);
+
+        let t0 = x1.mul(f, x2);
+        let t1 = y1.mul(f, y2);
+        let t2 = *z1; // z1 * 1
+
+        let t3 = x1.add(f, y1);
+        let t4 = x2.add(f, y2);
+        let t3 = t3.mul(f, &t4);
+
+        let t4 = t0.add(f, &t1);
+        let t3 = t3.sub(f, &t4);
+        let t4 = y1.add(f, z1);
+
+        let x3 = y2.add(f, one);
+        let t4 = t4.mul(f, &x3);
+        let x3 = t1.add(f, &t2);
+
+        let t4 = t4.sub(f, &x3);
+        let x3 = x1.add(f, z1);
+        let y3 = x2.add(f, one);
+
+        let x3 = x3.mul(f, &y3);
+        let y3 = t0.add(f, &t2);
+        let y3 = x3.sub(f, &y3);
+
+        let z3 = b.mul(f, &t2);
+        let x3 = y3.sub(f, &z3);
+        let z3 = x3.add(f, &x3);
+
+        let x3 = x3.add(f, &z3);
+        let z3 = t1.sub(f, &x3);
+        let x3 = t1.add(f, &x3);
+
+        let y3 = b.mul(f, &y3);
+        let t1 = t2.add(f, &t2);
+        let t2 = t1.add(f, &t2);
+
+        let y3 = y3.sub(f, &t2);
+        let y3 = y3.sub(f, &t0);
+        let t1 = y3.add(f, &y3);
+
+        let y3 = t1.add(f, &y3);
+        let t1 = t0.add(f, &t0);
+        let t0 = t1.add(f, &t0);
+
+        let t0 = t0.sub(f, &t2);
+        let t1 = t4.mul(f, &y3);
+        let t2 = t0.mul(f, &y3);
+
+        let y3 = x3.mul(f, &z3);
+        let y3 = y3.add(f, &t2);
+        let x3 = t3.mul(f, &x3);
+
+        let x3 = x3.sub(f, &t1);
+        let z3 = t4.mul(f, &z3);
+        let t1 = t3.mul(f, &t0);
+
+        let z3 = z3.add(f, &t1);
+
+        Self { x: x3, y: y3, z: z3 }
+    }
+
+    /// Branchless select: returns `b` when `choice` is all-ones, `a` when zero.
+    #[inline]
+    fn select_mask(mask: u32, a: &Self, b: &Self) -> Self {
+        let mut out = *a;
+        for i in 0..N {
+            out.x.v[i] = (a.x.v[i] & !mask) | (b.x.v[i] & mask);
+            out.y.v[i] = (a.y.v[i] & !mask) | (b.y.v[i] & mask);
+            out.z.v[i] = (a.z.v[i] & !mask) | (b.z.v[i] & mask);
+        }
+        out
+    }
+
     /// Branchless table lookup: returns `table[digit]` without ever indexing
     /// memory by a secret.
     ///
@@ -285,12 +373,24 @@ impl<const N: usize> Point<N> {
                 z[t] &= !is_zero;
             }
 
+            let mut one_l = [0u32; N];
+            one_l.copy_from_slice(c.field.one);
+            let one = Fe::from_mont_limbs(one_l);
             let sel = Self {
                 x: Fe::from_mont_limbs(px),
                 y: Fe::from_mont_limbs(py),
                 z: Fe::from_mont_limbs(z),
             };
-            acc = acc.add(c, &sel);
+            // `digit` comes from the SECRET scalar, so this must not branch:
+            // the mixed and general formulas cost a different number of
+            // multiplications, and choosing between them with an `if` would
+            // leak whether the digit is zero. Always compute the mixed
+            // addition, then branchlessly keep the old accumulator when the
+            // digit was zero (adding the identity is a no-op). The discarded
+            // result is harmless -- the formula has no divisions or branches.
+            let sum = acc.add_affine(c, &sel.x, &sel.y, &one);
+            let _ = sel.z;
+            acc = Self::select_mask(is_zero, &sum, &acc);
         }
         acc
     }

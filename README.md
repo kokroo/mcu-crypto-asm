@@ -167,10 +167,41 @@ sides agreeing proves consistency, not correctness.
 A field multiply is ~15 µs — not what hurts. A **scalar multiplication** is,
 measured on an nRF52840 at 64 MHz:
 
-| | double-and-add-always | 4-bit window | worst chunk (budget = 1) |
+| | start | 4-bit window | + comb (`k*G`) |
 |---|---|---|---|
-| P-256 `k*G` | 150 ms | **100 ms** | **343 µs** |
-| P-384 `k*G` | 433 ms | **284 ms** | **643 µs** |
+| P-256 `k*G` | 150 ms | 100 ms | **21 ms** |
+| P-384 `k*G` | 433 ms | 284 ms | **63 ms** |
+| P-256 `derive_public_key` | — | — | **26 ms** |
+| P-384 `derive_public_key` | — | — | **78 ms** |
+
+`k*G` is **6.9× faster** than where it started. What got it there, in order of
+payoff:
+
+| change | effect |
+|---|---|
+| 4-bit window instead of double-and-add-always | −33% |
+| fixed-base comb, 4 tables × 16 entries | −63% |
+| windowed inversion (`p−2` is public, so digits may be skipped) | −21% / −32% of the inversion |
+| mixed addition (comb entries are affine, `Z2 = 1`) | −8% |
+| `u64` carry-chain idiom in `add_mod`/`sub_mod` | −24% on those |
+
+The comb costs 4 KiB (P-256) + 6 KiB (P-384) of flash. Ops are `d·(1+T)` with
+`d = bits/(4T)`, while the masked-scan cost is *independent* of `T`, so more
+tables is a strict win until additions dominate — 128 ops at `T=1`, 96 at 2,
+**80 at 4**, 72 at 8. `T=4` is the knee.
+
+⚠️ **A timing leak nearly shipped here.** Choosing between the mixed and
+general addition formulas with `if digit == 0` branches on the secret scalar,
+and the two cost a different number of multiplications. It is now branchless:
+always compute the mixed addition, then select the old accumulator back when
+the digit was zero.
+
+The chunked form still bounds executor stalls:
+
+| | blocking | worst chunk (budget = 1) |
+|---|---|---|
+| P-256 `k*G` | — | **336 µs** |
+| P-384 `k*G` | — | **626 µs** |
 
 Two separate things are going on there.
 
