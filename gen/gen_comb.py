@@ -38,7 +38,15 @@ CURVES = {
     ),
 }
 
-BLOCKS = 4  # comb width; also the number of bits consumed per addition
+BLOCKS = 4      # blocks per table -> 16 entries each
+NTABLES = 4     # number of tables
+
+# Total point operations are d*(1 + NTABLES) with d = bits/(BLOCKS*NTABLES),
+# while the total masked-scan cost is INDEPENDENT of NTABLES (more tables,
+# proportionally fewer iterations). So more tables is a strict speed win until
+# the additions dominate:
+#   T=1 -> 128 ops (P-256)   T=2 -> 96   T=4 -> 80   T=8 -> 72
+# T=4 is the knee; beyond it flash doubles for a few percent.
 
 
 def add(P, Q, p):
@@ -94,31 +102,36 @@ for name, c in CURVES.items():
     n, p = c["n"], c["p"]
     R = (1 << (32 * n)) % p
     bits = 32 * n
-    d = bits // BLOCKS
     G = (c["gx"], c["gy"])
 
+    d = bits // (BLOCKS * NTABLES)
     entries = []
-    for j in range(1 << BLOCKS):
-        acc = None
-        for b in range(BLOCKS):
-            if j & (1 << b):
-                acc = add(acc, mul(1 << (b * d), G, p), p)
-        entries.append(acc)
+    for t in range(NTABLES):
+        for j in range(1 << BLOCKS):
+            acc = None
+            for b in range(BLOCKS):
+                if j & (1 << b):
+                    shift = (t * BLOCKS + b) * d
+                    acc = add(acc, mul(1 << shift, G, p), p)
+            entries.append(acc)
 
-    out.append(f"/// {name}: bits per block.")
+    out.append(f"/// {name}: comb iterations (bits per block).")
     out.append(f"pub const {name}_COMB_D: usize = {d};")
-    out.append(f"/// {name} comb table, affine Montgomery form.")
+    out.append(f"/// {name}: number of 16-entry tables.")
+    out.append(f"pub const {name}_COMB_T: usize = {NTABLES};")
+    out.append(f"/// {name} comb tables, affine Montgomery form, {NTABLES} x 16 entries.")
     out.append(
-        f"pub const {name}_COMB: [([u32; {n}], [u32; {n}]); {1 << BLOCKS}] = ["
+        f"pub const {name}_COMB: [([u32; {n}], [u32; {n}]); {NTABLES * (1 << BLOCKS)}] = ["
     )
-    for j, e in enumerate(entries):
+    for jj, e in enumerate(entries):
+        j = jj % (1 << BLOCKS)
         if e is None:
             # Identity: (0 : 1 : 0). y must be Montgomery 1, not 0.
             out.append(f"    ({arr(0,n)},")
-            out.append(f"     {arr(R % p, n)}),   // j = {j}: identity (0 : 1 : 0)")
+            out.append(f"     {arr(R % p, n)}),   // t={jj >> BLOCKS} j={j}: identity")
         else:
             out.append(f"    ({arr(e[0]*R % p, n)},")
-            out.append(f"     {arr(e[1]*R % p, n)}),   // j = {j}")
+            out.append(f"     {arr(e[1]*R % p, n)}),   // t={jj >> BLOCKS} j={j}")
     out.append("];")
     out.append("")
 
@@ -127,6 +140,7 @@ dst.write_text("\n".join(out))
 print(f"wrote {dst}")
 for name, c in CURVES.items():
     n = c["n"]
-    d = 32 * n // BLOCKS
-    print(f"  {name}: D={d}, {1<<BLOCKS} entries, {(1<<BLOCKS)*2*n*4} bytes, "
-          f"{d} doublings + {d} additions per k*G")
+    d = 32 * n // (BLOCKS * NTABLES)
+    ent = NTABLES * (1 << BLOCKS)
+    print(f"  {name}: D={d}, {NTABLES}x16={ent} entries, {ent*2*n*4} bytes, "
+          f"{d} doublings + {d*NTABLES} additions = {d*(1+NTABLES)} ops per k*G")

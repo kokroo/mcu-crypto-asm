@@ -77,16 +77,19 @@ pub mod p256 {
     /// `k * G` via the compile-time comb table. Much faster than the general
     /// [`crate::Point::mul_scalar`], but only valid for the base point.
     pub fn mul_base(k: &[u32; N]) -> PointP256 {
-        crate::Point::mul_base(&CURVE, k, &crate::comb_tables::P256_COMB, COMB_D)
+        crate::Point::mul_base(&CURVE, k, &crate::comb_tables::P256_COMB, COMB_D, COMB_T)
     }
 
     /// Bits per comb block for this curve.
     pub const COMB_D: usize = crate::comb_tables::P256_COMB_D;
 
+    /// Number of comb tables for this curve.
+    pub const COMB_T: usize = crate::comb_tables::P256_COMB_T;
+
     /// SEC1 public key from a private scalar.
     pub fn derive_public_key(secret: &[u8], out: &mut [u8]) -> Result<(), crate::ecdh::Error> {
         crate::ecdh::derive_public_key::<N>(
-            &CURVE, secret, out, &crate::comb_tables::P256_COMB, COMB_D,
+            &CURVE, secret, out, &crate::comb_tables::P256_COMB, COMB_D, COMB_T,
         )
     }
 
@@ -97,7 +100,7 @@ pub mod p256 {
         budget: u32,
     ) -> Result<(), crate::ecdh::Error> {
         crate::ecdh::derive_public_key_yielding::<N>(
-            &CURVE, secret, out, &crate::comb_tables::P256_COMB, COMB_D, budget,
+            &CURVE, secret, out, &crate::comb_tables::P256_COMB, COMB_D, COMB_T, budget,
         )
         .await
     }
@@ -142,16 +145,19 @@ pub mod p384 {
     /// `k * G` via the compile-time comb table. Much faster than the general
     /// [`crate::Point::mul_scalar`], but only valid for the base point.
     pub fn mul_base(k: &[u32; N]) -> PointP384 {
-        crate::Point::mul_base(&CURVE, k, &crate::comb_tables::P384_COMB, COMB_D)
+        crate::Point::mul_base(&CURVE, k, &crate::comb_tables::P384_COMB, COMB_D, COMB_T)
     }
 
     /// Bits per comb block for this curve.
     pub const COMB_D: usize = crate::comb_tables::P384_COMB_D;
 
+    /// Number of comb tables for this curve.
+    pub const COMB_T: usize = crate::comb_tables::P384_COMB_T;
+
     /// SEC1 public key from a private scalar.
     pub fn derive_public_key(secret: &[u8], out: &mut [u8]) -> Result<(), crate::ecdh::Error> {
         crate::ecdh::derive_public_key::<N>(
-            &CURVE, secret, out, &crate::comb_tables::P384_COMB, COMB_D,
+            &CURVE, secret, out, &crate::comb_tables::P384_COMB, COMB_D, COMB_T,
         )
     }
 
@@ -162,7 +168,7 @@ pub mod p384 {
         budget: u32,
     ) -> Result<(), crate::ecdh::Error> {
         crate::ecdh::derive_public_key_yielding::<N>(
-            &CURVE, secret, out, &crate::comb_tables::P384_COMB, COMB_D, budget,
+            &CURVE, secret, out, &crate::comb_tables::P384_COMB, COMB_D, COMB_T, budget,
         )
         .await
     }

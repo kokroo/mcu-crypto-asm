@@ -128,12 +128,17 @@ fn async_ecdh_matches_blocking_and_still_validates() {
     p256::derive_public_key(&sk, &mut pk_sync).unwrap();
 
     let mut pk_async = vec![0u8; 1 + 8 * N];
-    let (r, yields) = block_on(p256::derive_public_key_yielding(&sk, &mut pk_async, 8));
+    let (r, yields) = block_on(p256::derive_public_key_yielding(&sk, &mut pk_async, 1));
     r.unwrap();
     assert_eq!(pk_sync, pk_async, "async derive disagreed with blocking");
-    // The comb runs D iterations (64 for P-256), so budget 8 gives 8 yields.
-    // What matters is that it is genuinely chunked, not the exact count.
-    assert!(yields >= 4, "derive should yield several times, saw {yields}");
+    // Budget 1 means one comb iteration per poll, so the yield count tracks
+    // the iteration count. Assert against the curve's own constant rather
+    // than a hardcoded number, which goes stale whenever the comb is retuned.
+    assert_eq!(
+        yields,
+        p256::COMB_D - 1,
+        "derive should yield once per comb iteration"
+    );
 
     let mut ss_sync = vec![0u8; 4 * N];
     let mut ss_async = vec![0u8; 4 * N];

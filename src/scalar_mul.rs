@@ -172,13 +172,19 @@ pub struct CombMul<const N: usize> {
     k: [u32; N],
     table: &'static [([u32; N], [u32; N])],
     d: usize,
+    ntables: usize,
     /// Iterations remaining, counting down. 0 means finished.
     i: usize,
 }
 
 impl<const N: usize> CombMul<N> {
     /// Begin computing `k * G` with the given comb table.
-    pub fn new(k: &[u32; N], table: &'static [([u32; N], [u32; N])], d: usize) -> Self {
+    pub fn new(
+        k: &[u32; N],
+        table: &'static [([u32; N], [u32; N])],
+        d: usize,
+        ntables: usize,
+    ) -> Self {
         Self {
             acc: Point {
                 x: crate::Fe::ZERO,
@@ -188,13 +194,15 @@ impl<const N: usize> CombMul<N> {
             k: *k,
             table,
             d,
+            ntables,
             i: d,
         }
     }
 
-    /// Total point operations: two per iteration. Independent of the scalar.
-    pub fn total_ops(d: usize) -> u32 {
-        (d as u32) * 2
+    /// Total point operations: one doubling plus `ntables` additions per
+    /// iteration. Independent of the scalar.
+    pub fn total_ops(d: usize, ntables: usize) -> u32 {
+        (d as u32) * (1 + ntables as u32)
     }
 
     /// Perform at most `budget` comb iterations (each a doubling plus an
@@ -209,7 +217,8 @@ impl<const N: usize> CombMul<N> {
                 return Some(self.acc);
             }
             self.i -= 1;
-            self.acc = Point::comb_iteration(c, &self.acc, &self.k, self.table, self.d, self.i);
+            self.acc =
+                Point::comb_iteration(c, &self.acc, &self.k, self.table, self.d, self.ntables, self.i);
         }
         if self.i == 0 {
             Some(self.acc)
@@ -225,9 +234,10 @@ pub async fn mul_base_yielding<const N: usize>(
     k: &[u32; N],
     table: &'static [([u32; N], [u32; N])],
     d: usize,
+    ntables: usize,
     budget: u32,
 ) -> Point<N> {
-    let mut state = CombMul::new(k, table, d);
+    let mut state = CombMul::new(k, table, d, ntables);
     loop {
         if let Some(result) = state.step(c, budget) {
             return result;

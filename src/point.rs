@@ -217,13 +217,19 @@ impl<const N: usize> Point<N> {
     ///
     /// Only valid for the generator — [`mul_scalar`](Self::mul_scalar) remains
     /// the variable-base path (ECDH against a peer's key).
-    pub fn mul_base(c: &CurveParams, k: &[u32], table: &[([u32; N], [u32; N])], d: usize) -> Self {
+    pub fn mul_base(
+        c: &CurveParams,
+        k: &[u32],
+        table: &[([u32; N], [u32; N])],
+        d: usize,
+        ntables: usize,
+    ) -> Self {
         debug_assert_eq!(k.len(), N);
-        debug_assert_eq!(table.len(), 16);
+        debug_assert_eq!(table.len(), ntables * 16);
 
         let mut acc = Self::identity(&c.field);
         for i in (0..d).rev() {
-            acc = Self::comb_iteration(c, &acc, k, table, d, i);
+            acc = Self::comb_iteration(c, &acc, k, table, d, ntables, i);
         }
         acc
     }
@@ -237,18 +243,19 @@ impl<const N: usize> Point<N> {
         k: &[u32],
         table: &[([u32; N], [u32; N])],
         d: usize,
+        ntables: usize,
         i: usize,
     ) -> Self {
-        {
-            let acc = acc.add(c, acc);
-
-            // Gather bit `i` from each of the four blocks. Positions depend
+        let mut acc = acc.add(c, acc);
+        for t in 0..ntables {
+            // Gather bit `i` from this table's four blocks. Positions depend
             // only on loop indices, never on the scalar's value.
             let mut digit = 0u32;
             for b in 0..4usize {
-                let bit = b * d + i;
+                let bit = (t * 4 + b) * d + i;
                 digit |= ((k[bit / 32] >> (bit % 32)) & 1) << b;
             }
+            let table = &table[t * 16..t * 16 + 16];
 
             // Branchless masked scan, as in `lookup`: never index by a secret.
             let mut px = [0u32; N];
@@ -283,8 +290,9 @@ impl<const N: usize> Point<N> {
                 y: Fe::from_mont_limbs(py),
                 z: Fe::from_mont_limbs(z),
             };
-            acc.add(c, &sel)
+            acc = acc.add(c, &sel);
         }
+        acc
     }
 
     /// Convert to affine `(x, y)` as plain integers. Returns `None` for the

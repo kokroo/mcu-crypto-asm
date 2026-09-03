@@ -7,6 +7,7 @@ fn roundtrip<const N: usize>(
     name: &str,
     comb: &[([u32; N], [u32; N])],
     comb_d: usize,
+    comb_t: usize,
 ) {
     let sk_a = {
         let mut b = vec![0u8; 4 * N];
@@ -23,8 +24,8 @@ fn roundtrip<const N: usize>(
 
     let mut pk_a = vec![0u8; 1 + 8 * N];
     let mut pk_b = vec![0u8; 1 + 8 * N];
-    ecdh::derive_public_key::<N>(c, &sk_a, &mut pk_a, comb, comb_d).unwrap();
-    ecdh::derive_public_key::<N>(c, &sk_b, &mut pk_b, comb, comb_d).unwrap();
+    ecdh::derive_public_key::<N>(c, &sk_a, &mut pk_a, comb, comb_d, comb_t).unwrap();
+    ecdh::derive_public_key::<N>(c, &sk_b, &mut pk_b, comb, comb_d, comb_t).unwrap();
     assert_eq!(pk_a[0], 0x04, "{name}: SEC1 uncompressed tag");
 
     let mut ss_a = vec![0u8; 4 * N];
@@ -37,12 +38,12 @@ fn roundtrip<const N: usize>(
 
 #[test]
 fn p256_ecdh_agrees() {
-    roundtrip::<{ p256::N }>(&p256::CURVE, "p256", &nistp_mcu::comb_tables::P256_COMB, p256::COMB_D);
+    roundtrip::<{ p256::N }>(&p256::CURVE, "p256", &nistp_mcu::comb_tables::P256_COMB, p256::COMB_D, p256::COMB_T);
 }
 
 #[test]
 fn p384_ecdh_agrees() {
-    roundtrip::<{ p384::N }>(&p384::CURVE, "p384", &nistp_mcu::comb_tables::P384_COMB, p384::COMB_D);
+    roundtrip::<{ p384::N }>(&p384::CURVE, "p384", &nistp_mcu::comb_tables::P384_COMB, p384::COMB_D, p384::COMB_T);
 }
 
 /// The invalid-curve attack: a point that is not on the curve must be refused,
