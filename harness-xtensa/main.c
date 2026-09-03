@@ -28,6 +28,10 @@
 #define R_FIAT_P256_CYCLES 7u
 #define R_FIAT_P384_CYCLES 8u
 #define R_CROSSCHECK 9u
+#define R_FAILIDX 10u
+#define R_GOT 11u
+#define R_WANT 12u
+#define R_LIMB 13u
 volatile uint32_t g_results[16] __attribute__((used, section(".results")));
 
 /* Baseline: fiat-crypto's generated Montgomery multiply -- the same operation,
@@ -101,6 +105,17 @@ static int run_curve(const char *name, int n, mulfn mul, const uint32_t *P,
         mul(got, pm, ONE, P, scratch);   /* back to a plain integer */
 
         if (!eq(got, want, n)) {
+            if (g_results[R_FAILIDX] == 0xFFFFFFFFu) {
+                g_results[R_FAILIDX] = (uint32_t)i;
+                for (int j = 0; j < n; j++) {
+                    if (got[j] != want[j]) {
+                        g_results[R_LIMB] = (uint32_t)j;
+                        g_results[R_GOT] = got[j];
+                        g_results[R_WANT] = want[j];
+                        break;
+                    }
+                }
+            }
             fails++;
             puts_("  FAIL "); puts_(name); puts_(" case "); putu_((uint32_t)i);
             puts_("\n    want ");
@@ -135,6 +150,7 @@ void xmain(void) {
     g_results[R_MAGIC] = 0x4E495354u; /* "NIST" */
     g_results[R_DONE] = 0;
     g_results[R_ITERS] = BENCH_ITERS;
+    g_results[R_FAILIDX] = 0xFFFFFFFFu;
 
     puts_("nistp-mcu Xtensa LX7 on-target tests\n");
     puts_("backend: xtensa-lx7 (SALTU)\n");
