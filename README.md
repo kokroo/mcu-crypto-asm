@@ -115,17 +115,27 @@ scalars produce `k*G` timings spanning **~1200 cycles (P-256)** and **~8600
 (P-384)**, while the control — the *same* scalar re-measured — spans exactly 0.
 The measurement is sound; the signal is real.
 
-What is already ruled out, each measured flat (spread 0) on silicon:
+What is ruled out, each measured **exactly flat (spread 0)** on silicon:
 
 - `mul_mont` — 16 operand classes, and the assembly has **zero branches**
 - `add_mod` / `sub_mod` — after the fixes below
-- `Point::add` — 200 additions across 6 structurally different points,
-  including the identity
+- `Point::add` — 200 additions over 6 operand *pairs* including
+  `identity+identity`, all **3775632 cycles to the cycle**
 
-So the residual signal is in the comb-specific code (the masked table scan or
-its inlining context), not in the arithmetic beneath it. Adding optimisation
-barriers to the digit, the accumulator, and the masks did not remove it, so
-the "LLVM re-specialises under inlining" hypothesis is unproven.
+The signal correlates with operand *sparsity*, not with any of those: for
+P-384, a scalar of all-ones takes 4396103 cycles and `k=1` takes 4404748, with
+random scalars at the fast end. A sparse scalar leaves the accumulator at the
+identity for nearly the whole loop — yet `identity+identity` addition is
+provably flat, so the two facts do not yet reconcile.
+
+`tools/audit_compiled.sh` disassembles `mul_base` and shows its conditional
+control flow. Everything it finds so far is benign — loop back-edges comparing
+against public constants (the 4-table loop, the 1536-byte table-scan bound)
+and an `it eq`/`moveq` conditional move, which is constant time on Cortex-M.
+So the obvious suspects are exonerated, which is exactly why optimisation
+barriers on the digit, the accumulator, the scan mask and the subtraction mask
+all failed to remove it. **The cause is not yet understood, and I would rather
+say that than ship another guess.**
 
 The variable-base path (`mul_scalar`, used by `shared_secret`) has not been
 measured at this level at all.

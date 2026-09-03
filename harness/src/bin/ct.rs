@@ -255,10 +255,14 @@ fn check_scalar_mul<const N: usize>(
     let mut dmax = 0u32;
     let mut cmin = u32::MAX;
     let mut cmax = 0u32;
-    for k in scalars.iter() {
+    let labels = ["k=0x..01 (mostly zero digits)", "k=all ones (all digits 15)",
+                  "k=0x0F0F.. (alternating)", "k=0x8888..",
+                  "k=1 (single bit)", "k=random"];
+    for (idx, k) in scalars.iter().enumerate() {
         let s = ticks();
         black_box(mul(black_box(k)));
         let t = ticks().wrapping_sub(s);
+        hprintln!("       [{}] {:>10} cycles  {}", idx, t, labels[idx]);
         if t < dmin { dmin = t; }
         if t > dmax { dmax = t; }
 
@@ -303,13 +307,21 @@ fn check_point_add() -> u32 {
     pts[5] = pts[4].add(c, &pts[3]);
 
     const R: u32 = 200;
+    // Test PAIRS, not just varying the left operand: the earlier version
+    // always used pts[3] on the right, so identity+identity -- the case a
+    // sparse scalar spends almost the whole comb in -- was never covered.
+    let pairs: [(usize, usize); 6] =
+        [(0, 0), (0, 3), (3, 0), (1, 2), (3, 4), (5, 5)];
+    let names = ["id+id", "id+P", "P+id", "G+2G", "3G+5G", "big+big"];
     let mut lo = u32::MAX;
     let mut hi2 = 0u32;
-    for a in pts.iter() {
-        for _ in 0..8 { black_box(black_box(a).add(c, black_box(&pts[3]))); }
+    for (n, (ia, ib)) in pairs.iter().enumerate() {
+        let (a, b) = (&pts[*ia], &pts[*ib]);
+        for _ in 0..8 { black_box(black_box(a).add(c, black_box(b))); }
         let s = ticks();
-        for _ in 0..R { black_box(black_box(a).add(c, black_box(&pts[3]))); }
+        for _ in 0..R { black_box(black_box(a).add(c, black_box(b))); }
         let t = ticks().wrapping_sub(s);
+        hprintln!("       {:>10} cycles  {}", t, names[n]);
         if t < lo { lo = t; }
         if t > hi2 { hi2 = t; }
     }
