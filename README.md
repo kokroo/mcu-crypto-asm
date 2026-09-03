@@ -27,12 +27,20 @@ remain:
 | P-256 modular multiply | 2246 | 1411 | **415** | **Emill wins, 3.39×** |
 | P-384 modular multiply | 3857 | **2834** | n/a | **we win, 1.36×** |
 
-**ESP32-S3 (Xtensa LX7) @ CCOUNT — exact hardware cycles:**
+**ESP32-S3 (Xtensa LX7) @ CCOUNT — exact hardware cycles, 1000 ops each:**
 
-| operation | nistp-mcu | vs Cortex-M4 |
-|---|---|---|
-| P-256 modular multiply | 1703 | 1.21× more cycles |
-| P-384 modular multiply | 3823 | 1.35× more cycles |
+| operation | fiat-crypto | nistp-mcu | verdict |
+|---|---|---|---|
+| P-256 modular multiply | 2795 | **1703** | **we win, 1.64×** |
+| P-384 modular multiply | 8538 | **3823** | **we win, 2.23×** |
+
+**This is the best result in the project, and the ESP is where it matters most**
+— no ECC accelerator on the chip, and no other optimised implementation exists.
+Note *why* the margin is so much bigger here than on Cortex-M4: fiat-crypto's
+P-384 costs 3857 cycles on Cortex-M4 but **8538 on Xtensa (2.2× worse)**, while
+ours degrades only 1.35×. Portable code leans on the compiler to synthesise
+carry chains, and with no carry flag on Xtensa that goes badly; explicit `SALTU`
+carry handling is exactly what recovers it.
 
 Two things worth reading off these numbers:
 
@@ -81,8 +89,9 @@ Where this crate is actually the best option available:
 
 - **P-384 on any MCU** — 1.36× faster than fiat-crypto on real silicon, and no
   hand-optimised P-384 to compete with. This is the real gap it fills.
-- **Xtensa LX7 (ESP32-S2/S3)** — the only optimised implementation, on a chip
-  with no ECC accelerator at all.
+- **Xtensa LX7 (ESP32-S2/S3)** — 1.64× (P-256) and **2.23× (P-384)** over
+  fiat-crypto on real silicon, the largest margins measured anywhere here, on a
+  chip with no ECC accelerator at all.
 - **Anywhere you want one implementation across arches**, with the portable
   backend as the fallback.
 
@@ -202,7 +211,7 @@ silent carry bugs happen.
 | Cortex-M7 (QEMU `mps2-an500`) | ✅ same binary, all pass | — |
 | Xtensa LX7 (QEMU `esp32s3`) | ✅ 128 vectors / curve | ✅ |
 | **nRF52840, real silicon** | ✅ 128 KAT + 500 differential / curve | ✅ 1.59× / 1.36× vs fiat-crypto |
-| **ESP32-S3, real silicon** | ✅ 128 vectors / curve | ✅ 1703 / 3823 cycles |
+| **ESP32-S3, real silicon** | ✅ 128 vectors / curve | ✅ 1.64× / **2.23×** vs fiat-crypto |
 | constant time, real silicon | ✅ **0 cycles of spread**, both curves | — |
 
 **Every test harness has been mutation-tested** — a deliberate bug was injected

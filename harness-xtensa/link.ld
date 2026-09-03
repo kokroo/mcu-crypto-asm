@@ -1,6 +1,6 @@
 /* Xtensa L32R reaches only backwards, so literal pools must precede their
    code -- otherwise the link fails with "dangerous relocation". */
-MEMORY { iram (rwx) : ORIGIN = 0x40378000, LENGTH = 0x40000
+MEMORY { iram (rwx) : ORIGIN = 0x40378000, LENGTH = 0x60000
          dram (rw)  : ORIGIN = 0x3FC90000, LENGTH = 0x40000 }
 ENTRY(_start)
 SECTIONS {

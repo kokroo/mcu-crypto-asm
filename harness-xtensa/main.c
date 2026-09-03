@@ -25,7 +25,16 @@
 #define R_P384_CYCLES 4u
 #define R_ITERS 5u
 #define R_DONE 6u
-volatile uint32_t g_results[8] __attribute__((used, section(".results")));
+#define R_FIAT_P256_CYCLES 7u
+#define R_FIAT_P384_CYCLES 8u
+#define R_CROSSCHECK 9u
+volatile uint32_t g_results[16] __attribute__((used, section(".results")));
+
+/* Baseline: fiat-crypto's generated Montgomery multiply -- the same operation,
+ * and the code RustCrypto ships. Without this the Xtensa numbers have nothing
+ * to be compared against. */
+extern void fiat_p256_mul_ext(uint32_t *out, const uint32_t *a, const uint32_t *b);
+extern void fiat_p384_mul_ext(uint32_t *out, const uint32_t *a, const uint32_t *b);
 
 /* Xtensa cycle counter. Free-running at the CPU clock; exact, unlike the
  * SysTick fallback QEMU forced on the Cortex-M side. */
@@ -146,6 +155,34 @@ void xmain(void) {
     nistp_mul_mont_12(am, P384_CASES[8][0], P384_R2, P384_P, scratch);
     nistp_mul_mont_12(bm, P384_CASES[8][1], P384_R2, P384_P, scratch);
     g_results[R_P384_CYCLES] = bench(12, nistp_mul_mont_12, P384_P, am, bm);
+
+    /* Cross-check fiat against ours before timing: comparing two routines is
+     * only meaningful once they are proven to compute the same thing. */
+    {
+        uint32_t ours[12], theirs[12];
+        uint32_t a8[8], b8[8], a12[12], b12[12];
+        nistp_mul_mont_8(a8, P256_CASES[8][0], P256_R2, P256_P, scratch);
+        nistp_mul_mont_8(b8, P256_CASES[8][1], P256_R2, P256_P, scratch);
+        nistp_mul_mont_8(ours, a8, b8, P256_P, scratch);
+        fiat_p256_mul_ext(theirs, a8, b8);
+        int ok = eq(ours, theirs, 8);
+
+        nistp_mul_mont_12(a12, P384_CASES[8][0], P384_R2, P384_P, scratch);
+        nistp_mul_mont_12(b12, P384_CASES[8][1], P384_R2, P384_P, scratch);
+        nistp_mul_mont_12(ours, a12, b12, P384_P, scratch);
+        fiat_p384_mul_ext(theirs, a12, b12);
+        ok = ok && eq(ours, theirs, 12);
+        g_results[R_CROSSCHECK] = ok ? 0x0000000Bu : 0xBADBAD00u;
+
+        /* Baseline timings, same iteration count as ours. */
+        uint32_t t0 = ccount();
+        for (unsigned i = 0; i < BENCH_ITERS; i++) fiat_p256_mul_ext(ours, a8, b8);
+        g_results[R_FIAT_P256_CYCLES] = ccount() - t0;
+
+        t0 = ccount();
+        for (unsigned i = 0; i < BENCH_ITERS; i++) fiat_p384_mul_ext(ours, a12, b12);
+        g_results[R_FIAT_P384_CYCLES] = ccount() - t0;
+    }
 
     if (!(f256 + f384)) puts_("ALL PASS\n");
     else { puts_("FAILURES: "); putu_((uint32_t)(f256 + f384)); putc_('\n'); }
