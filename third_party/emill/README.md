@@ -5,7 +5,7 @@ Files are **unmodified**; only the assembly and its config header are vendored,
 which is all that is needed for the field-multiply comparison.
 
 `P256_mulmod` is the reference hand-optimised P-256 Montgomery multiply and is
-the operation `nistp-mcu`'s `mul_mont` competes with. It is an *internal*
+the operation `mcu-crypto`'s `mul_mont` competes with. It is an *internal*
 symbol with a non-AAPCS convention:
 
     inputs:  r1 -> in1, r2 -> in2   (both 8-word, Montgomery form)

@@ -1,19 +1,24 @@
-# nistp-mcu
+# mcu-crypto
 
-Fast, constant-time **P-256 and P-384** for 32-bit microcontrollers, with
-hand-written assembly for **Cortex-M4/M7/M33** and **Xtensa LX7**
-(ESP32-S2/S3). `no_std`, no allocator, no dependencies.
+Assembly-optimised, constant-time cryptography for 32-bit microcontrollers.
+`no_std`, no allocator, no dependencies.
+
+**Today that means P-256 and P-384**, with hand-written assembly for
+**Cortex-M4/M7/M33** and **Xtensa LX7** (ESP32-S2/S3). The crate is named for
+the scope it is meant to grow into — other primitives will be added as
+separate, feature-gated modules under the same package, so a project that
+wants one of them does not compile the rest.
 
 Every performance and constant-time claim below is **measured on real silicon**
 (nRF52840 and ESP32-S3 over J-Link), not estimated.
 
 ```toml
 [dependencies]
-nistp-mcu = "0.1"
+mcu-crypto = "0.1"
 ```
 
 ```rust
-use nistp_mcu::p256;
+use mcu_crypto::p256;
 
 // Public key from a private scalar (SEC1 uncompressed: 0x04 || x || y)
 let mut pk = [0u8; 65];
@@ -21,7 +26,7 @@ p256::derive_public_key(&secret /* 32 bytes, big-endian */, &mut pk)?;
 
 // ECDH - rejects peer points that are not on the curve
 let mut shared = [0u8; 32];
-nistp_mcu::ecdh::shared_secret::<{ p256::N }>(
+mcu_crypto::ecdh::shared_secret::<{ p256::N }>(
     &p256::CURVE, &secret, &peer_pk, &mut shared,
 )?;
 ```
@@ -30,6 +35,20 @@ On an embassy executor use the yielding form, so a 31 ms operation does not
 stall every other task - see [Not blocking the executor](#not-blocking-the-executor).
 
 ---
+
+## Scope
+
+| primitive | status |
+|---|---|
+| P-256 field arithmetic, point ops, ECDH | ✅ done, hardware-validated |
+| P-384 field arithmetic, point ops, ECDH | ✅ done, hardware-validated |
+| ECDSA (both curves) | planned |
+| further primitives (hashing, symmetric, X25519) | not started |
+
+Each primitive lives in its own module and, once there is more than one, its
+own cargo feature. The shared machinery — the assembly generators in `gen/`,
+the QEMU and on-hardware harnesses, and the three-way constant-time
+verification — is the reusable part, and is deliberately primitive-agnostic.
 
 ## Why this exists
 
@@ -70,14 +89,14 @@ Reproduce with `harness/src/bin/bench.rs`.
 
 **nRF52840 (Cortex-M4) @ 64 MHz**
 
-| operation | fiat-crypto | nistp-mcu | Emill | verdict |
+| operation | fiat-crypto | mcu-crypto | Emill | verdict |
 |---|---|---|---|---|
 | P-256 | 2248 | **998** | **418** | Emill wins, 2.38x |
 | P-384 | 3858 | **1951** | n/a | **we win, 1.97x** |
 
 **ESP32-S3 (Xtensa LX7)**
 
-| operation | fiat-crypto | nistp-mcu | verdict |
+| operation | fiat-crypto | mcu-crypto | verdict |
 |---|---|---|---|
 | P-256 | 2795 | **1272** | **we win, 2.20x** |
 | P-384 | 8538 | **2884** | **we win, 2.96x** |

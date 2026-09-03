@@ -5,7 +5,7 @@
 //! projective complete formulas under test, so a transcription error cannot be
 //! mirrored in both.
 
-use nistp_mcu::{p256, p384, CurveParams, Point};
+use mcu_crypto::{p256, p384, CurveParams, Point};
 
 #[path = "point_vectors.rs"]
 mod vectors;
@@ -77,7 +77,7 @@ fn complete_formulas_handle_exceptional_cases() {
 /// the oracle vectors, and with `mul_scalar` on random scalars.
 #[test]
 fn p256_comb_matches_oracle() {
-    use nistp_mcu::p256;
+    use mcu_crypto::p256;
     for (i, (k, want_x, want_y, want_inf)) in vectors::P256_MUL_G.iter().enumerate() {
         let r = p256::mul_base(k);
         match r.to_affine(&p256::CURVE.field) {
@@ -93,7 +93,7 @@ fn p256_comb_matches_oracle() {
 
 #[test]
 fn p384_comb_matches_oracle() {
-    use nistp_mcu::p384;
+    use mcu_crypto::p384;
     for (i, (k, want_x, want_y, want_inf)) in vectors::P384_MUL_G.iter().enumerate() {
         let r = p384::mul_base(k);
         match r.to_affine(&p384::CURVE.field) {
@@ -111,7 +111,7 @@ fn p384_comb_matches_oracle() {
 /// zero digits (which select the stored identity entry).
 #[test]
 fn comb_agrees_with_general_scalar_mul() {
-    use nistp_mcu::{p256, p384, Point};
+    use mcu_crypto::{p256, p384, Point};
     let g = Point::<{ p256::N }>::generator(&p256::CURVE);
     let mut st = 0x243F6A88u32;
     for _ in 0..12 {

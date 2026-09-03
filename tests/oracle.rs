@@ -4,7 +4,7 @@
 //! If Montgomery form, CIOS, the conditional subtraction or the generated
 //! constants are wrong anywhere, these fail.
 
-use nistp_mcu::{p256, p384, Fe, Params};
+use mcu_crypto::{p256, p384, Fe, Params};
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
 

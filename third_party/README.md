@@ -1,7 +1,7 @@
 # Vendored third-party code
 
 Used **only for benchmarking and cross-checking**. None of it is linked into
-the `nistp-mcu` library itself — it lives in the benchmark harnesses.
+the `mcu-crypto` library itself — it lives in the benchmark harnesses.
 
 | directory | upstream | licence | why |
 |---|---|---|---|

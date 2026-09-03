@@ -1,7 +1,7 @@
 //! The resumable / async scalar multiplication must be (a) identical to the
 //! blocking one and (b) uniform in the scalar, so chunking cannot leak.
 
-use nistp_mcu::{mul_scalar_yielding, p256, p384, CurveParams, Point, ScalarMul};
+use mcu_crypto::{mul_scalar_yielding, p256, p384, CurveParams, Point, ScalarMul};
 use std::future::Future;
 use std::pin::pin;
 use std::task::{Context, Poll, Waker};
@@ -116,7 +116,7 @@ fn step_count_is_independent_of_the_scalar() {
 /// hostile input before doing any work.
 #[test]
 fn async_ecdh_matches_blocking_and_still_validates() {
-    use nistp_mcu::ecdh;
+    use mcu_crypto::ecdh;
     const N: usize = p256::N;
     let c = &p256::CURVE;
 

@@ -18,7 +18,7 @@
 
 use cortex_m_rt::entry;
 use cortex_m_semihosting::{debug, hprintln};
-use nistp_mcu::{backend, p256, p384, Fe, Params};
+use mcu_crypto::{backend, p256, p384, Fe, Params};
 
 use panic_semihosting as _;
 
@@ -138,7 +138,7 @@ fn asm_mul<const N: usize>(a: &[u32; N], b: &[u32; N], f: &Params, out: &mut [u3
 
 #[entry]
 fn main() -> ! {
-    hprintln!("nistp-mcu on-target tests");
+    hprintln!("mcu-crypto on-target tests");
     hprintln!("backend: {}", backend::NAME);
 
     let mut fails = 0;

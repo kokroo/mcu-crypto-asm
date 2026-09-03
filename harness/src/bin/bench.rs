@@ -16,7 +16,7 @@
 use core::hint::black_box;
 use cortex_m_rt::entry;
 use cortex_m_semihosting::{debug, hprintln};
-use nistp_mcu::{backend, p256, p384, Point, ScalarMul};
+use mcu_crypto::{backend, p256, p384, Point, ScalarMul};
 
 use panic_semihosting as _;
 
@@ -158,7 +158,7 @@ fn linearity_ok<F: Fn()>(op: F) -> (bool, u32, u32) {
 #[entry]
 fn main() -> ! {
     let counter = counter_init();
-    hprintln!("nistp-mcu field-multiply benchmark");
+    hprintln!("mcu-crypto field-multiply benchmark");
     hprintln!("backend: {}", backend::NAME);
     match counter {
         Counter::Dwt => hprintln!("counter: DWT CYCCNT (exact hardware cycles)"),
@@ -201,7 +201,7 @@ fn main() -> ! {
         0xfedc_ba98, 0x7654_3210, 0x1122_3344, 0x5566_7788, 0x99aa_bbcc, 0xddee_ff00,
         0xa5a5_5a5a, 0x0f0f_f0f0,
     ]);
-    let ours256 = bench!("nistp-mcu (asm)", ITERS, {
+    let ours256 = bench!("mcu-crypto (asm)", ITERS, {
         black_box(black_box(&a256).mul(&p256::FIELD, black_box(&b256)));
     });
 
@@ -264,7 +264,7 @@ fn main() -> ! {
         0xfedc_ba98, 0x7654_3210, 0x1122_3344, 0x5566_7788, 0x99aa_bbcc, 0xddee_ff00,
         0xa5a5_5a5a, 0x0f0f_f0f0, 0x1111_2222, 0x3333_4444, 0x5555_6666, 0x7777_8888,
     ]);
-    let ours384 = bench!("nistp-mcu (asm)", ITERS, {
+    let ours384 = bench!("mcu-crypto (asm)", ITERS, {
         black_box(black_box(&a384).mul(&p384::FIELD, black_box(&b384)));
     });
 

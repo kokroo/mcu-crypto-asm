@@ -14,7 +14,7 @@
 use core::hint::black_box;
 use cortex_m_rt::entry;
 use cortex_m_semihosting::{debug, hprintln};
-use nistp_mcu::{comb_tables, p256, Point};
+use mcu_crypto::{comb_tables, p256, Point};
 
 use panic_semihosting as _;
 

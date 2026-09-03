@@ -1,13 +1,13 @@
 [package]
-name = "nistp-mcu"
+name = "mcu-crypto"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
-description = "Fast constant-time P-256 / P-384 field arithmetic for 32-bit MCUs (Cortex-M4 UMAAL, Xtensa LX7)"
-repository = "https://github.com/kokroo/nistp-mcu"
+description = "Assembly-optimised, constant-time cryptography for 32-bit microcontrollers (Cortex-M, Xtensa). Currently P-256 and P-384."
+repository = "https://github.com/kokroo/mcu-crypto"
 categories = ["cryptography", "no-std", "embedded"]
-keywords = ["p256", "p384", "ecc", "cortex-m", "xtensa"]
+keywords = ["crypto", "embedded", "no-std", "cortex-m", "p256"]
 
 [dependencies]
 
