@@ -11,6 +11,8 @@
 @ void nistp_mul_mont_8(uint32_t out[8], const uint32_t a[8],
 @                const uint32_t b[8], const uint32_t p[8]);
 @ out = a * b * R^-1 mod p,  R = 2^256
+@ NOTE: the p[] argument is ignored -- the modulus is a compile-time
+@ constant and lives in registers.
 	.globl	nistp_mul_mont_8
 	.p2align 2
 	.thumb_func
@@ -19,181 +21,136 @@ nistp_mul_mont_8:
 	push	{r4-r11, lr}
 	sub	sp, sp, #40
 	mov	r4, sp
-	mov	r11, #0			@ permanent zero, for carry-only adds
-	@ modulus limbs live in registers: 0x00000000->r11, 0x00000001->r12, 0xffffffff->lr
+	mov	r11, #0			@ permanent zero
+	@ modulus limbs in registers: 0x00000000->r11, 0x00000001->r12, 0xffffffff->lr
 	mov	r12, #1
 	mvn	lr, #0			@ 0xffffffff
 	@ t = 0
-	mov	r7, #0
-	str	r7, [r4, #0]
-	str	r7, [r4, #4]
-	str	r7, [r4, #8]
-	str	r7, [r4, #12]
-	str	r7, [r4, #16]
-	str	r7, [r4, #20]
-	str	r7, [r4, #24]
-	str	r7, [r4, #28]
-	str	r7, [r4, #32]
-	str	r7, [r4, #36]
+	strd	r11, r11, [r4, #0]
+	strd	r11, r11, [r4, #8]
+	strd	r11, r11, [r4, #16]
+	strd	r11, r11, [r4, #24]
+	strd	r11, r11, [r4, #32]
 	mov	r9, #8			@ outer counter i
 1:
 	ldr	r5, [r2], #4		@ b[i]
 	mov	r6, #0			@ C = 0
-	ldr	r8, [r1, #0]
-	ldr	r7, [r4, #0]
-	umaal	r7, r6, r8, r5		@ (C,t[0]) = t[0] + a[0]*b[i] + C
-	str	r7, [r4, #0]
-	ldr	r8, [r1, #4]
-	ldr	r7, [r4, #4]
-	umaal	r7, r6, r8, r5		@ (C,t[1]) = t[1] + a[1]*b[i] + C
-	str	r7, [r4, #4]
-	ldr	r8, [r1, #8]
-	ldr	r7, [r4, #8]
-	umaal	r7, r6, r8, r5		@ (C,t[2]) = t[2] + a[2]*b[i] + C
-	str	r7, [r4, #8]
-	ldr	r8, [r1, #12]
-	ldr	r7, [r4, #12]
-	umaal	r7, r6, r8, r5		@ (C,t[3]) = t[3] + a[3]*b[i] + C
-	str	r7, [r4, #12]
-	ldr	r8, [r1, #16]
-	ldr	r7, [r4, #16]
-	umaal	r7, r6, r8, r5		@ (C,t[4]) = t[4] + a[4]*b[i] + C
-	str	r7, [r4, #16]
-	ldr	r8, [r1, #20]
-	ldr	r7, [r4, #20]
-	umaal	r7, r6, r8, r5		@ (C,t[5]) = t[5] + a[5]*b[i] + C
-	str	r7, [r4, #20]
-	ldr	r8, [r1, #24]
-	ldr	r7, [r4, #24]
-	umaal	r7, r6, r8, r5		@ (C,t[6]) = t[6] + a[6]*b[i] + C
-	str	r7, [r4, #24]
-	ldr	r8, [r1, #28]
-	ldr	r7, [r4, #28]
-	umaal	r7, r6, r8, r5		@ (C,t[7]) = t[7] + a[7]*b[i] + C
-	str	r7, [r4, #28]
+	ldrd	r8, r10, [r1, #0]	@ a[0], a[1]
+	ldrd	r7, r3, [r4, #0]	@ t[0], t[1]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	strd	r7, r3, [r4, #0]
+	ldrd	r8, r10, [r1, #8]	@ a[2], a[3]
+	ldrd	r7, r3, [r4, #8]	@ t[2], t[3]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	strd	r7, r3, [r4, #8]
+	ldrd	r8, r10, [r1, #16]	@ a[4], a[5]
+	ldrd	r7, r3, [r4, #16]	@ t[4], t[5]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	strd	r7, r3, [r4, #16]
+	ldrd	r8, r10, [r1, #24]	@ a[6], a[7]
+	ldrd	r7, r3, [r4, #24]	@ t[6], t[7]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	strd	r7, r3, [r4, #24]
 	ldr	r7, [r4, #32]
-	adds	r7, r7, r6		@ (c, t[8]) = t[8] + C
-	str	r7, [r4, #32]		@ (ldr/str do not touch flags)
-	adc.w	r7, r11, r11		@ r7 = 0 + 0 + C = carry
-	str	r7, [r4, #36]	@ t[9] = carry
-	ldr	r5, [r4, #0]		@ m = t[0]  (n0inv == 1)
+	adds	r7, r7, r6		@ t[8] += C
+	str	r7, [r4, #32]
+	adc.w	r7, r11, r11		@ carry
+	str	r7, [r4, #36]
+	ldr	r5, [r4, #0]		@ m = t[0]
 	mov	r6, #0
 	ldr	r7, [r4, #0]
-	umaal	r7, r6, r5, lr		@ low word cancels; keep C only
+	umaal	r7, r6, r5, lr		@ low word cancels
 	ldr	r7, [r4, #4]
 	umaal	r7, r6, r5, lr		@ p[1] = 0xffffffff
-	str	r7, [r4, #0]	@ t[0] = t[1] + m*p[1] + C
-	ldr	r7, [r4, #8]
+	str	r7, [r4, #0]
+	ldrd	r7, r3, [r4, #8]	@ t[2], t[3]
 	umaal	r7, r6, r5, lr		@ p[2] = 0xffffffff
-	str	r7, [r4, #4]	@ t[1] = t[2] + m*p[2] + C
-	ldr	r7, [r4, #12]
-	umaal	r7, r6, r5, r11		@ p[3] = 0x00000000
-	str	r7, [r4, #8]	@ t[2] = t[3] + m*p[3] + C
-	ldr	r7, [r4, #16]
+	umaal	r3, r6, r5, r11		@ p[3] = 0x00000000
+	strd	r7, r3, [r4, #4]	@ t[1], t[2]
+	ldrd	r7, r3, [r4, #16]	@ t[4], t[5]
 	umaal	r7, r6, r5, r11		@ p[4] = 0x00000000
-	str	r7, [r4, #12]	@ t[3] = t[4] + m*p[4] + C
-	ldr	r7, [r4, #20]
-	umaal	r7, r6, r5, r11		@ p[5] = 0x00000000
-	str	r7, [r4, #16]	@ t[4] = t[5] + m*p[5] + C
-	ldr	r7, [r4, #24]
+	umaal	r3, r6, r5, r11		@ p[5] = 0x00000000
+	strd	r7, r3, [r4, #12]	@ t[3], t[4]
+	ldrd	r7, r3, [r4, #24]	@ t[6], t[7]
 	umaal	r7, r6, r5, r12		@ p[6] = 0x00000001
-	str	r7, [r4, #20]	@ t[5] = t[6] + m*p[6] + C
-	ldr	r7, [r4, #28]
-	umaal	r7, r6, r5, lr		@ p[7] = 0xffffffff
-	str	r7, [r4, #24]	@ t[6] = t[7] + m*p[7] + C
+	umaal	r3, r6, r5, lr		@ p[7] = 0xffffffff
+	strd	r7, r3, [r4, #20]	@ t[5], t[6]
 	ldr	r7, [r4, #32]
 	adds	r7, r7, r6
 	str	r7, [r4, #28]
 	ldr	r8, [r4, #36]
-	adc.w	r8, r8, r11		@ + carry (r11 == 0)
+	adc.w	r8, r8, r11
 	str	r8, [r4, #32]
 	subs	r9, r9, #1
 	bne	1b
-	@ diff = t[0..7] - p, written to out; carry set == no borrow
+	@ diff = t - p into out; carry set == no borrow
 	ldr	r7, [r4, #0]
-	ldr	r8, [r3, #0]
-	subs	r7, r7, r8
+	subs	r7, r7, lr
 	str	r7, [r0, #0]
 	ldr	r7, [r4, #4]
-	ldr	r8, [r3, #4]
-	sbcs	r7, r7, r8
+	sbcs	r7, r7, lr
 	str	r7, [r0, #4]
 	ldr	r7, [r4, #8]
-	ldr	r8, [r3, #8]
-	sbcs	r7, r7, r8
+	sbcs	r7, r7, lr
 	str	r7, [r0, #8]
 	ldr	r7, [r4, #12]
-	ldr	r8, [r3, #12]
-	sbcs	r7, r7, r8
+	sbcs	r7, r7, r11
 	str	r7, [r0, #12]
 	ldr	r7, [r4, #16]
-	ldr	r8, [r3, #16]
-	sbcs	r7, r7, r8
+	sbcs	r7, r7, r11
 	str	r7, [r0, #16]
 	ldr	r7, [r4, #20]
-	ldr	r8, [r3, #20]
-	sbcs	r7, r7, r8
+	sbcs	r7, r7, r11
 	str	r7, [r0, #20]
 	ldr	r7, [r4, #24]
-	ldr	r8, [r3, #24]
-	sbcs	r7, r7, r8
+	sbcs	r7, r7, r12
 	str	r7, [r0, #24]
 	ldr	r7, [r4, #28]
-	ldr	r8, [r3, #28]
-	sbcs	r7, r7, r8
+	sbcs	r7, r7, lr
 	str	r7, [r0, #28]
-	ldr	r7, [r4, #32]		@ the extra word (0 or 1)
-	sbcs	r7, r7, #0
-	@ r10 = 0 if no borrow (keep diff), 0xFFFFFFFF if borrow (keep t)
-	sbc	r10, r10, r10
-	ldr	r7, [r0, #0]
-	ldr	r8, [r4, #0]
+	ldr	r7, [r4, #32]		@ extra word (0 or 1)
+	sbcs	r7, r7, r11
+	sbc	r10, r10, r10		@ 0 if no borrow, else all ones
+	ldrd	r7, r3, [r0, #0]
+	ldrd	r8, r12, [r4, #0]
 	eor	r8, r8, r7
+	eor	r12, r12, r3
 	and	r8, r8, r10
-	eor	r7, r7, r8		@ select, branchlessly
-	str	r7, [r0, #0]
-	ldr	r7, [r0, #4]
-	ldr	r8, [r4, #4]
+	and	r12, r12, r10
+	eor	r7, r7, r8		@ branchless select
+	eor	r3, r3, r12
+	strd	r7, r3, [r0, #0]
+	ldrd	r7, r3, [r0, #8]
+	ldrd	r8, r12, [r4, #8]
 	eor	r8, r8, r7
+	eor	r12, r12, r3
 	and	r8, r8, r10
-	eor	r7, r7, r8		@ select, branchlessly
-	str	r7, [r0, #4]
-	ldr	r7, [r0, #8]
-	ldr	r8, [r4, #8]
+	and	r12, r12, r10
+	eor	r7, r7, r8		@ branchless select
+	eor	r3, r3, r12
+	strd	r7, r3, [r0, #8]
+	ldrd	r7, r3, [r0, #16]
+	ldrd	r8, r12, [r4, #16]
 	eor	r8, r8, r7
+	eor	r12, r12, r3
 	and	r8, r8, r10
-	eor	r7, r7, r8		@ select, branchlessly
-	str	r7, [r0, #8]
-	ldr	r7, [r0, #12]
-	ldr	r8, [r4, #12]
+	and	r12, r12, r10
+	eor	r7, r7, r8		@ branchless select
+	eor	r3, r3, r12
+	strd	r7, r3, [r0, #16]
+	ldrd	r7, r3, [r0, #24]
+	ldrd	r8, r12, [r4, #24]
 	eor	r8, r8, r7
+	eor	r12, r12, r3
 	and	r8, r8, r10
-	eor	r7, r7, r8		@ select, branchlessly
-	str	r7, [r0, #12]
-	ldr	r7, [r0, #16]
-	ldr	r8, [r4, #16]
-	eor	r8, r8, r7
-	and	r8, r8, r10
-	eor	r7, r7, r8		@ select, branchlessly
-	str	r7, [r0, #16]
-	ldr	r7, [r0, #20]
-	ldr	r8, [r4, #20]
-	eor	r8, r8, r7
-	and	r8, r8, r10
-	eor	r7, r7, r8		@ select, branchlessly
-	str	r7, [r0, #20]
-	ldr	r7, [r0, #24]
-	ldr	r8, [r4, #24]
-	eor	r8, r8, r7
-	and	r8, r8, r10
-	eor	r7, r7, r8		@ select, branchlessly
-	str	r7, [r0, #24]
-	ldr	r7, [r0, #28]
-	ldr	r8, [r4, #28]
-	eor	r8, r8, r7
-	and	r8, r8, r10
-	eor	r7, r7, r8		@ select, branchlessly
-	str	r7, [r0, #28]
+	and	r12, r12, r10
+	eor	r7, r7, r8		@ branchless select
+	eor	r3, r3, r12
+	strd	r7, r3, [r0, #24]
 	add	sp, sp, #40
 	pop	{r4-r11, pc}
 	.size	nistp_mul_mont_8, .-nistp_mul_mont_8
@@ -201,6 +158,8 @@ nistp_mul_mont_8:
 @ void nistp_mul_mont_12(uint32_t out[12], const uint32_t a[12],
 @                const uint32_t b[12], const uint32_t p[12]);
 @ out = a * b * R^-1 mod p,  R = 2^384
+@ NOTE: the p[] argument is ignored -- the modulus is a compile-time
+@ constant and lives in registers.
 	.globl	nistp_mul_mont_12
 	.p2align 2
 	.thumb_func
@@ -209,253 +168,186 @@ nistp_mul_mont_12:
 	push	{r4-r11, lr}
 	sub	sp, sp, #56
 	mov	r4, sp
-	mov	r11, #0			@ permanent zero, for carry-only adds
-	@ modulus limbs live in registers: 0x00000000->r11, 0xfffffffe->r12, 0xffffffff->lr
+	mov	r11, #0			@ permanent zero
+	@ modulus limbs in registers: 0x00000000->r11, 0xfffffffe->r12, 0xffffffff->lr
 	mvn	r12, #1			@ 0xfffffffe
 	mvn	lr, #0			@ 0xffffffff
 	@ t = 0
-	mov	r7, #0
-	str	r7, [r4, #0]
-	str	r7, [r4, #4]
-	str	r7, [r4, #8]
-	str	r7, [r4, #12]
-	str	r7, [r4, #16]
-	str	r7, [r4, #20]
-	str	r7, [r4, #24]
-	str	r7, [r4, #28]
-	str	r7, [r4, #32]
-	str	r7, [r4, #36]
-	str	r7, [r4, #40]
-	str	r7, [r4, #44]
-	str	r7, [r4, #48]
-	str	r7, [r4, #52]
+	strd	r11, r11, [r4, #0]
+	strd	r11, r11, [r4, #8]
+	strd	r11, r11, [r4, #16]
+	strd	r11, r11, [r4, #24]
+	strd	r11, r11, [r4, #32]
+	strd	r11, r11, [r4, #40]
+	strd	r11, r11, [r4, #48]
 	mov	r9, #12			@ outer counter i
 1:
 	ldr	r5, [r2], #4		@ b[i]
 	mov	r6, #0			@ C = 0
-	ldr	r8, [r1, #0]
-	ldr	r7, [r4, #0]
-	umaal	r7, r6, r8, r5		@ (C,t[0]) = t[0] + a[0]*b[i] + C
-	str	r7, [r4, #0]
-	ldr	r8, [r1, #4]
-	ldr	r7, [r4, #4]
-	umaal	r7, r6, r8, r5		@ (C,t[1]) = t[1] + a[1]*b[i] + C
-	str	r7, [r4, #4]
-	ldr	r8, [r1, #8]
-	ldr	r7, [r4, #8]
-	umaal	r7, r6, r8, r5		@ (C,t[2]) = t[2] + a[2]*b[i] + C
-	str	r7, [r4, #8]
-	ldr	r8, [r1, #12]
-	ldr	r7, [r4, #12]
-	umaal	r7, r6, r8, r5		@ (C,t[3]) = t[3] + a[3]*b[i] + C
-	str	r7, [r4, #12]
-	ldr	r8, [r1, #16]
-	ldr	r7, [r4, #16]
-	umaal	r7, r6, r8, r5		@ (C,t[4]) = t[4] + a[4]*b[i] + C
-	str	r7, [r4, #16]
-	ldr	r8, [r1, #20]
-	ldr	r7, [r4, #20]
-	umaal	r7, r6, r8, r5		@ (C,t[5]) = t[5] + a[5]*b[i] + C
-	str	r7, [r4, #20]
-	ldr	r8, [r1, #24]
-	ldr	r7, [r4, #24]
-	umaal	r7, r6, r8, r5		@ (C,t[6]) = t[6] + a[6]*b[i] + C
-	str	r7, [r4, #24]
-	ldr	r8, [r1, #28]
-	ldr	r7, [r4, #28]
-	umaal	r7, r6, r8, r5		@ (C,t[7]) = t[7] + a[7]*b[i] + C
-	str	r7, [r4, #28]
-	ldr	r8, [r1, #32]
-	ldr	r7, [r4, #32]
-	umaal	r7, r6, r8, r5		@ (C,t[8]) = t[8] + a[8]*b[i] + C
-	str	r7, [r4, #32]
-	ldr	r8, [r1, #36]
-	ldr	r7, [r4, #36]
-	umaal	r7, r6, r8, r5		@ (C,t[9]) = t[9] + a[9]*b[i] + C
-	str	r7, [r4, #36]
-	ldr	r8, [r1, #40]
-	ldr	r7, [r4, #40]
-	umaal	r7, r6, r8, r5		@ (C,t[10]) = t[10] + a[10]*b[i] + C
-	str	r7, [r4, #40]
-	ldr	r8, [r1, #44]
-	ldr	r7, [r4, #44]
-	umaal	r7, r6, r8, r5		@ (C,t[11]) = t[11] + a[11]*b[i] + C
-	str	r7, [r4, #44]
+	ldrd	r8, r10, [r1, #0]	@ a[0], a[1]
+	ldrd	r7, r3, [r4, #0]	@ t[0], t[1]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	strd	r7, r3, [r4, #0]
+	ldrd	r8, r10, [r1, #8]	@ a[2], a[3]
+	ldrd	r7, r3, [r4, #8]	@ t[2], t[3]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	strd	r7, r3, [r4, #8]
+	ldrd	r8, r10, [r1, #16]	@ a[4], a[5]
+	ldrd	r7, r3, [r4, #16]	@ t[4], t[5]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	strd	r7, r3, [r4, #16]
+	ldrd	r8, r10, [r1, #24]	@ a[6], a[7]
+	ldrd	r7, r3, [r4, #24]	@ t[6], t[7]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	strd	r7, r3, [r4, #24]
+	ldrd	r8, r10, [r1, #32]	@ a[8], a[9]
+	ldrd	r7, r3, [r4, #32]	@ t[8], t[9]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	strd	r7, r3, [r4, #32]
+	ldrd	r8, r10, [r1, #40]	@ a[10], a[11]
+	ldrd	r7, r3, [r4, #40]	@ t[10], t[11]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	strd	r7, r3, [r4, #40]
 	ldr	r7, [r4, #48]
-	adds	r7, r7, r6		@ (c, t[12]) = t[12] + C
-	str	r7, [r4, #48]		@ (ldr/str do not touch flags)
-	adc.w	r7, r11, r11		@ r7 = 0 + 0 + C = carry
-	str	r7, [r4, #52]	@ t[13] = carry
-	ldr	r5, [r4, #0]		@ m = t[0]  (n0inv == 1)
+	adds	r7, r7, r6		@ t[12] += C
+	str	r7, [r4, #48]
+	adc.w	r7, r11, r11		@ carry
+	str	r7, [r4, #52]
+	ldr	r5, [r4, #0]		@ m = t[0]
 	mov	r6, #0
 	ldr	r7, [r4, #0]
-	umaal	r7, r6, r5, lr		@ low word cancels; keep C only
+	umaal	r7, r6, r5, lr		@ low word cancels
 	ldr	r7, [r4, #4]
 	umaal	r7, r6, r5, r11		@ p[1] = 0x00000000
-	str	r7, [r4, #0]	@ t[0] = t[1] + m*p[1] + C
-	ldr	r7, [r4, #8]
+	str	r7, [r4, #0]
+	ldrd	r7, r3, [r4, #8]	@ t[2], t[3]
 	umaal	r7, r6, r5, r11		@ p[2] = 0x00000000
-	str	r7, [r4, #4]	@ t[1] = t[2] + m*p[2] + C
-	ldr	r7, [r4, #12]
-	umaal	r7, r6, r5, lr		@ p[3] = 0xffffffff
-	str	r7, [r4, #8]	@ t[2] = t[3] + m*p[3] + C
-	ldr	r7, [r4, #16]
+	umaal	r3, r6, r5, lr		@ p[3] = 0xffffffff
+	strd	r7, r3, [r4, #4]	@ t[1], t[2]
+	ldrd	r7, r3, [r4, #16]	@ t[4], t[5]
 	umaal	r7, r6, r5, r12		@ p[4] = 0xfffffffe
-	str	r7, [r4, #12]	@ t[3] = t[4] + m*p[4] + C
-	ldr	r7, [r4, #20]
-	umaal	r7, r6, r5, lr		@ p[5] = 0xffffffff
-	str	r7, [r4, #16]	@ t[4] = t[5] + m*p[5] + C
-	ldr	r7, [r4, #24]
+	umaal	r3, r6, r5, lr		@ p[5] = 0xffffffff
+	strd	r7, r3, [r4, #12]	@ t[3], t[4]
+	ldrd	r7, r3, [r4, #24]	@ t[6], t[7]
 	umaal	r7, r6, r5, lr		@ p[6] = 0xffffffff
-	str	r7, [r4, #20]	@ t[5] = t[6] + m*p[6] + C
-	ldr	r7, [r4, #28]
-	umaal	r7, r6, r5, lr		@ p[7] = 0xffffffff
-	str	r7, [r4, #24]	@ t[6] = t[7] + m*p[7] + C
-	ldr	r7, [r4, #32]
+	umaal	r3, r6, r5, lr		@ p[7] = 0xffffffff
+	strd	r7, r3, [r4, #20]	@ t[5], t[6]
+	ldrd	r7, r3, [r4, #32]	@ t[8], t[9]
 	umaal	r7, r6, r5, lr		@ p[8] = 0xffffffff
-	str	r7, [r4, #28]	@ t[7] = t[8] + m*p[8] + C
-	ldr	r7, [r4, #36]
-	umaal	r7, r6, r5, lr		@ p[9] = 0xffffffff
-	str	r7, [r4, #32]	@ t[8] = t[9] + m*p[9] + C
-	ldr	r7, [r4, #40]
+	umaal	r3, r6, r5, lr		@ p[9] = 0xffffffff
+	strd	r7, r3, [r4, #28]	@ t[7], t[8]
+	ldrd	r7, r3, [r4, #40]	@ t[10], t[11]
 	umaal	r7, r6, r5, lr		@ p[10] = 0xffffffff
-	str	r7, [r4, #36]	@ t[9] = t[10] + m*p[10] + C
-	ldr	r7, [r4, #44]
-	umaal	r7, r6, r5, lr		@ p[11] = 0xffffffff
-	str	r7, [r4, #40]	@ t[10] = t[11] + m*p[11] + C
+	umaal	r3, r6, r5, lr		@ p[11] = 0xffffffff
+	strd	r7, r3, [r4, #36]	@ t[9], t[10]
 	ldr	r7, [r4, #48]
 	adds	r7, r7, r6
 	str	r7, [r4, #44]
 	ldr	r8, [r4, #52]
-	adc.w	r8, r8, r11		@ + carry (r11 == 0)
+	adc.w	r8, r8, r11
 	str	r8, [r4, #48]
 	subs	r9, r9, #1
 	bne	1b
-	@ diff = t[0..11] - p, written to out; carry set == no borrow
+	@ diff = t - p into out; carry set == no borrow
 	ldr	r7, [r4, #0]
-	ldr	r8, [r3, #0]
-	subs	r7, r7, r8
+	subs	r7, r7, lr
 	str	r7, [r0, #0]
 	ldr	r7, [r4, #4]
-	ldr	r8, [r3, #4]
-	sbcs	r7, r7, r8
+	sbcs	r7, r7, r11
 	str	r7, [r0, #4]
 	ldr	r7, [r4, #8]
-	ldr	r8, [r3, #8]
-	sbcs	r7, r7, r8
+	sbcs	r7, r7, r11
 	str	r7, [r0, #8]
 	ldr	r7, [r4, #12]
-	ldr	r8, [r3, #12]
-	sbcs	r7, r7, r8
+	sbcs	r7, r7, lr
 	str	r7, [r0, #12]
 	ldr	r7, [r4, #16]
-	ldr	r8, [r3, #16]
-	sbcs	r7, r7, r8
+	sbcs	r7, r7, r12
 	str	r7, [r0, #16]
 	ldr	r7, [r4, #20]
-	ldr	r8, [r3, #20]
-	sbcs	r7, r7, r8
+	sbcs	r7, r7, lr
 	str	r7, [r0, #20]
 	ldr	r7, [r4, #24]
-	ldr	r8, [r3, #24]
-	sbcs	r7, r7, r8
+	sbcs	r7, r7, lr
 	str	r7, [r0, #24]
 	ldr	r7, [r4, #28]
-	ldr	r8, [r3, #28]
-	sbcs	r7, r7, r8
+	sbcs	r7, r7, lr
 	str	r7, [r0, #28]
 	ldr	r7, [r4, #32]
-	ldr	r8, [r3, #32]
-	sbcs	r7, r7, r8
+	sbcs	r7, r7, lr
 	str	r7, [r0, #32]
 	ldr	r7, [r4, #36]
-	ldr	r8, [r3, #36]
-	sbcs	r7, r7, r8
+	sbcs	r7, r7, lr
 	str	r7, [r0, #36]
 	ldr	r7, [r4, #40]
-	ldr	r8, [r3, #40]
-	sbcs	r7, r7, r8
+	sbcs	r7, r7, lr
 	str	r7, [r0, #40]
 	ldr	r7, [r4, #44]
-	ldr	r8, [r3, #44]
-	sbcs	r7, r7, r8
+	sbcs	r7, r7, lr
 	str	r7, [r0, #44]
-	ldr	r7, [r4, #48]		@ the extra word (0 or 1)
-	sbcs	r7, r7, #0
-	@ r10 = 0 if no borrow (keep diff), 0xFFFFFFFF if borrow (keep t)
-	sbc	r10, r10, r10
-	ldr	r7, [r0, #0]
-	ldr	r8, [r4, #0]
+	ldr	r7, [r4, #48]		@ extra word (0 or 1)
+	sbcs	r7, r7, r11
+	sbc	r10, r10, r10		@ 0 if no borrow, else all ones
+	ldrd	r7, r3, [r0, #0]
+	ldrd	r8, r12, [r4, #0]
 	eor	r8, r8, r7
+	eor	r12, r12, r3
 	and	r8, r8, r10
-	eor	r7, r7, r8		@ select, branchlessly
-	str	r7, [r0, #0]
-	ldr	r7, [r0, #4]
-	ldr	r8, [r4, #4]
+	and	r12, r12, r10
+	eor	r7, r7, r8		@ branchless select
+	eor	r3, r3, r12
+	strd	r7, r3, [r0, #0]
+	ldrd	r7, r3, [r0, #8]
+	ldrd	r8, r12, [r4, #8]
 	eor	r8, r8, r7
+	eor	r12, r12, r3
 	and	r8, r8, r10
-	eor	r7, r7, r8		@ select, branchlessly
-	str	r7, [r0, #4]
-	ldr	r7, [r0, #8]
-	ldr	r8, [r4, #8]
+	and	r12, r12, r10
+	eor	r7, r7, r8		@ branchless select
+	eor	r3, r3, r12
+	strd	r7, r3, [r0, #8]
+	ldrd	r7, r3, [r0, #16]
+	ldrd	r8, r12, [r4, #16]
 	eor	r8, r8, r7
+	eor	r12, r12, r3
 	and	r8, r8, r10
-	eor	r7, r7, r8		@ select, branchlessly
-	str	r7, [r0, #8]
-	ldr	r7, [r0, #12]
-	ldr	r8, [r4, #12]
+	and	r12, r12, r10
+	eor	r7, r7, r8		@ branchless select
+	eor	r3, r3, r12
+	strd	r7, r3, [r0, #16]
+	ldrd	r7, r3, [r0, #24]
+	ldrd	r8, r12, [r4, #24]
 	eor	r8, r8, r7
+	eor	r12, r12, r3
 	and	r8, r8, r10
-	eor	r7, r7, r8		@ select, branchlessly
-	str	r7, [r0, #12]
-	ldr	r7, [r0, #16]
-	ldr	r8, [r4, #16]
+	and	r12, r12, r10
+	eor	r7, r7, r8		@ branchless select
+	eor	r3, r3, r12
+	strd	r7, r3, [r0, #24]
+	ldrd	r7, r3, [r0, #32]
+	ldrd	r8, r12, [r4, #32]
 	eor	r8, r8, r7
+	eor	r12, r12, r3
 	and	r8, r8, r10
-	eor	r7, r7, r8		@ select, branchlessly
-	str	r7, [r0, #16]
-	ldr	r7, [r0, #20]
-	ldr	r8, [r4, #20]
+	and	r12, r12, r10
+	eor	r7, r7, r8		@ branchless select
+	eor	r3, r3, r12
+	strd	r7, r3, [r0, #32]
+	ldrd	r7, r3, [r0, #40]
+	ldrd	r8, r12, [r4, #40]
 	eor	r8, r8, r7
+	eor	r12, r12, r3
 	and	r8, r8, r10
-	eor	r7, r7, r8		@ select, branchlessly
-	str	r7, [r0, #20]
-	ldr	r7, [r0, #24]
-	ldr	r8, [r4, #24]
-	eor	r8, r8, r7
-	and	r8, r8, r10
-	eor	r7, r7, r8		@ select, branchlessly
-	str	r7, [r0, #24]
-	ldr	r7, [r0, #28]
-	ldr	r8, [r4, #28]
-	eor	r8, r8, r7
-	and	r8, r8, r10
-	eor	r7, r7, r8		@ select, branchlessly
-	str	r7, [r0, #28]
-	ldr	r7, [r0, #32]
-	ldr	r8, [r4, #32]
-	eor	r8, r8, r7
-	and	r8, r8, r10
-	eor	r7, r7, r8		@ select, branchlessly
-	str	r7, [r0, #32]
-	ldr	r7, [r0, #36]
-	ldr	r8, [r4, #36]
-	eor	r8, r8, r7
-	and	r8, r8, r10
-	eor	r7, r7, r8		@ select, branchlessly
-	str	r7, [r0, #36]
-	ldr	r7, [r0, #40]
-	ldr	r8, [r4, #40]
-	eor	r8, r8, r7
-	and	r8, r8, r10
-	eor	r7, r7, r8		@ select, branchlessly
-	str	r7, [r0, #40]
-	ldr	r7, [r0, #44]
-	ldr	r8, [r4, #44]
-	eor	r8, r8, r7
-	and	r8, r8, r10
-	eor	r7, r7, r8		@ select, branchlessly
-	str	r7, [r0, #44]
+	and	r12, r12, r10
+	eor	r7, r7, r8		@ branchless select
+	eor	r3, r3, r12
+	strd	r7, r3, [r0, #40]
 	add	sp, sp, #56
 	pop	{r4-r11, pc}
 	.size	nistp_mul_mont_12, .-nistp_mul_mont_12

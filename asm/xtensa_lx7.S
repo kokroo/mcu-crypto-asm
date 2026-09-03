@@ -12,11 +12,13 @@
 
 
 # out = a * b * R^-1 mod p,  R = 2^256
+# NOTE: the p argument is ignored; the modulus is a compile-time constant.
 	.globl	nistp_mul_mont_8
 	.align	4
 	.type	nistp_mul_mont_8, @function
 nistp_mul_mont_8:
 	entry	a1, 32			# no stack locals; scratch is an argument
+	movi	a5, -1			# 0xffffffff
 	movi	a9, 0
 	s32i	a9, a6, 0
 	s32i	a9, a6, 4
@@ -43,19 +45,17 @@ nistp_mul_mont_8:
 	add	a15, a15, a8
 	saltu	a12, a15, a8
 	add	a11, a11, a12
-	mov	a8, a11			# C = hi
 	s32i	a15, a6, 0		# t[0] = lo
 	l32i	a10, a3, 4		# a[1]
 	l32i	a9, a6, 4		# t[1]
 	mull	a15, a10, a7
-	muluh	a11, a10, a7
+	muluh	a8, a10, a7
 	add	a15, a15, a9
 	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11			# C = hi
+	add	a8, a8, a12
+	add	a15, a15, a11
+	saltu	a12, a15, a11
+	add	a8, a8, a12
 	s32i	a15, a6, 4		# t[1] = lo
 	l32i	a10, a3, 8		# a[2]
 	l32i	a9, a6, 8		# t[2]
@@ -67,19 +67,17 @@ nistp_mul_mont_8:
 	add	a15, a15, a8
 	saltu	a12, a15, a8
 	add	a11, a11, a12
-	mov	a8, a11			# C = hi
 	s32i	a15, a6, 8		# t[2] = lo
 	l32i	a10, a3, 12		# a[3]
 	l32i	a9, a6, 12		# t[3]
 	mull	a15, a10, a7
-	muluh	a11, a10, a7
+	muluh	a8, a10, a7
 	add	a15, a15, a9
 	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11			# C = hi
+	add	a8, a8, a12
+	add	a15, a15, a11
+	saltu	a12, a15, a11
+	add	a8, a8, a12
 	s32i	a15, a6, 12		# t[3] = lo
 	l32i	a10, a3, 16		# a[4]
 	l32i	a9, a6, 16		# t[4]
@@ -91,19 +89,17 @@ nistp_mul_mont_8:
 	add	a15, a15, a8
 	saltu	a12, a15, a8
 	add	a11, a11, a12
-	mov	a8, a11			# C = hi
 	s32i	a15, a6, 16		# t[4] = lo
 	l32i	a10, a3, 20		# a[5]
 	l32i	a9, a6, 20		# t[5]
 	mull	a15, a10, a7
-	muluh	a11, a10, a7
+	muluh	a8, a10, a7
 	add	a15, a15, a9
 	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11			# C = hi
+	add	a8, a8, a12
+	add	a15, a15, a11
+	saltu	a12, a15, a11
+	add	a8, a8, a12
 	s32i	a15, a6, 20		# t[5] = lo
 	l32i	a10, a3, 24		# a[6]
 	l32i	a9, a6, 24		# t[6]
@@ -115,228 +111,205 @@ nistp_mul_mont_8:
 	add	a15, a15, a8
 	saltu	a12, a15, a8
 	add	a11, a11, a12
-	mov	a8, a11			# C = hi
 	s32i	a15, a6, 24		# t[6] = lo
 	l32i	a10, a3, 28		# a[7]
 	l32i	a9, a6, 28		# t[7]
 	mull	a15, a10, a7
-	muluh	a11, a10, a7
+	muluh	a8, a10, a7
 	add	a15, a15, a9
 	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11			# C = hi
+	add	a8, a8, a12
+	add	a15, a15, a11
+	saltu	a12, a15, a11
+	add	a8, a8, a12
 	s32i	a15, a6, 28		# t[7] = lo
 	l32i	a9, a6, 32
 	add	a15, a9, a8
 	s32i	a15, a6, 32		# t[8] += C
-	movi	a11, 0
 	saltu	a12, a15, a9
-	add	a11, a11, a12
-	s32i	a11, a6, 36	# t[9] = carry
-	l32i	a7, a6, 0		# m = t[0]  (n0inv == 1)
-	movi	a8, 0
-	l32i	a10, a5, 0		# p[0]
+	s32i	a12, a6, 36	# t[9] = carry
+	l32i	a7, a6, 0		# m = t[0]
 	l32i	a9, a6, 0
-	mull	a15, a10, a7
-	muluh	a11, a10, a7
+	mull	a15, a5, a7
+	muluh	a8, a5, a7
 	add	a15, a15, a9		# low word cancels to zero
 	saltu	a12, a15, a9
-	add	a11, a11, a12
-	mov	a8, a11			# keep only the carry
-	l32i	a10, a5, 4		# p[1] = 0xffffffff
-	l32i	a9, a6, 4		# t[1]
-	mull	a15, a10, a7
-	muluh	a11, a10, a7
+	add	a8, a8, a12		# C = carry only
+	l32i	a9, a6, 4		# t[1], p[1] = 0xffffffff
+	mull	a15, a5, a7
+	muluh	a11, a5, a7
 	add	a15, a15, a9
 	saltu	a12, a15, a9
 	add	a11, a11, a12
 	add	a15, a15, a8
 	saltu	a12, a15, a8
 	add	a11, a11, a12
-	mov	a8, a11
-	s32i	a15, a6, 0	# t[0]
-	l32i	a10, a5, 8		# p[2] = 0xffffffff
-	l32i	a9, a6, 8		# t[2]
-	mull	a15, a10, a7
-	muluh	a11, a10, a7
+	s32i	a15, a6, 0
+	l32i	a9, a6, 8		# t[2], p[2] = 0xffffffff
+	mull	a15, a5, a7
+	muluh	a8, a5, a7
 	add	a15, a15, a9
 	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11
-	s32i	a15, a6, 4	# t[1]
+	add	a8, a8, a12
+	add	a15, a15, a11
+	saltu	a12, a15, a11
+	add	a8, a8, a12
+	s32i	a15, a6, 4
 	l32i	a9, a6, 12		# t[3], p[3] == 0
 	add	a15, a9, a8
-	saltu	a8, a15, a9		# C = carry out
-	s32i	a15, a6, 8	# t[2] = t[3] + C
+	saltu	a11, a15, a9
+	s32i	a15, a6, 8
 	l32i	a9, a6, 16		# t[4], p[4] == 0
-	add	a15, a9, a8
-	saltu	a8, a15, a9		# C = carry out
-	s32i	a15, a6, 12	# t[3] = t[4] + C
+	add	a15, a9, a11
+	saltu	a8, a15, a9
+	s32i	a15, a6, 12
 	l32i	a9, a6, 20		# t[5], p[5] == 0
 	add	a15, a9, a8
-	saltu	a8, a15, a9		# C = carry out
-	s32i	a15, a6, 16	# t[4] = t[5] + C
+	saltu	a11, a15, a9
+	s32i	a15, a6, 16
 	l32i	a9, a6, 24		# t[6], p[6] == 1
 	add	a15, a9, a7		# + m
 	saltu	a12, a15, a9
-	add	a15, a15, a8		# + C
-	saltu	a14, a15, a8
-	add	a8, a12, a14		# C = carry out (<= 1)
-	s32i	a15, a6, 20	# t[5]
-	l32i	a10, a5, 28		# p[7] = 0xffffffff
-	l32i	a9, a6, 28		# t[7]
-	mull	a15, a10, a7
-	muluh	a11, a10, a7
+	add	a15, a15, a11
+	saltu	a8, a15, a11
+	add	a8, a8, a12
+	s32i	a15, a6, 20
+	l32i	a9, a6, 28		# t[7], p[7] = 0xffffffff
+	mull	a15, a5, a7
+	muluh	a11, a5, a7
 	add	a15, a15, a9
 	saltu	a12, a15, a9
 	add	a11, a11, a12
 	add	a15, a15, a8
 	saltu	a12, a15, a8
 	add	a11, a11, a12
-	mov	a8, a11
-	s32i	a15, a6, 24	# t[6]
+	s32i	a15, a6, 24
 	l32i	a9, a6, 32
-	add	a15, a9, a8
+	add	a15, a9, a11
 	s32i	a15, a6, 28
-	movi	a11, 0
 	saltu	a12, a15, a9
-	add	a11, a11, a12
 	l32i	a9, a6, 36
-	add	a9, a9, a11
+	add	a9, a9, a12
 	s32i	a9, a6, 32
 	addi	a13, a13, -1
 	bnez	a13, .Lnistp_mul_mont_8_outer
 	movi	a8, 0			# borrow
 	l32i	a9, a6, 0		# t[0]
-	l32i	a10, a5, 0		# p[0]
-	sub	a15, a9, a10
-	saltu	a12, a9, a10		# borrow from t-p
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
 	sub	a11, a15, a8
-	saltu	a14, a15, a8		# borrow from -borrow_in
-	add	a8, a12, a14		# new borrow (0 or 1)
-	s32i	a11, a2, 0		# out[0] = diff
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 0		# out[0] = diff
 	l32i	a9, a6, 4		# t[1]
-	l32i	a10, a5, 4		# p[1]
-	sub	a15, a9, a10
-	saltu	a12, a9, a10		# borrow from t-p
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
 	sub	a11, a15, a8
-	saltu	a14, a15, a8		# borrow from -borrow_in
-	add	a8, a12, a14		# new borrow (0 or 1)
-	s32i	a11, a2, 4		# out[1] = diff
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 4		# out[1] = diff
 	l32i	a9, a6, 8		# t[2]
-	l32i	a10, a5, 8		# p[2]
-	sub	a15, a9, a10
-	saltu	a12, a9, a10		# borrow from t-p
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
 	sub	a11, a15, a8
-	saltu	a14, a15, a8		# borrow from -borrow_in
-	add	a8, a12, a14		# new borrow (0 or 1)
-	s32i	a11, a2, 8		# out[2] = diff
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 8		# out[2] = diff
 	l32i	a9, a6, 12		# t[3]
-	l32i	a10, a5, 12		# p[3]
-	sub	a15, a9, a10
-	saltu	a12, a9, a10		# borrow from t-p
-	sub	a11, a15, a8
-	saltu	a14, a15, a8		# borrow from -borrow_in
-	add	a8, a12, a14		# new borrow (0 or 1)
-	s32i	a11, a2, 12		# out[3] = diff
+	sub	a15, a9, a8
+	saltu	a8, a9, a8
+	s32i	a15, a2, 12		# out[3] = diff
 	l32i	a9, a6, 16		# t[4]
-	l32i	a10, a5, 16		# p[4]
-	sub	a15, a9, a10
-	saltu	a12, a9, a10		# borrow from t-p
-	sub	a11, a15, a8
-	saltu	a14, a15, a8		# borrow from -borrow_in
-	add	a8, a12, a14		# new borrow (0 or 1)
-	s32i	a11, a2, 16		# out[4] = diff
+	sub	a15, a9, a8
+	saltu	a8, a9, a8
+	s32i	a15, a2, 16		# out[4] = diff
 	l32i	a9, a6, 20		# t[5]
-	l32i	a10, a5, 20		# p[5]
-	sub	a15, a9, a10
-	saltu	a12, a9, a10		# borrow from t-p
-	sub	a11, a15, a8
-	saltu	a14, a15, a8		# borrow from -borrow_in
-	add	a8, a12, a14		# new borrow (0 or 1)
-	s32i	a11, a2, 20		# out[5] = diff
+	sub	a15, a9, a8
+	saltu	a8, a9, a8
+	s32i	a15, a2, 20		# out[5] = diff
 	l32i	a9, a6, 24		# t[6]
-	l32i	a10, a5, 24		# p[6]
+	movi	a10, 1
 	sub	a15, a9, a10
-	saltu	a12, a9, a10		# borrow from t-p
+	saltu	a12, a9, a10
 	sub	a11, a15, a8
-	saltu	a14, a15, a8		# borrow from -borrow_in
-	add	a8, a12, a14		# new borrow (0 or 1)
-	s32i	a11, a2, 24		# out[6] = diff
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 24		# out[6] = diff
 	l32i	a9, a6, 28		# t[7]
-	l32i	a10, a5, 28		# p[7]
-	sub	a15, a9, a10
-	saltu	a12, a9, a10		# borrow from t-p
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
 	sub	a11, a15, a8
-	saltu	a14, a15, a8		# borrow from -borrow_in
-	add	a8, a12, a14		# new borrow (0 or 1)
-	s32i	a11, a2, 28		# out[7] = diff
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 28		# out[7] = diff
 	l32i	a9, a6, 32		# extra word (0 or 1)
-	saltu	a12, a9, a8		# underflow => result was < p
-	neg	a12, a12		# mask: 0 or 0xFFFFFFFF
-	l32i	a9, a2, 0		# diff
-	l32i	a10, a6, 0		# t[0]
+	saltu	a12, a9, a8		# underflow => keep t
+	neg	a12, a12		# mask
+	l32i	a9, a2, 0
+	l32i	a10, a6, 0
 	xor	a11, a9, a10
 	and	a11, a11, a12
-	xor	a9, a9, a11		# select, branchlessly
+	xor	a9, a9, a11		# branchless select
 	s32i	a9, a2, 0
-	l32i	a9, a2, 4		# diff
-	l32i	a10, a6, 4		# t[1]
+	l32i	a9, a2, 4
+	l32i	a10, a6, 4
 	xor	a11, a9, a10
 	and	a11, a11, a12
-	xor	a9, a9, a11		# select, branchlessly
+	xor	a9, a9, a11		# branchless select
 	s32i	a9, a2, 4
-	l32i	a9, a2, 8		# diff
-	l32i	a10, a6, 8		# t[2]
+	l32i	a9, a2, 8
+	l32i	a10, a6, 8
 	xor	a11, a9, a10
 	and	a11, a11, a12
-	xor	a9, a9, a11		# select, branchlessly
+	xor	a9, a9, a11		# branchless select
 	s32i	a9, a2, 8
-	l32i	a9, a2, 12		# diff
-	l32i	a10, a6, 12		# t[3]
+	l32i	a9, a2, 12
+	l32i	a10, a6, 12
 	xor	a11, a9, a10
 	and	a11, a11, a12
-	xor	a9, a9, a11		# select, branchlessly
+	xor	a9, a9, a11		# branchless select
 	s32i	a9, a2, 12
-	l32i	a9, a2, 16		# diff
-	l32i	a10, a6, 16		# t[4]
+	l32i	a9, a2, 16
+	l32i	a10, a6, 16
 	xor	a11, a9, a10
 	and	a11, a11, a12
-	xor	a9, a9, a11		# select, branchlessly
+	xor	a9, a9, a11		# branchless select
 	s32i	a9, a2, 16
-	l32i	a9, a2, 20		# diff
-	l32i	a10, a6, 20		# t[5]
+	l32i	a9, a2, 20
+	l32i	a10, a6, 20
 	xor	a11, a9, a10
 	and	a11, a11, a12
-	xor	a9, a9, a11		# select, branchlessly
+	xor	a9, a9, a11		# branchless select
 	s32i	a9, a2, 20
-	l32i	a9, a2, 24		# diff
-	l32i	a10, a6, 24		# t[6]
+	l32i	a9, a2, 24
+	l32i	a10, a6, 24
 	xor	a11, a9, a10
 	and	a11, a11, a12
-	xor	a9, a9, a11		# select, branchlessly
+	xor	a9, a9, a11		# branchless select
 	s32i	a9, a2, 24
-	l32i	a9, a2, 28		# diff
-	l32i	a10, a6, 28		# t[7]
+	l32i	a9, a2, 28
+	l32i	a10, a6, 28
 	xor	a11, a9, a10
 	and	a11, a11, a12
-	xor	a9, a9, a11		# select, branchlessly
+	xor	a9, a9, a11		# branchless select
 	s32i	a9, a2, 28
 	retw
 	.size	nistp_mul_mont_8, .-nistp_mul_mont_8
 
 # out = a * b * R^-1 mod p,  R = 2^384
+# NOTE: the p argument is ignored; the modulus is a compile-time constant.
 	.globl	nistp_mul_mont_12
 	.align	4
 	.type	nistp_mul_mont_12, @function
 nistp_mul_mont_12:
 	entry	a1, 32			# no stack locals; scratch is an argument
+	movi	a5, -2			# 0xfffffffe
+	movi	a14, -1			# 0xffffffff
 	movi	a9, 0
 	s32i	a9, a6, 0
 	s32i	a9, a6, 4
@@ -367,19 +340,17 @@ nistp_mul_mont_12:
 	add	a15, a15, a8
 	saltu	a12, a15, a8
 	add	a11, a11, a12
-	mov	a8, a11			# C = hi
 	s32i	a15, a6, 0		# t[0] = lo
 	l32i	a10, a3, 4		# a[1]
 	l32i	a9, a6, 4		# t[1]
 	mull	a15, a10, a7
-	muluh	a11, a10, a7
+	muluh	a8, a10, a7
 	add	a15, a15, a9
 	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11			# C = hi
+	add	a8, a8, a12
+	add	a15, a15, a11
+	saltu	a12, a15, a11
+	add	a8, a8, a12
 	s32i	a15, a6, 4		# t[1] = lo
 	l32i	a10, a3, 8		# a[2]
 	l32i	a9, a6, 8		# t[2]
@@ -391,19 +362,17 @@ nistp_mul_mont_12:
 	add	a15, a15, a8
 	saltu	a12, a15, a8
 	add	a11, a11, a12
-	mov	a8, a11			# C = hi
 	s32i	a15, a6, 8		# t[2] = lo
 	l32i	a10, a3, 12		# a[3]
 	l32i	a9, a6, 12		# t[3]
 	mull	a15, a10, a7
-	muluh	a11, a10, a7
+	muluh	a8, a10, a7
 	add	a15, a15, a9
 	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11			# C = hi
+	add	a8, a8, a12
+	add	a15, a15, a11
+	saltu	a12, a15, a11
+	add	a8, a8, a12
 	s32i	a15, a6, 12		# t[3] = lo
 	l32i	a10, a3, 16		# a[4]
 	l32i	a9, a6, 16		# t[4]
@@ -415,19 +384,17 @@ nistp_mul_mont_12:
 	add	a15, a15, a8
 	saltu	a12, a15, a8
 	add	a11, a11, a12
-	mov	a8, a11			# C = hi
 	s32i	a15, a6, 16		# t[4] = lo
 	l32i	a10, a3, 20		# a[5]
 	l32i	a9, a6, 20		# t[5]
 	mull	a15, a10, a7
-	muluh	a11, a10, a7
+	muluh	a8, a10, a7
 	add	a15, a15, a9
 	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11			# C = hi
+	add	a8, a8, a12
+	add	a15, a15, a11
+	saltu	a12, a15, a11
+	add	a8, a8, a12
 	s32i	a15, a6, 20		# t[5] = lo
 	l32i	a10, a3, 24		# a[6]
 	l32i	a9, a6, 24		# t[6]
@@ -439,19 +406,17 @@ nistp_mul_mont_12:
 	add	a15, a15, a8
 	saltu	a12, a15, a8
 	add	a11, a11, a12
-	mov	a8, a11			# C = hi
 	s32i	a15, a6, 24		# t[6] = lo
 	l32i	a10, a3, 28		# a[7]
 	l32i	a9, a6, 28		# t[7]
 	mull	a15, a10, a7
-	muluh	a11, a10, a7
+	muluh	a8, a10, a7
 	add	a15, a15, a9
 	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11			# C = hi
+	add	a8, a8, a12
+	add	a15, a15, a11
+	saltu	a12, a15, a11
+	add	a8, a8, a12
 	s32i	a15, a6, 28		# t[7] = lo
 	l32i	a10, a3, 32		# a[8]
 	l32i	a9, a6, 32		# t[8]
@@ -463,19 +428,17 @@ nistp_mul_mont_12:
 	add	a15, a15, a8
 	saltu	a12, a15, a8
 	add	a11, a11, a12
-	mov	a8, a11			# C = hi
 	s32i	a15, a6, 32		# t[8] = lo
 	l32i	a10, a3, 36		# a[9]
 	l32i	a9, a6, 36		# t[9]
 	mull	a15, a10, a7
-	muluh	a11, a10, a7
+	muluh	a8, a10, a7
 	add	a15, a15, a9
 	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11			# C = hi
+	add	a8, a8, a12
+	add	a15, a15, a11
+	saltu	a12, a15, a11
+	add	a8, a8, a12
 	s32i	a15, a6, 36		# t[9] = lo
 	l32i	a10, a3, 40		# a[10]
 	l32i	a9, a6, 40		# t[10]
@@ -487,335 +450,300 @@ nistp_mul_mont_12:
 	add	a15, a15, a8
 	saltu	a12, a15, a8
 	add	a11, a11, a12
-	mov	a8, a11			# C = hi
 	s32i	a15, a6, 40		# t[10] = lo
 	l32i	a10, a3, 44		# a[11]
 	l32i	a9, a6, 44		# t[11]
 	mull	a15, a10, a7
-	muluh	a11, a10, a7
+	muluh	a8, a10, a7
 	add	a15, a15, a9
 	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11			# C = hi
+	add	a8, a8, a12
+	add	a15, a15, a11
+	saltu	a12, a15, a11
+	add	a8, a8, a12
 	s32i	a15, a6, 44		# t[11] = lo
 	l32i	a9, a6, 48
 	add	a15, a9, a8
 	s32i	a15, a6, 48		# t[12] += C
-	movi	a11, 0
 	saltu	a12, a15, a9
-	add	a11, a11, a12
-	s32i	a11, a6, 52	# t[13] = carry
-	l32i	a7, a6, 0		# m = t[0]  (n0inv == 1)
-	movi	a8, 0
-	l32i	a10, a5, 0		# p[0]
+	s32i	a12, a6, 52	# t[13] = carry
+	l32i	a7, a6, 0		# m = t[0]
 	l32i	a9, a6, 0
-	mull	a15, a10, a7
-	muluh	a11, a10, a7
+	mull	a15, a14, a7
+	muluh	a8, a14, a7
 	add	a15, a15, a9		# low word cancels to zero
 	saltu	a12, a15, a9
-	add	a11, a11, a12
-	mov	a8, a11			# keep only the carry
+	add	a8, a8, a12		# C = carry only
 	l32i	a9, a6, 4		# t[1], p[1] == 0
 	add	a15, a9, a8
-	saltu	a8, a15, a9		# C = carry out
-	s32i	a15, a6, 0	# t[0] = t[1] + C
+	saltu	a11, a15, a9
+	s32i	a15, a6, 0
 	l32i	a9, a6, 8		# t[2], p[2] == 0
-	add	a15, a9, a8
-	saltu	a8, a15, a9		# C = carry out
-	s32i	a15, a6, 4	# t[1] = t[2] + C
-	l32i	a10, a5, 12		# p[3] = 0xffffffff
-	l32i	a9, a6, 12		# t[3]
-	mull	a15, a10, a7
-	muluh	a11, a10, a7
+	add	a15, a9, a11
+	saltu	a8, a15, a9
+	s32i	a15, a6, 4
+	l32i	a9, a6, 12		# t[3], p[3] = 0xffffffff
+	mull	a15, a14, a7
+	muluh	a11, a14, a7
 	add	a15, a15, a9
 	saltu	a12, a15, a9
 	add	a11, a11, a12
 	add	a15, a15, a8
 	saltu	a12, a15, a8
 	add	a11, a11, a12
-	mov	a8, a11
-	s32i	a15, a6, 8	# t[2]
-	l32i	a10, a5, 16		# p[4] = 0xfffffffe
-	l32i	a9, a6, 16		# t[4]
-	mull	a15, a10, a7
-	muluh	a11, a10, a7
+	s32i	a15, a6, 8
+	l32i	a9, a6, 16		# t[4], p[4] = 0xfffffffe
+	mull	a15, a5, a7
+	muluh	a8, a5, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a8, a8, a12
+	add	a15, a15, a11
+	saltu	a12, a15, a11
+	add	a8, a8, a12
+	s32i	a15, a6, 12
+	l32i	a9, a6, 20		# t[5], p[5] = 0xffffffff
+	mull	a15, a14, a7
+	muluh	a11, a14, a7
 	add	a15, a15, a9
 	saltu	a12, a15, a9
 	add	a11, a11, a12
 	add	a15, a15, a8
 	saltu	a12, a15, a8
 	add	a11, a11, a12
-	mov	a8, a11
-	s32i	a15, a6, 12	# t[3]
-	l32i	a10, a5, 20		# p[5] = 0xffffffff
-	l32i	a9, a6, 20		# t[5]
-	mull	a15, a10, a7
-	muluh	a11, a10, a7
+	s32i	a15, a6, 16
+	l32i	a9, a6, 24		# t[6], p[6] = 0xffffffff
+	mull	a15, a14, a7
+	muluh	a8, a14, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a8, a8, a12
+	add	a15, a15, a11
+	saltu	a12, a15, a11
+	add	a8, a8, a12
+	s32i	a15, a6, 20
+	l32i	a9, a6, 28		# t[7], p[7] = 0xffffffff
+	mull	a15, a14, a7
+	muluh	a11, a14, a7
 	add	a15, a15, a9
 	saltu	a12, a15, a9
 	add	a11, a11, a12
 	add	a15, a15, a8
 	saltu	a12, a15, a8
 	add	a11, a11, a12
-	mov	a8, a11
-	s32i	a15, a6, 16	# t[4]
-	l32i	a10, a5, 24		# p[6] = 0xffffffff
-	l32i	a9, a6, 24		# t[6]
-	mull	a15, a10, a7
-	muluh	a11, a10, a7
+	s32i	a15, a6, 24
+	l32i	a9, a6, 32		# t[8], p[8] = 0xffffffff
+	mull	a15, a14, a7
+	muluh	a8, a14, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a8, a8, a12
+	add	a15, a15, a11
+	saltu	a12, a15, a11
+	add	a8, a8, a12
+	s32i	a15, a6, 28
+	l32i	a9, a6, 36		# t[9], p[9] = 0xffffffff
+	mull	a15, a14, a7
+	muluh	a11, a14, a7
 	add	a15, a15, a9
 	saltu	a12, a15, a9
 	add	a11, a11, a12
 	add	a15, a15, a8
 	saltu	a12, a15, a8
 	add	a11, a11, a12
-	mov	a8, a11
-	s32i	a15, a6, 20	# t[5]
-	l32i	a10, a5, 28		# p[7] = 0xffffffff
-	l32i	a9, a6, 28		# t[7]
-	mull	a15, a10, a7
-	muluh	a11, a10, a7
+	s32i	a15, a6, 32
+	l32i	a9, a6, 40		# t[10], p[10] = 0xffffffff
+	mull	a15, a14, a7
+	muluh	a8, a14, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a8, a8, a12
+	add	a15, a15, a11
+	saltu	a12, a15, a11
+	add	a8, a8, a12
+	s32i	a15, a6, 36
+	l32i	a9, a6, 44		# t[11], p[11] = 0xffffffff
+	mull	a15, a14, a7
+	muluh	a11, a14, a7
 	add	a15, a15, a9
 	saltu	a12, a15, a9
 	add	a11, a11, a12
 	add	a15, a15, a8
 	saltu	a12, a15, a8
 	add	a11, a11, a12
-	mov	a8, a11
-	s32i	a15, a6, 24	# t[6]
-	l32i	a10, a5, 32		# p[8] = 0xffffffff
-	l32i	a9, a6, 32		# t[8]
-	mull	a15, a10, a7
-	muluh	a11, a10, a7
-	add	a15, a15, a9
-	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11
-	s32i	a15, a6, 28	# t[7]
-	l32i	a10, a5, 36		# p[9] = 0xffffffff
-	l32i	a9, a6, 36		# t[9]
-	mull	a15, a10, a7
-	muluh	a11, a10, a7
-	add	a15, a15, a9
-	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11
-	s32i	a15, a6, 32	# t[8]
-	l32i	a10, a5, 40		# p[10] = 0xffffffff
-	l32i	a9, a6, 40		# t[10]
-	mull	a15, a10, a7
-	muluh	a11, a10, a7
-	add	a15, a15, a9
-	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11
-	s32i	a15, a6, 36	# t[9]
-	l32i	a10, a5, 44		# p[11] = 0xffffffff
-	l32i	a9, a6, 44		# t[11]
-	mull	a15, a10, a7
-	muluh	a11, a10, a7
-	add	a15, a15, a9
-	saltu	a12, a15, a9
-	add	a11, a11, a12
-	add	a15, a15, a8
-	saltu	a12, a15, a8
-	add	a11, a11, a12
-	mov	a8, a11
-	s32i	a15, a6, 40	# t[10]
+	s32i	a15, a6, 40
 	l32i	a9, a6, 48
-	add	a15, a9, a8
+	add	a15, a9, a11
 	s32i	a15, a6, 44
-	movi	a11, 0
 	saltu	a12, a15, a9
-	add	a11, a11, a12
 	l32i	a9, a6, 52
-	add	a9, a9, a11
+	add	a9, a9, a12
 	s32i	a9, a6, 48
 	addi	a13, a13, -1
 	bnez	a13, .Lnistp_mul_mont_12_outer
 	movi	a8, 0			# borrow
 	l32i	a9, a6, 0		# t[0]
-	l32i	a10, a5, 0		# p[0]
-	sub	a15, a9, a10
-	saltu	a12, a9, a10		# borrow from t-p
+	sub	a15, a9, a14
+	saltu	a12, a9, a14
 	sub	a11, a15, a8
-	saltu	a14, a15, a8		# borrow from -borrow_in
-	add	a8, a12, a14		# new borrow (0 or 1)
-	s32i	a11, a2, 0		# out[0] = diff
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 0		# out[0] = diff
 	l32i	a9, a6, 4		# t[1]
-	l32i	a10, a5, 4		# p[1]
-	sub	a15, a9, a10
-	saltu	a12, a9, a10		# borrow from t-p
-	sub	a11, a15, a8
-	saltu	a14, a15, a8		# borrow from -borrow_in
-	add	a8, a12, a14		# new borrow (0 or 1)
-	s32i	a11, a2, 4		# out[1] = diff
+	sub	a15, a9, a8
+	saltu	a8, a9, a8
+	s32i	a15, a2, 4		# out[1] = diff
 	l32i	a9, a6, 8		# t[2]
-	l32i	a10, a5, 8		# p[2]
-	sub	a15, a9, a10
-	saltu	a12, a9, a10		# borrow from t-p
-	sub	a11, a15, a8
-	saltu	a14, a15, a8		# borrow from -borrow_in
-	add	a8, a12, a14		# new borrow (0 or 1)
-	s32i	a11, a2, 8		# out[2] = diff
+	sub	a15, a9, a8
+	saltu	a8, a9, a8
+	s32i	a15, a2, 8		# out[2] = diff
 	l32i	a9, a6, 12		# t[3]
-	l32i	a10, a5, 12		# p[3]
-	sub	a15, a9, a10
-	saltu	a12, a9, a10		# borrow from t-p
+	sub	a15, a9, a14
+	saltu	a12, a9, a14
 	sub	a11, a15, a8
-	saltu	a14, a15, a8		# borrow from -borrow_in
-	add	a8, a12, a14		# new borrow (0 or 1)
-	s32i	a11, a2, 12		# out[3] = diff
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 12		# out[3] = diff
 	l32i	a9, a6, 16		# t[4]
-	l32i	a10, a5, 16		# p[4]
-	sub	a15, a9, a10
-	saltu	a12, a9, a10		# borrow from t-p
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
 	sub	a11, a15, a8
-	saltu	a14, a15, a8		# borrow from -borrow_in
-	add	a8, a12, a14		# new borrow (0 or 1)
-	s32i	a11, a2, 16		# out[4] = diff
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 16		# out[4] = diff
 	l32i	a9, a6, 20		# t[5]
-	l32i	a10, a5, 20		# p[5]
-	sub	a15, a9, a10
-	saltu	a12, a9, a10		# borrow from t-p
+	sub	a15, a9, a14
+	saltu	a12, a9, a14
 	sub	a11, a15, a8
-	saltu	a14, a15, a8		# borrow from -borrow_in
-	add	a8, a12, a14		# new borrow (0 or 1)
-	s32i	a11, a2, 20		# out[5] = diff
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 20		# out[5] = diff
 	l32i	a9, a6, 24		# t[6]
-	l32i	a10, a5, 24		# p[6]
-	sub	a15, a9, a10
-	saltu	a12, a9, a10		# borrow from t-p
+	sub	a15, a9, a14
+	saltu	a12, a9, a14
 	sub	a11, a15, a8
-	saltu	a14, a15, a8		# borrow from -borrow_in
-	add	a8, a12, a14		# new borrow (0 or 1)
-	s32i	a11, a2, 24		# out[6] = diff
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 24		# out[6] = diff
 	l32i	a9, a6, 28		# t[7]
-	l32i	a10, a5, 28		# p[7]
-	sub	a15, a9, a10
-	saltu	a12, a9, a10		# borrow from t-p
+	sub	a15, a9, a14
+	saltu	a12, a9, a14
 	sub	a11, a15, a8
-	saltu	a14, a15, a8		# borrow from -borrow_in
-	add	a8, a12, a14		# new borrow (0 or 1)
-	s32i	a11, a2, 28		# out[7] = diff
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 28		# out[7] = diff
 	l32i	a9, a6, 32		# t[8]
-	l32i	a10, a5, 32		# p[8]
-	sub	a15, a9, a10
-	saltu	a12, a9, a10		# borrow from t-p
+	sub	a15, a9, a14
+	saltu	a12, a9, a14
 	sub	a11, a15, a8
-	saltu	a14, a15, a8		# borrow from -borrow_in
-	add	a8, a12, a14		# new borrow (0 or 1)
-	s32i	a11, a2, 32		# out[8] = diff
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 32		# out[8] = diff
 	l32i	a9, a6, 36		# t[9]
-	l32i	a10, a5, 36		# p[9]
-	sub	a15, a9, a10
-	saltu	a12, a9, a10		# borrow from t-p
+	sub	a15, a9, a14
+	saltu	a12, a9, a14
 	sub	a11, a15, a8
-	saltu	a14, a15, a8		# borrow from -borrow_in
-	add	a8, a12, a14		# new borrow (0 or 1)
-	s32i	a11, a2, 36		# out[9] = diff
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 36		# out[9] = diff
 	l32i	a9, a6, 40		# t[10]
-	l32i	a10, a5, 40		# p[10]
-	sub	a15, a9, a10
-	saltu	a12, a9, a10		# borrow from t-p
+	sub	a15, a9, a14
+	saltu	a12, a9, a14
 	sub	a11, a15, a8
-	saltu	a14, a15, a8		# borrow from -borrow_in
-	add	a8, a12, a14		# new borrow (0 or 1)
-	s32i	a11, a2, 40		# out[10] = diff
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 40		# out[10] = diff
 	l32i	a9, a6, 44		# t[11]
-	l32i	a10, a5, 44		# p[11]
-	sub	a15, a9, a10
-	saltu	a12, a9, a10		# borrow from t-p
+	sub	a15, a9, a14
+	saltu	a12, a9, a14
 	sub	a11, a15, a8
-	saltu	a14, a15, a8		# borrow from -borrow_in
-	add	a8, a12, a14		# new borrow (0 or 1)
-	s32i	a11, a2, 44		# out[11] = diff
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 44		# out[11] = diff
 	l32i	a9, a6, 48		# extra word (0 or 1)
-	saltu	a12, a9, a8		# underflow => result was < p
-	neg	a12, a12		# mask: 0 or 0xFFFFFFFF
-	l32i	a9, a2, 0		# diff
-	l32i	a10, a6, 0		# t[0]
+	saltu	a12, a9, a8		# underflow => keep t
+	neg	a12, a12		# mask
+	l32i	a9, a2, 0
+	l32i	a10, a6, 0
 	xor	a11, a9, a10
 	and	a11, a11, a12
-	xor	a9, a9, a11		# select, branchlessly
+	xor	a9, a9, a11		# branchless select
 	s32i	a9, a2, 0
-	l32i	a9, a2, 4		# diff
-	l32i	a10, a6, 4		# t[1]
+	l32i	a9, a2, 4
+	l32i	a10, a6, 4
 	xor	a11, a9, a10
 	and	a11, a11, a12
-	xor	a9, a9, a11		# select, branchlessly
+	xor	a9, a9, a11		# branchless select
 	s32i	a9, a2, 4
-	l32i	a9, a2, 8		# diff
-	l32i	a10, a6, 8		# t[2]
+	l32i	a9, a2, 8
+	l32i	a10, a6, 8
 	xor	a11, a9, a10
 	and	a11, a11, a12
-	xor	a9, a9, a11		# select, branchlessly
+	xor	a9, a9, a11		# branchless select
 	s32i	a9, a2, 8
-	l32i	a9, a2, 12		# diff
-	l32i	a10, a6, 12		# t[3]
+	l32i	a9, a2, 12
+	l32i	a10, a6, 12
 	xor	a11, a9, a10
 	and	a11, a11, a12
-	xor	a9, a9, a11		# select, branchlessly
+	xor	a9, a9, a11		# branchless select
 	s32i	a9, a2, 12
-	l32i	a9, a2, 16		# diff
-	l32i	a10, a6, 16		# t[4]
+	l32i	a9, a2, 16
+	l32i	a10, a6, 16
 	xor	a11, a9, a10
 	and	a11, a11, a12
-	xor	a9, a9, a11		# select, branchlessly
+	xor	a9, a9, a11		# branchless select
 	s32i	a9, a2, 16
-	l32i	a9, a2, 20		# diff
-	l32i	a10, a6, 20		# t[5]
+	l32i	a9, a2, 20
+	l32i	a10, a6, 20
 	xor	a11, a9, a10
 	and	a11, a11, a12
-	xor	a9, a9, a11		# select, branchlessly
+	xor	a9, a9, a11		# branchless select
 	s32i	a9, a2, 20
-	l32i	a9, a2, 24		# diff
-	l32i	a10, a6, 24		# t[6]
+	l32i	a9, a2, 24
+	l32i	a10, a6, 24
 	xor	a11, a9, a10
 	and	a11, a11, a12
-	xor	a9, a9, a11		# select, branchlessly
+	xor	a9, a9, a11		# branchless select
 	s32i	a9, a2, 24
-	l32i	a9, a2, 28		# diff
-	l32i	a10, a6, 28		# t[7]
+	l32i	a9, a2, 28
+	l32i	a10, a6, 28
 	xor	a11, a9, a10
 	and	a11, a11, a12
-	xor	a9, a9, a11		# select, branchlessly
+	xor	a9, a9, a11		# branchless select
 	s32i	a9, a2, 28
-	l32i	a9, a2, 32		# diff
-	l32i	a10, a6, 32		# t[8]
+	l32i	a9, a2, 32
+	l32i	a10, a6, 32
 	xor	a11, a9, a10
 	and	a11, a11, a12
-	xor	a9, a9, a11		# select, branchlessly
+	xor	a9, a9, a11		# branchless select
 	s32i	a9, a2, 32
-	l32i	a9, a2, 36		# diff
-	l32i	a10, a6, 36		# t[9]
+	l32i	a9, a2, 36
+	l32i	a10, a6, 36
 	xor	a11, a9, a10
 	and	a11, a11, a12
-	xor	a9, a9, a11		# select, branchlessly
+	xor	a9, a9, a11		# branchless select
 	s32i	a9, a2, 36
-	l32i	a9, a2, 40		# diff
-	l32i	a10, a6, 40		# t[10]
+	l32i	a9, a2, 40
+	l32i	a10, a6, 40
 	xor	a11, a9, a10
 	and	a11, a11, a12
-	xor	a9, a9, a11		# select, branchlessly
+	xor	a9, a9, a11		# branchless select
 	s32i	a9, a2, 40
-	l32i	a9, a2, 44		# diff
-	l32i	a10, a6, 44		# t[11]
+	l32i	a9, a2, 44
+	l32i	a10, a6, 44
 	xor	a11, a9, a10
 	and	a11, a11, a12
-	xor	a9, a9, a11		# select, branchlessly
+	xor	a9, a9, a11		# branchless select
 	s32i	a9, a2, 44
 	retw
 	.size	nistp_mul_mont_12, .-nistp_mul_mont_12

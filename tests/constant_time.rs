@@ -51,7 +51,7 @@ const CM4_SRC: &str = include_str!("../asm/cortex_m4.S");
 /// `it`-block conditional forms.
 const CM4_ALLOWED: &[&str] = &[
     "ldr", "str", "umaal", "eor", "and", "orr", "mov", "mov.w", "add", "adds", "adc.w", "sub",
-    "subs", "sbc", "sbcs", "push", "pop", "bne", "mvn", "movw", "movt",
+    "subs", "sbc", "sbcs", "push", "pop", "bne", "mvn", "movw", "movt", "ldrd", "strd",
 ];
 
 #[test]
@@ -116,7 +116,7 @@ fn cortex_m4_has_no_data_dependent_memory_addressing() {
 
     for (line_no, insn) in instructions(CM4_SRC, '@') {
         let op = opcode(&insn);
-        if op != "ldr" && op != "str" {
+        if !matches!(op, "ldr" | "str" | "ldrd" | "strd") {
             continue;
         }
         let start = insn.find('[').unwrap_or_else(|| panic!("line {line_no}: {insn}"));

@@ -78,13 +78,50 @@ def carry_into(dst, sum_reg, addend, tmp):
     ]
 
 
+def const_regs_x(pl):
+    """Map the distinct NON-ZERO modulus limbs to registers.
+
+    Zero limbs never need one: those reduction steps skip the product
+    entirely. Both NIST primes have exactly two distinct non-zero values, so
+    a5 and a14 suffice -- a5 is free because the `p` pointer is no longer used
+    anywhere (the conditional subtraction uses the constants too), and a14 was
+    only ever a conditional-subtraction temporary.
+    """
+    distinct = sorted({v for v in pl if v not in (0, 1)})
+    assert len(distinct) <= 2, distinct
+    regs = ["a5", "a14"]
+    mapping, setup = {}, []
+    for v, r in zip(distinct, regs):
+        mapping[v] = r
+        if v == 0xFFFFFFFF:
+            setup.append(f"	movi	{r}, -1			# 0xffffffff")
+        elif v == 0xFFFFFFFE:
+            setup.append(f"	movi	{r}, -2			# 0xfffffffe")
+        else:
+            setup.append(f"	movi	{r}, {v}")
+    return mapping, setup
+
+
 def emit_mul(n):
+    """CIOS for `n` limbs.
+
+    Two things keep the instruction count down beyond the obvious:
+
+    * The carry register ALTERNATES between a8 and a11 across steps, so the
+      running carry never needs a `mov` to get back into place -- one
+      instruction saved on every one of the 2n^2 steps.
+    * The modulus lives in registers, so the reduction never loads p[j], and
+      limbs equal to 0 or 1 skip the multiply entirely.
+    """
     L = []
     e = L.append
     name = f"nistp_mul_mont_{n}"
+    pl = limbs(MODULI[n], n)
+    creg, csetup = const_regs_x(pl)
 
     e("")
     e(f"# out = a * b * R^-1 mod p,  R = 2^{32*n}")
+    e(f"# NOTE: the p argument is ignored; the modulus is a compile-time constant.")
     e(f"	.globl	{name}")
     e(f"	.align	4")
     e(f"	.type	{name}, @function")
@@ -92,118 +129,122 @@ def emit_mul(n):
     if WINDOWED:
         e("	entry	a1, 32			# no stack locals; scratch is an argument")
     else:
-        # call0 ABI: a12-a15 are CALLEE-SAVED. The windowed path never needs
-        # this because ENTRY gives it a fresh window; forgetting it here
-        # corrupts the caller and crashes on the first call.
         e("	addi	a1, a1, -16		# call0: preserve a12-a15")
         e("	s32i	a12, a1, 0")
         e("	s32i	a13, a1, 4")
         e("	s32i	a14, a1, 8")
         e("	s32i	a15, a1, 12")
+    for line in csetup:
+        e(line)
 
-    # zero t[0..n+1]
     e("	movi	a9, 0")
     for j in range(n + 2):
         e(f"	s32i	a9, a6, {j*4}")
-
     e(f"	movi	a13, {n}			# outer counter i")
     e(f".L{name}_outer:")
 
-    # ---- multiply pass: t += a * b[i] ----
+    # ---- multiply pass. `cur` holds the running carry; each step writes the
+    # next carry into `nxt`, and the two swap -- no `mov` needed.
     e("	l32i	a7, a4, 0		# b[i]")
     e("	addi	a4, a4, 4")
     e("	movi	a8, 0			# C = 0")
+    cur, nxt = "a8", "a11"
     for j in range(n):
         e(f"	l32i	a10, a3, {j*4}		# a[{j}]")
         e(f"	l32i	a9, a6, {j*4}		# t[{j}]")
-        e("	mull	a15, a10, a7")
-        e("	muluh	a11, a10, a7")
-        e("	add	a15, a15, a9")
-        L.extend(carry_into("a11", "a15", "a9", "a12"))
-        e("	add	a15, a15, a8")
-        L.extend(carry_into("a11", "a15", "a8", "a12"))
-        e("	mov	a8, a11			# C = hi")
+        e(f"	mull	a15, a10, a7")
+        e(f"	muluh	{nxt}, a10, a7")
+        e(f"	add	a15, a15, a9")
+        e(f"	saltu	a12, a15, a9")
+        e(f"	add	{nxt}, {nxt}, a12")
+        e(f"	add	a15, a15, {cur}")
+        e(f"	saltu	a12, a15, {cur}")
+        e(f"	add	{nxt}, {nxt}, a12")
         e(f"	s32i	a15, a6, {j*4}		# t[{j}] = lo")
+        cur, nxt = nxt, cur
     e(f"	l32i	a9, a6, {n*4}")
-    e("	add	a15, a9, a8")
+    e(f"	add	a15, a9, {cur}")
     e(f"	s32i	a15, a6, {n*4}		# t[{n}] += C")
-    e("	movi	a11, 0")
-    L.extend(carry_into("a11", "a15", "a9", "a12"))
-    e(f"	s32i	a11, a6, {(n+1)*4}	# t[{n+1}] = carry")
+    e(f"	saltu	a12, a15, a9")
+    e(f"	s32i	a12, a6, {(n+1)*4}	# t[{n+1}] = carry")
 
-    # ---- reduction pass: m = t[0], because n0' == 1 ----
-    e("	l32i	a7, a6, 0		# m = t[0]  (n0inv == 1)")
-    e("	movi	a8, 0")
-    e("	l32i	a10, a5, 0		# p[0]")
+    # ---- reduction: m = t[0] because n0' == 1 ----
+    e("	l32i	a7, a6, 0		# m = t[0]")
     e("	l32i	a9, a6, 0")
-    e("	mull	a15, a10, a7")
-    e("	muluh	a11, a10, a7")
+    e(f"	mull	a15, {creg[pl[0]]}, a7")
+    e(f"	muluh	a8, {creg[pl[0]]}, a7")
     e("	add	a15, a15, a9		# low word cancels to zero")
-    L.extend(carry_into("a11", "a15", "a9", "a12"))
-    e("	mov	a8, a11			# keep only the carry")
-    pl = limbs(MODULI[n], n)
+    e("	saltu	a12, a15, a9")
+    e("	add	a8, a8, a12		# C = carry only")
+    cur, nxt = "a8", "a11"
     for j in range(1, n):
         if pl[j] == 0:
-            # (C, t[j-1]) = t[j] + C  -- no product at all. 5 instructions
-            # instead of 11.
             e(f"	l32i	a9, a6, {j*4}		# t[{j}], p[{j}] == 0")
-            e("	add	a15, a9, a8")
-            e("	saltu	a8, a15, a9		# C = carry out")
-            e(f"	s32i	a15, a6, {(j-1)*4}	# t[{j-1}] = t[{j}] + C")
+            e(f"	add	a15, a9, {cur}")
+            e(f"	saltu	{nxt}, a15, a9")
+            e(f"	s32i	a15, a6, {(j-1)*4}")
+            cur, nxt = nxt, cur
             continue
         if pl[j] == 1:
-            # (C, t[j-1]) = t[j] + m + C. The two carries cannot both be set,
-            # so their sum is the carry out.
             e(f"	l32i	a9, a6, {j*4}		# t[{j}], p[{j}] == 1")
-            e("	add	a15, a9, a7		# + m")
-            e("	saltu	a12, a15, a9")
-            e("	add	a15, a15, a8		# + C")
-            e("	saltu	a14, a15, a8")
-            e("	add	a8, a12, a14		# C = carry out (<= 1)")
-            e(f"	s32i	a15, a6, {(j-1)*4}	# t[{j-1}]")
+            e(f"	add	a15, a9, a7		# + m")
+            e(f"	saltu	a12, a15, a9")
+            e(f"	add	a15, a15, {cur}")
+            e(f"	saltu	{nxt}, a15, {cur}")
+            e(f"	add	{nxt}, {nxt}, a12")
+            e(f"	s32i	a15, a6, {(j-1)*4}")
+            cur, nxt = nxt, cur
             continue
-        e(f"	l32i	a10, a5, {j*4}		# p[{j}] = 0x{pl[j]:08x}")
-        e(f"	l32i	a9, a6, {j*4}		# t[{j}]")
-        e("	mull	a15, a10, a7")
-        e("	muluh	a11, a10, a7")
-        e("	add	a15, a15, a9")
-        L.extend(carry_into("a11", "a15", "a9", "a12"))
-        e("	add	a15, a15, a8")
-        L.extend(carry_into("a11", "a15", "a8", "a12"))
-        e("	mov	a8, a11")
-        e(f"	s32i	a15, a6, {(j-1)*4}	# t[{j-1}]")
+        e(f"	l32i	a9, a6, {j*4}		# t[{j}], p[{j}] = 0x{pl[j]:08x}")
+        e(f"	mull	a15, {creg[pl[j]]}, a7")
+        e(f"	muluh	{nxt}, {creg[pl[j]]}, a7")
+        e(f"	add	a15, a15, a9")
+        e(f"	saltu	a12, a15, a9")
+        e(f"	add	{nxt}, {nxt}, a12")
+        e(f"	add	a15, a15, {cur}")
+        e(f"	saltu	a12, a15, {cur}")
+        e(f"	add	{nxt}, {nxt}, a12")
+        e(f"	s32i	a15, a6, {(j-1)*4}")
+        cur, nxt = nxt, cur
     e(f"	l32i	a9, a6, {n*4}")
-    e("	add	a15, a9, a8")
+    e(f"	add	a15, a9, {cur}")
     e(f"	s32i	a15, a6, {(n-1)*4}")
-    e("	movi	a11, 0")
-    L.extend(carry_into("a11", "a15", "a9", "a12"))
+    e(f"	saltu	a12, a15, a9")
     e(f"	l32i	a9, a6, {(n+1)*4}")
-    e("	add	a9, a9, a11")
+    e(f"	add	a9, a9, a12")
     e(f"	s32i	a9, a6, {n*4}")
 
     e("	addi	a13, a13, -1")
     e(f"	bnez	a13, .L{name}_outer")
 
-    # ---- conditional subtraction ----
+    # ---- conditional subtraction, modulus from registers ----
     e("	movi	a8, 0			# borrow")
     for j in range(n):
         e(f"	l32i	a9, a6, {j*4}		# t[{j}]")
-        e(f"	l32i	a10, a5, {j*4}		# p[{j}]")
-        e("	sub	a15, a9, a10")
-        e("	saltu	a12, a9, a10		# borrow from t-p")
-        e("	sub	a11, a15, a8")
-        e("	saltu	a14, a15, a8		# borrow from -borrow_in")
-        e("	add	a8, a12, a14		# new borrow (0 or 1)")
-        e(f"	s32i	a11, a2, {j*4}		# out[{j}] = diff")
+        if pl[j] == 0:
+            e(f"	sub	a15, a9, a8")
+            e(f"	saltu	a8, a9, a8")
+        else:
+            src = creg[pl[j]] if pl[j] != 1 else None
+            if src is None:
+                e(f"	movi	a10, 1")
+                src = "a10"
+            e(f"	sub	a15, a9, {src}")
+            e(f"	saltu	a12, a9, {src}")
+            e(f"	sub	a11, a15, a8")
+            e(f"	saltu	a10, a15, a8")
+            e(f"	add	a8, a12, a10")
+            e(f"	mov	a15, a11")
+        e(f"	s32i	a15, a2, {j*4}		# out[{j}] = diff")
     e(f"	l32i	a9, a6, {n*4}		# extra word (0 or 1)")
-    e("	saltu	a12, a9, a8		# underflow => result was < p")
-    e("	neg	a12, a12		# mask: 0 or 0xFFFFFFFF")
+    e("	saltu	a12, a9, a8		# underflow => keep t")
+    e("	neg	a12, a12		# mask")
     for j in range(n):
-        e(f"	l32i	a9, a2, {j*4}		# diff")
-        e(f"	l32i	a10, a6, {j*4}		# t[{j}]")
+        e(f"	l32i	a9, a2, {j*4}")
+        e(f"	l32i	a10, a6, {j*4}")
         e("	xor	a11, a9, a10")
         e("	and	a11, a11, a12")
-        e("	xor	a9, a9, a11		# select, branchlessly")
+        e("	xor	a9, a9, a11		# branchless select")
         e(f"	s32i	a9, a2, {j*4}")
 
     if WINDOWED:

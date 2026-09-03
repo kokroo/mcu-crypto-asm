@@ -20,7 +20,7 @@ QEMU="${ESP_QEMU:-/tmp/espqemu/qemu/bin/qemu-system-xtensa}"
 export XTENSA_GNU_CONFIG="$TC/lib/xtensa_esp32s3.so"
 
 "$TC/bin/xtensa-esp-elf-gcc" -nostdlib -nostartfiles -O2 -Wall -I "$HERE" \
-    -T "$HERE/link.ld" "$HERE/start.S" "$HERE/main.c" "$HERE/../asm/xtensa_lx7.S" \
+    -T "$HERE/link.ld" "$HERE/start.S" "$HERE/main.c" "$HERE/../asm/xtensa_lx7.S" "$HERE/../third_party/fiat-crypto/shim.c" -I "$HERE/../third_party/fiat-crypto" \
     -o "$HERE/xtensa-harness.elf" || exit 1
 
 # The bare-metal harness cannot ask QEMU to exit, so it spins after printing.
