@@ -18,7 +18,7 @@
 use core::hint::black_box;
 use cortex_m_rt::entry;
 use cortex_m_semihosting::{debug, hprintln};
-use mcu_crypto::{backend, p256, p384, Fe, Params, Point};
+use mcu_crypto_asm::{backend, p256, p384, Fe, Params, Point};
 
 use panic_semihosting as _;
 
@@ -364,7 +364,7 @@ fn check_point_add() -> u32 {
 #[entry]
 fn main() -> ! {
     counter_init();
-    hprintln!("mcu-crypto dynamic constant-time check");
+    hprintln!("mcu-crypto-asm dynamic constant-time check");
     hprintln!("backend: {}", backend::NAME);
     hprintln!(
         "counter: {}",

@@ -32,7 +32,7 @@ fn main() {
     // variable-latency, so this code would not be constant time there.
     if target.starts_with("thumbv7m") {
         println!(
-            "cargo:warning=mcu-crypto: {target} is Cortex-M3 — UMAAL exists but the \
+            "cargo:warning=mcu-crypto-asm: {target} is Cortex-M3 — UMAAL exists but the \
              multiplier is variable-latency, so the assembly would not be constant \
              time. Using the portable backend."
         );
@@ -49,7 +49,7 @@ fn main() {
         match build_xtensa_asm(core) {
             Ok(()) => println!("cargo:rustc-cfg=nistp_asm_xtensa"),
             Err(e) => println!(
-                "cargo:warning=mcu-crypto: falling back to the portable backend on \
+                "cargo:warning=mcu-crypto-asm: falling back to the portable backend on \
                  {target}: {e}"
             ),
         }

@@ -1,6 +1,6 @@
 //! ECDH: agreement, SEC1 encoding, and rejection of hostile inputs.
 
-use mcu_crypto::{ecdh, p256, p384, CurveParams};
+use mcu_crypto_asm::{ecdh, p256, p384, CurveParams};
 
 fn roundtrip<const N: usize>(
     c: &CurveParams,
@@ -41,7 +41,7 @@ fn p256_ecdh_agrees() {
     roundtrip::<{ p256::N }>(
         &p256::CURVE,
         "p256",
-        &mcu_crypto::comb_tables::P256_COMB,
+        &mcu_crypto_asm::comb_tables::P256_COMB,
         p256::COMB_D,
         p256::COMB_T,
     );
@@ -52,7 +52,7 @@ fn p384_ecdh_agrees() {
     roundtrip::<{ p384::N }>(
         &p384::CURVE,
         "p384",
-        &mcu_crypto::comb_tables::P384_COMB,
+        &mcu_crypto_asm::comb_tables::P384_COMB,
         p384::COMB_D,
         p384::COMB_T,
     );

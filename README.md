@@ -1,7 +1,12 @@
-# mcu-crypto
+# mcu-crypto-asm
 
-Assembly-optimised, constant-time cryptography for 32-bit microcontrollers.
-`no_std`, no allocator, no dependencies.
+**Hand-written assembly cryptography for 32-bit microcontrollers** —
+constant-time, `no_std`, no allocator, no dependencies.
+
+The `-asm` is the point: these are hand-rolled assembly kernels for the one
+operation that dominates each primitive, not portable code hoping the compiler
+does something clever. Where that wins, the README says by how much and shows
+the measurement; where it loses, it says that too.
 
 **Today that means P-256 and P-384**, with hand-written assembly for
 **Cortex-M4/M7/M33** and **Xtensa LX7** (ESP32-S2/S3). The crate is named for
@@ -14,11 +19,11 @@ Every performance and constant-time claim below is **measured on real silicon**
 
 ```toml
 [dependencies]
-mcu-crypto = "0.1"
+mcu-crypto-asm = "0.1"
 ```
 
 ```rust
-use mcu_crypto::p256;
+use mcu_crypto_asm::p256;
 
 // Public key from a private scalar (SEC1 uncompressed: 0x04 || x || y)
 let mut pk = [0u8; 65];
@@ -26,7 +31,7 @@ p256::derive_public_key(&secret /* 32 bytes, big-endian */, &mut pk)?;
 
 // ECDH - rejects peer points that are not on the curve
 let mut shared = [0u8; 32];
-mcu_crypto::ecdh::shared_secret::<{ p256::N }>(
+mcu_crypto_asm::ecdh::shared_secret::<{ p256::N }>(
     &p256::CURVE, &secret, &peer_pk, &mut shared,
 )?;
 ```
@@ -89,14 +94,14 @@ Reproduce with `harness/src/bin/bench.rs`.
 
 **nRF52840 (Cortex-M4) @ 64 MHz**
 
-| operation | fiat-crypto | mcu-crypto | Emill | verdict |
+| operation | fiat-crypto | mcu-crypto-asm | Emill | verdict |
 |---|---|---|---|---|
 | P-256 | 2248 | **998** | **418** | Emill wins, 2.38x |
 | P-384 | 3858 | **1951** | n/a | **we win, 1.97x** |
 
 **ESP32-S3 (Xtensa LX7)**
 
-| operation | fiat-crypto | mcu-crypto | verdict |
+| operation | fiat-crypto | mcu-crypto-asm | verdict |
 |---|---|---|---|
 | P-256 | 2795 | **1272** | **we win, 2.20x** |
 | P-384 | 8538 | **2884** | **we win, 2.96x** |

@@ -1,13 +1,13 @@
 [package]
-name = "mcu-crypto"
+name = "mcu-crypto-asm"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
-description = "Assembly-optimised, constant-time cryptography for 32-bit microcontrollers (Cortex-M, Xtensa). Currently P-256 and P-384."
-repository = "https://github.com/kokroo/mcu-crypto"
+description = "Hand-written assembly cryptography for 32-bit microcontrollers: constant-time, no_std, Cortex-M and Xtensa. Currently P-256 and P-384."
+repository = "https://github.com/kokroo/mcu-crypto-asm"
 categories = ["cryptography", "no-std", "embedded"]
-keywords = ["crypto", "embedded", "no-std", "cortex-m", "p256"]
+keywords = ["crypto", "embedded", "no-std", "cortex-m", "assembly"]
 
 [dependencies]
 
