@@ -10,17 +10,18 @@
 
 @ void nistp_mul_mont_8(uint32_t out[8], const uint32_t a[8],
 @                const uint32_t b[8], const uint32_t p[8]);
-@ out = a * b * R^-1 mod p,  R = 2^256
+@ out = a * b * R^-1 mod p,  R = 2^256.  FIOS, fully unrolled.
 @ NOTE: the p[] argument is ignored -- the modulus is a compile-time
-@ constant and lives in registers.
+@ constant held in registers.
 	.globl	nistp_mul_mont_8
 	.p2align 2
 	.thumb_func
 	.type	nistp_mul_mont_8, %function
 nistp_mul_mont_8:
 	push	{r4-r11, lr}
-	sub	sp, sp, #40
+	sub	sp, sp, #48
 	mov	r4, sp
+	str	r0, [r4, #40]	@ park `out`; r0 becomes the reduce carry
 	mov	r11, #0			@ permanent zero
 	@ modulus limbs in registers: 0x00000000->r11, 0x00000001->r12, 0xffffffff->lr
 	mov	r12, #1
@@ -31,63 +32,351 @@ nistp_mul_mont_8:
 	strd	r11, r11, [r4, #16]
 	strd	r11, r11, [r4, #24]
 	strd	r11, r11, [r4, #32]
-	mov	r9, #8			@ outer counter i
-1:
-	ldr	r5, [r2], #4		@ b[i]
-	mov	r6, #0			@ C = 0
-	ldrd	r8, r10, [r1, #0]	@ a[0], a[1]
-	ldrd	r7, r3, [r4, #0]	@ t[0], t[1]
-	umaal	r7, r6, r8, r5
-	umaal	r3, r6, r10, r5
-	strd	r7, r3, [r4, #0]
-	ldrd	r8, r10, [r1, #8]	@ a[2], a[3]
-	ldrd	r7, r3, [r4, #8]	@ t[2], t[3]
-	umaal	r7, r6, r8, r5
-	umaal	r3, r6, r10, r5
-	strd	r7, r3, [r4, #8]
-	ldrd	r8, r10, [r1, #16]	@ a[4], a[5]
-	ldrd	r7, r3, [r4, #16]	@ t[4], t[5]
-	umaal	r7, r6, r8, r5
-	umaal	r3, r6, r10, r5
-	strd	r7, r3, [r4, #16]
-	ldrd	r8, r10, [r1, #24]	@ a[6], a[7]
-	ldrd	r7, r3, [r4, #24]	@ t[6], t[7]
-	umaal	r7, r6, r8, r5
-	umaal	r3, r6, r10, r5
-	strd	r7, r3, [r4, #24]
-	ldr	r7, [r4, #32]
-	adds	r7, r7, r6		@ t[8] += C
-	str	r7, [r4, #32]
-	adc.w	r7, r11, r11		@ carry
-	str	r7, [r4, #36]
-	ldr	r5, [r4, #0]		@ m = t[0]
-	mov	r6, #0
+	@ ---- i = 0 ----
+	ldr	r5, [r2, #0]		@ b[0]
+	ldr	r8, [r1, #0]
 	ldr	r7, [r4, #0]
-	umaal	r7, r6, r5, lr		@ low word cancels
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	ldr	r8, [r1, #4]
 	ldr	r7, [r4, #4]
-	umaal	r7, r6, r5, lr		@ p[1] = 0xffffffff
-	str	r7, [r4, #0]
-	ldrd	r7, r3, [r4, #8]	@ t[2], t[3]
-	umaal	r7, r6, r5, lr		@ p[2] = 0xffffffff
-	umaal	r3, r6, r5, r11		@ p[3] = 0x00000000
-	strd	r7, r3, [r4, #4]	@ t[1], t[2]
-	ldrd	r7, r3, [r4, #16]	@ t[4], t[5]
-	umaal	r7, r6, r5, r11		@ p[4] = 0x00000000
-	umaal	r3, r6, r5, r11		@ p[5] = 0x00000000
-	strd	r7, r3, [r4, #12]	@ t[3], t[4]
-	ldrd	r7, r3, [r4, #24]	@ t[6], t[7]
-	umaal	r7, r6, r5, r12		@ p[6] = 0x00000001
-	umaal	r3, r6, r5, lr		@ p[7] = 0xffffffff
-	strd	r7, r3, [r4, #20]	@ t[5], t[6]
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, lr		@ p[1] = 0xffffffff
+	str	r7, [r4, #0]		@ t[0] = S
+	ldrd	r8, r10, [r1, #8]
+	ldrd	r7, r3, [r4, #8]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, r11
+	strd	r7, r3, [r4, #4]
+	ldrd	r8, r10, [r1, #16]
+	ldrd	r7, r3, [r4, #16]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, r11
+	strd	r7, r3, [r4, #12]
+	ldrd	r8, r10, [r1, #24]
+	ldrd	r7, r3, [r4, #24]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #20]
 	ldr	r7, [r4, #32]
 	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
 	str	r7, [r4, #28]
-	ldr	r8, [r4, #36]
-	adc.w	r8, r8, r11
-	str	r8, [r4, #32]
-	subs	r9, r9, #1
-	bne	1b
-	@ diff = t - p into out; carry set == no borrow
+	add	r8, r8, r10
+	str	r8, [r4, #32]		@ t[8] = carries
+	@ ---- i = 1 ----
+	ldr	r5, [r2, #4]		@ b[1]
+	ldr	r8, [r1, #0]
+	ldr	r7, [r4, #0]
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	ldr	r8, [r1, #4]
+	ldr	r7, [r4, #4]
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, lr		@ p[1] = 0xffffffff
+	str	r7, [r4, #0]		@ t[0] = S
+	ldrd	r8, r10, [r1, #8]
+	ldrd	r7, r3, [r4, #8]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, r11
+	strd	r7, r3, [r4, #4]
+	ldrd	r8, r10, [r1, #16]
+	ldrd	r7, r3, [r4, #16]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, r11
+	strd	r7, r3, [r4, #12]
+	ldrd	r8, r10, [r1, #24]
+	ldrd	r7, r3, [r4, #24]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #20]
+	ldr	r7, [r4, #32]
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	str	r7, [r4, #28]
+	add	r8, r8, r10
+	str	r8, [r4, #32]		@ t[8] = carries
+	@ ---- i = 2 ----
+	ldr	r5, [r2, #8]		@ b[2]
+	ldr	r8, [r1, #0]
+	ldr	r7, [r4, #0]
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	ldr	r8, [r1, #4]
+	ldr	r7, [r4, #4]
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, lr		@ p[1] = 0xffffffff
+	str	r7, [r4, #0]		@ t[0] = S
+	ldrd	r8, r10, [r1, #8]
+	ldrd	r7, r3, [r4, #8]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, r11
+	strd	r7, r3, [r4, #4]
+	ldrd	r8, r10, [r1, #16]
+	ldrd	r7, r3, [r4, #16]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, r11
+	strd	r7, r3, [r4, #12]
+	ldrd	r8, r10, [r1, #24]
+	ldrd	r7, r3, [r4, #24]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #20]
+	ldr	r7, [r4, #32]
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	str	r7, [r4, #28]
+	add	r8, r8, r10
+	str	r8, [r4, #32]		@ t[8] = carries
+	@ ---- i = 3 ----
+	ldr	r5, [r2, #12]		@ b[3]
+	ldr	r8, [r1, #0]
+	ldr	r7, [r4, #0]
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	ldr	r8, [r1, #4]
+	ldr	r7, [r4, #4]
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, lr		@ p[1] = 0xffffffff
+	str	r7, [r4, #0]		@ t[0] = S
+	ldrd	r8, r10, [r1, #8]
+	ldrd	r7, r3, [r4, #8]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, r11
+	strd	r7, r3, [r4, #4]
+	ldrd	r8, r10, [r1, #16]
+	ldrd	r7, r3, [r4, #16]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, r11
+	strd	r7, r3, [r4, #12]
+	ldrd	r8, r10, [r1, #24]
+	ldrd	r7, r3, [r4, #24]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #20]
+	ldr	r7, [r4, #32]
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	str	r7, [r4, #28]
+	add	r8, r8, r10
+	str	r8, [r4, #32]		@ t[8] = carries
+	@ ---- i = 4 ----
+	ldr	r5, [r2, #16]		@ b[4]
+	ldr	r8, [r1, #0]
+	ldr	r7, [r4, #0]
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	ldr	r8, [r1, #4]
+	ldr	r7, [r4, #4]
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, lr		@ p[1] = 0xffffffff
+	str	r7, [r4, #0]		@ t[0] = S
+	ldrd	r8, r10, [r1, #8]
+	ldrd	r7, r3, [r4, #8]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, r11
+	strd	r7, r3, [r4, #4]
+	ldrd	r8, r10, [r1, #16]
+	ldrd	r7, r3, [r4, #16]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, r11
+	strd	r7, r3, [r4, #12]
+	ldrd	r8, r10, [r1, #24]
+	ldrd	r7, r3, [r4, #24]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #20]
+	ldr	r7, [r4, #32]
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	str	r7, [r4, #28]
+	add	r8, r8, r10
+	str	r8, [r4, #32]		@ t[8] = carries
+	@ ---- i = 5 ----
+	ldr	r5, [r2, #20]		@ b[5]
+	ldr	r8, [r1, #0]
+	ldr	r7, [r4, #0]
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	ldr	r8, [r1, #4]
+	ldr	r7, [r4, #4]
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, lr		@ p[1] = 0xffffffff
+	str	r7, [r4, #0]		@ t[0] = S
+	ldrd	r8, r10, [r1, #8]
+	ldrd	r7, r3, [r4, #8]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, r11
+	strd	r7, r3, [r4, #4]
+	ldrd	r8, r10, [r1, #16]
+	ldrd	r7, r3, [r4, #16]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, r11
+	strd	r7, r3, [r4, #12]
+	ldrd	r8, r10, [r1, #24]
+	ldrd	r7, r3, [r4, #24]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #20]
+	ldr	r7, [r4, #32]
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	str	r7, [r4, #28]
+	add	r8, r8, r10
+	str	r8, [r4, #32]		@ t[8] = carries
+	@ ---- i = 6 ----
+	ldr	r5, [r2, #24]		@ b[6]
+	ldr	r8, [r1, #0]
+	ldr	r7, [r4, #0]
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	ldr	r8, [r1, #4]
+	ldr	r7, [r4, #4]
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, lr		@ p[1] = 0xffffffff
+	str	r7, [r4, #0]		@ t[0] = S
+	ldrd	r8, r10, [r1, #8]
+	ldrd	r7, r3, [r4, #8]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, r11
+	strd	r7, r3, [r4, #4]
+	ldrd	r8, r10, [r1, #16]
+	ldrd	r7, r3, [r4, #16]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, r11
+	strd	r7, r3, [r4, #12]
+	ldrd	r8, r10, [r1, #24]
+	ldrd	r7, r3, [r4, #24]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #20]
+	ldr	r7, [r4, #32]
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	str	r7, [r4, #28]
+	add	r8, r8, r10
+	str	r8, [r4, #32]		@ t[8] = carries
+	@ ---- i = 7 ----
+	ldr	r5, [r2, #28]		@ b[7]
+	ldr	r8, [r1, #0]
+	ldr	r7, [r4, #0]
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	ldr	r8, [r1, #4]
+	ldr	r7, [r4, #4]
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, lr		@ p[1] = 0xffffffff
+	str	r7, [r4, #0]		@ t[0] = S
+	ldrd	r8, r10, [r1, #8]
+	ldrd	r7, r3, [r4, #8]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, r11
+	strd	r7, r3, [r4, #4]
+	ldrd	r8, r10, [r1, #16]
+	ldrd	r7, r3, [r4, #16]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, r11
+	strd	r7, r3, [r4, #12]
+	ldrd	r8, r10, [r1, #24]
+	ldrd	r7, r3, [r4, #24]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #20]
+	ldr	r7, [r4, #32]
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	str	r7, [r4, #28]
+	add	r8, r8, r10
+	str	r8, [r4, #32]		@ t[8] = carries
+	ldr	r0, [r4, #40]	@ recover `out`
 	ldr	r7, [r4, #0]
 	subs	r7, r7, lr
 	str	r7, [r0, #0]
@@ -112,7 +401,7 @@ nistp_mul_mont_8:
 	ldr	r7, [r4, #28]
 	sbcs	r7, r7, lr
 	str	r7, [r0, #28]
-	ldr	r7, [r4, #32]		@ extra word (0 or 1)
+	ldr	r7, [r4, #32]
 	sbcs	r7, r7, r11
 	sbc	r10, r10, r10		@ 0 if no borrow, else all ones
 	ldrd	r7, r3, [r0, #0]
@@ -151,23 +440,24 @@ nistp_mul_mont_8:
 	eor	r7, r7, r8		@ branchless select
 	eor	r3, r3, r12
 	strd	r7, r3, [r0, #24]
-	add	sp, sp, #40
+	add	sp, sp, #48
 	pop	{r4-r11, pc}
 	.size	nistp_mul_mont_8, .-nistp_mul_mont_8
 
 @ void nistp_mul_mont_12(uint32_t out[12], const uint32_t a[12],
 @                const uint32_t b[12], const uint32_t p[12]);
-@ out = a * b * R^-1 mod p,  R = 2^384
+@ out = a * b * R^-1 mod p,  R = 2^384.  FIOS, fully unrolled.
 @ NOTE: the p[] argument is ignored -- the modulus is a compile-time
-@ constant and lives in registers.
+@ constant held in registers.
 	.globl	nistp_mul_mont_12
 	.p2align 2
 	.thumb_func
 	.type	nistp_mul_mont_12, %function
 nistp_mul_mont_12:
 	push	{r4-r11, lr}
-	sub	sp, sp, #56
+	sub	sp, sp, #64
 	mov	r4, sp
+	str	r0, [r4, #56]	@ park `out`; r0 becomes the reduce carry
 	mov	r11, #0			@ permanent zero
 	@ modulus limbs in registers: 0x00000000->r11, 0xfffffffe->r12, 0xffffffff->lr
 	mvn	r12, #1			@ 0xfffffffe
@@ -180,81 +470,691 @@ nistp_mul_mont_12:
 	strd	r11, r11, [r4, #32]
 	strd	r11, r11, [r4, #40]
 	strd	r11, r11, [r4, #48]
-	mov	r9, #12			@ outer counter i
-1:
-	ldr	r5, [r2], #4		@ b[i]
-	mov	r6, #0			@ C = 0
-	ldrd	r8, r10, [r1, #0]	@ a[0], a[1]
-	ldrd	r7, r3, [r4, #0]	@ t[0], t[1]
-	umaal	r7, r6, r8, r5
-	umaal	r3, r6, r10, r5
-	strd	r7, r3, [r4, #0]
-	ldrd	r8, r10, [r1, #8]	@ a[2], a[3]
-	ldrd	r7, r3, [r4, #8]	@ t[2], t[3]
-	umaal	r7, r6, r8, r5
-	umaal	r3, r6, r10, r5
-	strd	r7, r3, [r4, #8]
-	ldrd	r8, r10, [r1, #16]	@ a[4], a[5]
-	ldrd	r7, r3, [r4, #16]	@ t[4], t[5]
-	umaal	r7, r6, r8, r5
-	umaal	r3, r6, r10, r5
-	strd	r7, r3, [r4, #16]
-	ldrd	r8, r10, [r1, #24]	@ a[6], a[7]
-	ldrd	r7, r3, [r4, #24]	@ t[6], t[7]
-	umaal	r7, r6, r8, r5
-	umaal	r3, r6, r10, r5
-	strd	r7, r3, [r4, #24]
-	ldrd	r8, r10, [r1, #32]	@ a[8], a[9]
-	ldrd	r7, r3, [r4, #32]	@ t[8], t[9]
-	umaal	r7, r6, r8, r5
-	umaal	r3, r6, r10, r5
-	strd	r7, r3, [r4, #32]
-	ldrd	r8, r10, [r1, #40]	@ a[10], a[11]
-	ldrd	r7, r3, [r4, #40]	@ t[10], t[11]
-	umaal	r7, r6, r8, r5
-	umaal	r3, r6, r10, r5
-	strd	r7, r3, [r4, #40]
-	ldr	r7, [r4, #48]
-	adds	r7, r7, r6		@ t[12] += C
-	str	r7, [r4, #48]
-	adc.w	r7, r11, r11		@ carry
-	str	r7, [r4, #52]
-	ldr	r5, [r4, #0]		@ m = t[0]
-	mov	r6, #0
+	@ ---- i = 0 ----
+	ldr	r5, [r2, #0]		@ b[0]
+	ldr	r8, [r1, #0]
 	ldr	r7, [r4, #0]
-	umaal	r7, r6, r5, lr		@ low word cancels
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	ldr	r8, [r1, #4]
 	ldr	r7, [r4, #4]
-	umaal	r7, r6, r5, r11		@ p[1] = 0x00000000
-	str	r7, [r4, #0]
-	ldrd	r7, r3, [r4, #8]	@ t[2], t[3]
-	umaal	r7, r6, r5, r11		@ p[2] = 0x00000000
-	umaal	r3, r6, r5, lr		@ p[3] = 0xffffffff
-	strd	r7, r3, [r4, #4]	@ t[1], t[2]
-	ldrd	r7, r3, [r4, #16]	@ t[4], t[5]
-	umaal	r7, r6, r5, r12		@ p[4] = 0xfffffffe
-	umaal	r3, r6, r5, lr		@ p[5] = 0xffffffff
-	strd	r7, r3, [r4, #12]	@ t[3], t[4]
-	ldrd	r7, r3, [r4, #24]	@ t[6], t[7]
-	umaal	r7, r6, r5, lr		@ p[6] = 0xffffffff
-	umaal	r3, r6, r5, lr		@ p[7] = 0xffffffff
-	strd	r7, r3, [r4, #20]	@ t[5], t[6]
-	ldrd	r7, r3, [r4, #32]	@ t[8], t[9]
-	umaal	r7, r6, r5, lr		@ p[8] = 0xffffffff
-	umaal	r3, r6, r5, lr		@ p[9] = 0xffffffff
-	strd	r7, r3, [r4, #28]	@ t[7], t[8]
-	ldrd	r7, r3, [r4, #40]	@ t[10], t[11]
-	umaal	r7, r6, r5, lr		@ p[10] = 0xffffffff
-	umaal	r3, r6, r5, lr		@ p[11] = 0xffffffff
-	strd	r7, r3, [r4, #36]	@ t[9], t[10]
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, r11		@ p[1] = 0x00000000
+	str	r7, [r4, #0]		@ t[0] = S
+	ldrd	r8, r10, [r1, #8]
+	ldrd	r7, r3, [r4, #8]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #4]
+	ldrd	r8, r10, [r1, #16]
+	ldrd	r7, r3, [r4, #16]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #12]
+	ldrd	r8, r10, [r1, #24]
+	ldrd	r7, r3, [r4, #24]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #20]
+	ldrd	r8, r10, [r1, #32]
+	ldrd	r7, r3, [r4, #32]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #28]
+	ldrd	r8, r10, [r1, #40]
+	ldrd	r7, r3, [r4, #40]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #36]
 	ldr	r7, [r4, #48]
 	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
 	str	r7, [r4, #44]
-	ldr	r8, [r4, #52]
-	adc.w	r8, r8, r11
-	str	r8, [r4, #48]
-	subs	r9, r9, #1
-	bne	1b
-	@ diff = t - p into out; carry set == no borrow
+	add	r8, r8, r10
+	str	r8, [r4, #48]		@ t[12] = carries
+	@ ---- i = 1 ----
+	ldr	r5, [r2, #4]		@ b[1]
+	ldr	r8, [r1, #0]
+	ldr	r7, [r4, #0]
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	ldr	r8, [r1, #4]
+	ldr	r7, [r4, #4]
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, r11		@ p[1] = 0x00000000
+	str	r7, [r4, #0]		@ t[0] = S
+	ldrd	r8, r10, [r1, #8]
+	ldrd	r7, r3, [r4, #8]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #4]
+	ldrd	r8, r10, [r1, #16]
+	ldrd	r7, r3, [r4, #16]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #12]
+	ldrd	r8, r10, [r1, #24]
+	ldrd	r7, r3, [r4, #24]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #20]
+	ldrd	r8, r10, [r1, #32]
+	ldrd	r7, r3, [r4, #32]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #28]
+	ldrd	r8, r10, [r1, #40]
+	ldrd	r7, r3, [r4, #40]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #36]
+	ldr	r7, [r4, #48]
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	str	r7, [r4, #44]
+	add	r8, r8, r10
+	str	r8, [r4, #48]		@ t[12] = carries
+	@ ---- i = 2 ----
+	ldr	r5, [r2, #8]		@ b[2]
+	ldr	r8, [r1, #0]
+	ldr	r7, [r4, #0]
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	ldr	r8, [r1, #4]
+	ldr	r7, [r4, #4]
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, r11		@ p[1] = 0x00000000
+	str	r7, [r4, #0]		@ t[0] = S
+	ldrd	r8, r10, [r1, #8]
+	ldrd	r7, r3, [r4, #8]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #4]
+	ldrd	r8, r10, [r1, #16]
+	ldrd	r7, r3, [r4, #16]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #12]
+	ldrd	r8, r10, [r1, #24]
+	ldrd	r7, r3, [r4, #24]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #20]
+	ldrd	r8, r10, [r1, #32]
+	ldrd	r7, r3, [r4, #32]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #28]
+	ldrd	r8, r10, [r1, #40]
+	ldrd	r7, r3, [r4, #40]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #36]
+	ldr	r7, [r4, #48]
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	str	r7, [r4, #44]
+	add	r8, r8, r10
+	str	r8, [r4, #48]		@ t[12] = carries
+	@ ---- i = 3 ----
+	ldr	r5, [r2, #12]		@ b[3]
+	ldr	r8, [r1, #0]
+	ldr	r7, [r4, #0]
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	ldr	r8, [r1, #4]
+	ldr	r7, [r4, #4]
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, r11		@ p[1] = 0x00000000
+	str	r7, [r4, #0]		@ t[0] = S
+	ldrd	r8, r10, [r1, #8]
+	ldrd	r7, r3, [r4, #8]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #4]
+	ldrd	r8, r10, [r1, #16]
+	ldrd	r7, r3, [r4, #16]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #12]
+	ldrd	r8, r10, [r1, #24]
+	ldrd	r7, r3, [r4, #24]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #20]
+	ldrd	r8, r10, [r1, #32]
+	ldrd	r7, r3, [r4, #32]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #28]
+	ldrd	r8, r10, [r1, #40]
+	ldrd	r7, r3, [r4, #40]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #36]
+	ldr	r7, [r4, #48]
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	str	r7, [r4, #44]
+	add	r8, r8, r10
+	str	r8, [r4, #48]		@ t[12] = carries
+	@ ---- i = 4 ----
+	ldr	r5, [r2, #16]		@ b[4]
+	ldr	r8, [r1, #0]
+	ldr	r7, [r4, #0]
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	ldr	r8, [r1, #4]
+	ldr	r7, [r4, #4]
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, r11		@ p[1] = 0x00000000
+	str	r7, [r4, #0]		@ t[0] = S
+	ldrd	r8, r10, [r1, #8]
+	ldrd	r7, r3, [r4, #8]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #4]
+	ldrd	r8, r10, [r1, #16]
+	ldrd	r7, r3, [r4, #16]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #12]
+	ldrd	r8, r10, [r1, #24]
+	ldrd	r7, r3, [r4, #24]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #20]
+	ldrd	r8, r10, [r1, #32]
+	ldrd	r7, r3, [r4, #32]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #28]
+	ldrd	r8, r10, [r1, #40]
+	ldrd	r7, r3, [r4, #40]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #36]
+	ldr	r7, [r4, #48]
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	str	r7, [r4, #44]
+	add	r8, r8, r10
+	str	r8, [r4, #48]		@ t[12] = carries
+	@ ---- i = 5 ----
+	ldr	r5, [r2, #20]		@ b[5]
+	ldr	r8, [r1, #0]
+	ldr	r7, [r4, #0]
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	ldr	r8, [r1, #4]
+	ldr	r7, [r4, #4]
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, r11		@ p[1] = 0x00000000
+	str	r7, [r4, #0]		@ t[0] = S
+	ldrd	r8, r10, [r1, #8]
+	ldrd	r7, r3, [r4, #8]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #4]
+	ldrd	r8, r10, [r1, #16]
+	ldrd	r7, r3, [r4, #16]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #12]
+	ldrd	r8, r10, [r1, #24]
+	ldrd	r7, r3, [r4, #24]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #20]
+	ldrd	r8, r10, [r1, #32]
+	ldrd	r7, r3, [r4, #32]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #28]
+	ldrd	r8, r10, [r1, #40]
+	ldrd	r7, r3, [r4, #40]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #36]
+	ldr	r7, [r4, #48]
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	str	r7, [r4, #44]
+	add	r8, r8, r10
+	str	r8, [r4, #48]		@ t[12] = carries
+	@ ---- i = 6 ----
+	ldr	r5, [r2, #24]		@ b[6]
+	ldr	r8, [r1, #0]
+	ldr	r7, [r4, #0]
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	ldr	r8, [r1, #4]
+	ldr	r7, [r4, #4]
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, r11		@ p[1] = 0x00000000
+	str	r7, [r4, #0]		@ t[0] = S
+	ldrd	r8, r10, [r1, #8]
+	ldrd	r7, r3, [r4, #8]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #4]
+	ldrd	r8, r10, [r1, #16]
+	ldrd	r7, r3, [r4, #16]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #12]
+	ldrd	r8, r10, [r1, #24]
+	ldrd	r7, r3, [r4, #24]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #20]
+	ldrd	r8, r10, [r1, #32]
+	ldrd	r7, r3, [r4, #32]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #28]
+	ldrd	r8, r10, [r1, #40]
+	ldrd	r7, r3, [r4, #40]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #36]
+	ldr	r7, [r4, #48]
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	str	r7, [r4, #44]
+	add	r8, r8, r10
+	str	r8, [r4, #48]		@ t[12] = carries
+	@ ---- i = 7 ----
+	ldr	r5, [r2, #28]		@ b[7]
+	ldr	r8, [r1, #0]
+	ldr	r7, [r4, #0]
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	ldr	r8, [r1, #4]
+	ldr	r7, [r4, #4]
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, r11		@ p[1] = 0x00000000
+	str	r7, [r4, #0]		@ t[0] = S
+	ldrd	r8, r10, [r1, #8]
+	ldrd	r7, r3, [r4, #8]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #4]
+	ldrd	r8, r10, [r1, #16]
+	ldrd	r7, r3, [r4, #16]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #12]
+	ldrd	r8, r10, [r1, #24]
+	ldrd	r7, r3, [r4, #24]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #20]
+	ldrd	r8, r10, [r1, #32]
+	ldrd	r7, r3, [r4, #32]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #28]
+	ldrd	r8, r10, [r1, #40]
+	ldrd	r7, r3, [r4, #40]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #36]
+	ldr	r7, [r4, #48]
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	str	r7, [r4, #44]
+	add	r8, r8, r10
+	str	r8, [r4, #48]		@ t[12] = carries
+	@ ---- i = 8 ----
+	ldr	r5, [r2, #32]		@ b[8]
+	ldr	r8, [r1, #0]
+	ldr	r7, [r4, #0]
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	ldr	r8, [r1, #4]
+	ldr	r7, [r4, #4]
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, r11		@ p[1] = 0x00000000
+	str	r7, [r4, #0]		@ t[0] = S
+	ldrd	r8, r10, [r1, #8]
+	ldrd	r7, r3, [r4, #8]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #4]
+	ldrd	r8, r10, [r1, #16]
+	ldrd	r7, r3, [r4, #16]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #12]
+	ldrd	r8, r10, [r1, #24]
+	ldrd	r7, r3, [r4, #24]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #20]
+	ldrd	r8, r10, [r1, #32]
+	ldrd	r7, r3, [r4, #32]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #28]
+	ldrd	r8, r10, [r1, #40]
+	ldrd	r7, r3, [r4, #40]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #36]
+	ldr	r7, [r4, #48]
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	str	r7, [r4, #44]
+	add	r8, r8, r10
+	str	r8, [r4, #48]		@ t[12] = carries
+	@ ---- i = 9 ----
+	ldr	r5, [r2, #36]		@ b[9]
+	ldr	r8, [r1, #0]
+	ldr	r7, [r4, #0]
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	ldr	r8, [r1, #4]
+	ldr	r7, [r4, #4]
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, r11		@ p[1] = 0x00000000
+	str	r7, [r4, #0]		@ t[0] = S
+	ldrd	r8, r10, [r1, #8]
+	ldrd	r7, r3, [r4, #8]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #4]
+	ldrd	r8, r10, [r1, #16]
+	ldrd	r7, r3, [r4, #16]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #12]
+	ldrd	r8, r10, [r1, #24]
+	ldrd	r7, r3, [r4, #24]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #20]
+	ldrd	r8, r10, [r1, #32]
+	ldrd	r7, r3, [r4, #32]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #28]
+	ldrd	r8, r10, [r1, #40]
+	ldrd	r7, r3, [r4, #40]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #36]
+	ldr	r7, [r4, #48]
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	str	r7, [r4, #44]
+	add	r8, r8, r10
+	str	r8, [r4, #48]		@ t[12] = carries
+	@ ---- i = 10 ----
+	ldr	r5, [r2, #40]		@ b[10]
+	ldr	r8, [r1, #0]
+	ldr	r7, [r4, #0]
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	ldr	r8, [r1, #4]
+	ldr	r7, [r4, #4]
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, r11		@ p[1] = 0x00000000
+	str	r7, [r4, #0]		@ t[0] = S
+	ldrd	r8, r10, [r1, #8]
+	ldrd	r7, r3, [r4, #8]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #4]
+	ldrd	r8, r10, [r1, #16]
+	ldrd	r7, r3, [r4, #16]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #12]
+	ldrd	r8, r10, [r1, #24]
+	ldrd	r7, r3, [r4, #24]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #20]
+	ldrd	r8, r10, [r1, #32]
+	ldrd	r7, r3, [r4, #32]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #28]
+	ldrd	r8, r10, [r1, #40]
+	ldrd	r7, r3, [r4, #40]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #36]
+	ldr	r7, [r4, #48]
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	str	r7, [r4, #44]
+	add	r8, r8, r10
+	str	r8, [r4, #48]		@ t[12] = carries
+	@ ---- i = 11 ----
+	ldr	r5, [r2, #44]		@ b[11]
+	ldr	r8, [r1, #0]
+	ldr	r7, [r4, #0]
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	ldr	r8, [r1, #4]
+	ldr	r7, [r4, #4]
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, r11		@ p[1] = 0x00000000
+	str	r7, [r4, #0]		@ t[0] = S
+	ldrd	r8, r10, [r1, #8]
+	ldrd	r7, r3, [r4, #8]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #4]
+	ldrd	r8, r10, [r1, #16]
+	ldrd	r7, r3, [r4, #16]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #12]
+	ldrd	r8, r10, [r1, #24]
+	ldrd	r7, r3, [r4, #24]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #20]
+	ldrd	r8, r10, [r1, #32]
+	ldrd	r7, r3, [r4, #32]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #28]
+	ldrd	r8, r10, [r1, #40]
+	ldrd	r7, r3, [r4, #40]
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, lr
+	strd	r7, r3, [r4, #36]
+	ldr	r7, [r4, #48]
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	str	r7, [r4, #44]
+	add	r8, r8, r10
+	str	r8, [r4, #48]		@ t[12] = carries
+	ldr	r0, [r4, #56]	@ recover `out`
 	ldr	r7, [r4, #0]
 	subs	r7, r7, lr
 	str	r7, [r0, #0]
@@ -291,7 +1191,7 @@ nistp_mul_mont_12:
 	ldr	r7, [r4, #44]
 	sbcs	r7, r7, lr
 	str	r7, [r0, #44]
-	ldr	r7, [r4, #48]		@ extra word (0 or 1)
+	ldr	r7, [r4, #48]
 	sbcs	r7, r7, r11
 	sbc	r10, r10, r10		@ 0 if no borrow, else all ones
 	ldrd	r7, r3, [r0, #0]
@@ -348,6 +1248,6 @@ nistp_mul_mont_12:
 	eor	r7, r7, r8		@ branchless select
 	eor	r3, r3, r12
 	strd	r7, r3, [r0, #40]
-	add	sp, sp, #56
+	add	sp, sp, #64
 	pop	{r4-r11, pc}
 	.size	nistp_mul_mont_12, .-nistp_mul_mont_12
