@@ -11,7 +11,7 @@
 //! recovers the private key from a handful of exchanges (the invalid-curve
 //! attack). Scalars are likewise required to be in `[1, n)`.
 
-use crate::{CurveParams, Fe, Point};
+use crate::{mul_scalar_yielding, CurveParams, Fe, Point};
 
 /// Why an ECDH operation was refused.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -166,4 +166,84 @@ fn less_than<const N: usize>(a: &[u32; N], b: &[u32]) -> bool {
         borrow = (b1 as u32) | (b2 as u32);
     }
     borrow == 1
+}
+
+
+// ---------------------------------------------------------------------------
+// Yielding variants
+// ---------------------------------------------------------------------------
+//
+// Identical maths, but the scalar multiplication is interleaved with the rest
+// of the system instead of held for 100 ms (P-256) or 285 ms (P-384). See
+// `crate::scalar_mul` for what `budget` buys you.
+
+/// [`derive_public_key`], yielding every `budget` point operations.
+pub async fn derive_public_key_yielding<const N: usize>(
+    c: &CurveParams,
+    secret: &[u8],
+    out: &mut [u8],
+    budget: u32,
+) -> Result<(), Error> {
+    if out.len() != 1 + 8 * N {
+        return Err(Error::BadLength);
+    }
+    let mut k = [0u32; N];
+    be_to_limbs(secret, &mut k)?;
+    if !scalar_in_range(&k, c.order) {
+        return Err(Error::BadScalar);
+    }
+    let g = Point::<N>::generator(c);
+    let p = mul_scalar_yielding(c, &g, &k, budget).await;
+    let (x, y) = p.to_affine(&c.field).ok_or(Error::BadPoint)?;
+    out[0] = 0x04;
+    limbs_to_be(&x, &mut out[1..1 + 4 * N]);
+    limbs_to_be(&y, &mut out[1 + 4 * N..]);
+    Ok(())
+}
+
+/// [`shared_secret`], yielding every `budget` point operations.
+///
+/// Validation happens up front, before any yielding, so a hostile peer point
+/// is rejected immediately rather than after a partial computation.
+pub async fn shared_secret_yielding<const N: usize>(
+    c: &CurveParams,
+    secret: &[u8],
+    peer: &[u8],
+    out: &mut [u8],
+    budget: u32,
+) -> Result<(), Error> {
+    if peer.len() != 1 + 8 * N || out.len() != 4 * N {
+        return Err(Error::BadLength);
+    }
+    if peer[0] != 0x04 {
+        return Err(Error::BadPoint);
+    }
+    let mut k = [0u32; N];
+    be_to_limbs(secret, &mut k)?;
+    if !scalar_in_range(&k, c.order) {
+        return Err(Error::BadScalar);
+    }
+    let mut xi = [0u32; N];
+    let mut yi = [0u32; N];
+    be_to_limbs(&peer[1..1 + 4 * N], &mut xi)?;
+    be_to_limbs(&peer[1 + 4 * N..], &mut yi)?;
+    if !less_than(&xi, c.field.p) || !less_than(&yi, c.field.p) {
+        return Err(Error::BadPoint);
+    }
+    let x = Fe::<N>::from_int(&c.field, &xi);
+    let y = Fe::<N>::from_int(&c.field, &yi);
+    if !on_curve(c, &x, &y) {
+        return Err(Error::BadPoint);
+    }
+    let mut one = [0u32; N];
+    one.copy_from_slice(c.field.one);
+    let peer_point = Point {
+        x,
+        y,
+        z: Fe::from_mont_limbs(one),
+    };
+    let shared = mul_scalar_yielding(c, &peer_point, &k, budget).await;
+    let (sx, _) = shared.to_affine(&c.field).ok_or(Error::BadPoint)?;
+    limbs_to_be(&sx, out);
+    Ok(())
 }

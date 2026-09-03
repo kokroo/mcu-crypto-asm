@@ -31,9 +31,11 @@ pub mod params;
 
 mod fe;
 mod point;
+pub mod scalar_mul;
 pub mod ecdh;
 pub use fe::{Fe, Params};
 pub use point::{CurveParams, Point};
+pub use scalar_mul::{mul_scalar_yielding, ScalarMul};
 
 /// P-256 (secp256r1) field arithmetic.
 pub mod p256 {

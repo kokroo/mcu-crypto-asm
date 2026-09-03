@@ -16,7 +16,7 @@
 use core::hint::black_box;
 use cortex_m_rt::entry;
 use cortex_m_semihosting::{debug, hprintln};
-use nistp_mcu::{backend, p256, p384};
+use nistp_mcu::{backend, p256, p384, Point, ScalarMul};
 
 use panic_semihosting as _;
 
@@ -267,6 +267,68 @@ fn main() -> ! {
     let fiat384 = bench!("fiat-crypto p384_32", ITERS, {
         fiat_p384_mul(black_box(&mut go), black_box(&ga), black_box(&gb));
     });
+
+    // --- scalar multiplication: what actually blocks an executor ---
+    hprintln!("");
+    hprintln!("scalar multiplication (k*G), the operation that blocks:");
+    {
+        let k256 = [0x9e37_79b9u32, 0x7f4a_7c15, 0x1234_5678, 0x9abc_def0,
+                    0x0f1e_2d3c, 0x4b5a_6978, 0xdead_beef, 0x0badc0de];
+        let g = Point::<{ p256::N }>::generator(&p256::CURVE);
+        let s0 = cyccnt();
+        black_box(black_box(&g).mul_scalar(&p256::CURVE, black_box(&k256)));
+        let c = cyccnt().wrapping_sub(s0);
+        hprintln!("  P-256 k*G   {:>10} cycles  ({} ms @ 64 MHz)", c, c / 64_000);
+
+        let k384 = [0x9e37_79b9u32, 0x7f4a_7c15, 0x1234_5678, 0x9abc_def0,
+                    0x0f1e_2d3c, 0x4b5a_6978, 0xdead_beef, 0x0badc0de,
+                    0x2468_ace0, 0x1357_bdf9, 0xfeed_face, 0x0123_4567];
+        let g4 = Point::<{ p384::N }>::generator(&p384::CURVE);
+        let s0 = cyccnt();
+        black_box(black_box(&g4).mul_scalar(&p384::CURVE, black_box(&k384)));
+        let c = cyccnt().wrapping_sub(s0);
+        hprintln!("  P-384 k*G   {:>10} cycles  ({} ms @ 64 MHz)", c, c / 64_000);
+    }
+
+    // --- worst-case blocking per chunk, which is what an executor feels ---
+    hprintln!("");
+    hprintln!("resumable: longest single step (budget = 1 point op):");
+    {
+        let k256 = [0x9e37_79b9u32, 0x7f4a_7c15, 0x1234_5678, 0x9abc_def0,
+                    0x0f1e_2d3c, 0x4b5a_6978, 0xdead_beef, 0x0badc0de];
+        let g = Point::<{ p256::N }>::generator(&p256::CURVE);
+        let mut st = ScalarMul::<{ p256::N }>::new(&p256::CURVE, &g, &k256);
+        let (mut worst, mut steps, mut total) = (0u32, 0u32, 0u32);
+        loop {
+            let s0 = cyccnt();
+            let done = st.step(&p256::CURVE, 1).is_some();
+            let d = cyccnt().wrapping_sub(s0);
+            total = total.wrapping_add(d);
+            if d > worst { worst = d; }
+            steps += 1;
+            if done { break; }
+        }
+        hprintln!("  P-256  {} steps, worst {} cycles ({} us @64MHz), total {}",
+                  steps, worst, worst / 64, total);
+
+        let k384 = [0x9e37_79b9u32, 0x7f4a_7c15, 0x1234_5678, 0x9abc_def0,
+                    0x0f1e_2d3c, 0x4b5a_6978, 0xdead_beef, 0x0badc0de,
+                    0x2468_ace0, 0x1357_bdf9, 0xfeed_face, 0x0123_4567];
+        let g4 = Point::<{ p384::N }>::generator(&p384::CURVE);
+        let mut st4 = ScalarMul::<{ p384::N }>::new(&p384::CURVE, &g4, &k384);
+        let (mut worst, mut steps, mut total) = (0u32, 0u32, 0u32);
+        loop {
+            let s0 = cyccnt();
+            let done = st4.step(&p384::CURVE, 1).is_some();
+            let d = cyccnt().wrapping_sub(s0);
+            total = total.wrapping_add(d);
+            if d > worst { worst = d; }
+            steps += 1;
+            if done { break; }
+        }
+        hprintln!("  P-384  {} steps, worst {} cycles ({} us @64MHz), total {}",
+                  steps, worst, worst / 64, total);
+    }
 
     hprintln!("");
     hprintln!("vs fiat-crypto (what RustCrypto p256/p384 ship):");

@@ -147,39 +147,63 @@ impl<const N: usize> Point<N> {
         Self { x: x3, y: y3, z: z3 }
     }
 
-    /// Branchless select: returns `b` when `choice == 1`, `a` when `choice == 0`.
+    /// Branchless table lookup: returns `table[digit]` without ever indexing
+    /// memory by a secret.
     ///
-    /// `choice` must be exactly 0 or 1.
+    /// Every entry is read and masked; exactly one mask is all-ones. An
+    /// ordinary `table[digit]` would make the *address* depend on the scalar,
+    /// which is the textbook cache/timing leak.
     #[inline]
-    fn select(choice: u32, a: &Self, b: &Self) -> Self {
-        let mask = choice.wrapping_neg(); // 0 or 0xFFFFFFFF
-        let mut out = *a;
-        for i in 0..N {
-            out.x.v[i] = (a.x.v[i] & !mask) | (b.x.v[i] & mask);
-            out.y.v[i] = (a.y.v[i] & !mask) | (b.y.v[i] & mask);
-            out.z.v[i] = (a.z.v[i] & !mask) | (b.z.v[i] & mask);
+    pub(crate) fn lookup(table: &[Self; 16], digit: u32) -> Self {
+        let mut out = Self {
+            x: Fe::ZERO,
+            y: Fe::ZERO,
+            z: Fe::ZERO,
+        };
+        for (i, entry) in table.iter().enumerate() {
+            let d = (i as u32) ^ digit;
+            // all-ones iff d == 0, with no branch
+            let nz = d | d.wrapping_neg();
+            let mask = ((nz >> 31) & 1).wrapping_sub(1);
+            for j in 0..N {
+                out.x.v[j] |= entry.x.v[j] & mask;
+                out.y.v[j] |= entry.y.v[j] & mask;
+                out.z.v[j] |= entry.z.v[j] & mask;
+            }
         }
         out
     }
 
     /// `k * self`, constant time in `k`.
     ///
-    /// Double-and-add-always, most-significant bit first: every bit performs
-    /// exactly one doubling and one addition, and a branchless select decides
-    /// whether the addition is kept. Combined with complete formulas there are
-    /// no exceptional cases, so the instruction trace is identical for every
-    /// scalar. The loop trip count is the bit length of the curve order, which
-    /// is public.
+    /// Fixed 4-bit window. Double-and-add-always costs two point operations
+    /// per bit; this costs four doublings plus one addition per *nibble*, so
+    /// roughly a third fewer — 335 point operations instead of 512 for P-256.
+    ///
+    /// Uniformity is preserved: the window count is fixed by the scalar's
+    /// width, the table lookup is a branchless masked scan, and the leading
+    /// doublings are performed unconditionally (they act on the identity,
+    /// which the complete formulas handle) rather than skipped by a branch.
+    ///
+    /// Costs a 16-entry table on the stack: 1.5 KiB for P-256, 2.3 KiB for
+    /// P-384.
     pub fn mul_scalar(&self, c: &CurveParams, k: &[u32]) -> Self {
         debug_assert_eq!(k.len(), N);
+        // Precompute table[i] = i * self.
+        let mut table = [Self::identity(&c.field); 16];
+        table[1] = *self;
+        for i in 2..16 {
+            table[i] = table[i - 1].add(c, self);
+        }
+        // Most-significant nibble first.
         let mut acc = Self::identity(&c.field);
-        for i in (0..N).rev() {
-            for bit in (0..32).rev() {
-                acc = acc.add(c, &acc); // doubling, via the complete formula
-                let sum = acc.add(c, self);
-                let choice = (k[i] >> bit) & 1;
-                acc = Self::select(choice, &acc, &sum);
+        for nib in (0..N * 8).rev() {
+            for _ in 0..4 {
+                acc = acc.add(c, &acc);
             }
+            let digit = (k[nib / 8] >> ((nib % 8) * 4)) & 0xF;
+            let sel = Self::lookup(&table, digit);
+            acc = acc.add(c, &sel);
         }
         acc
     }

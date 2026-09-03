@@ -162,6 +162,61 @@ cannot be mirrored in both. Vectors include `k = n` (the identity) and
 `k = n-1` (`-G`). The SEC1 byte encoding is pinned separately, because two
 sides agreeing proves consistency, not correctness.
 
+## Scalar multiplication, and not blocking the executor
+
+A field multiply is ~15 µs — not what hurts. A **scalar multiplication** is,
+measured on an nRF52840 at 64 MHz:
+
+| | double-and-add-always | 4-bit window | worst chunk (budget = 1) |
+|---|---|---|---|
+| P-256 `k*G` | 150 ms | **100 ms** | **343 µs** |
+| P-384 `k*G` | 433 ms | **284 ms** | **643 µs** |
+
+Two separate things are going on there.
+
+**Windowing** replaced double-and-add-always (two point operations per bit)
+with four doublings plus one addition per nibble — about a third fewer point
+operations. The table lookup is a branchless masked scan over all 16 entries,
+never an index computed from the scalar, which would put the *address* on the
+secret.
+
+**Chunking** is the answer to "must this block the CPU for 285 ms?" On a single
+core with no ECC accelerator, `async` cannot move the work elsewhere — the CPU
+still has to do it. What it can do is refuse to hold the CPU for the whole
+computation. [`ScalarMul::step`] performs a bounded number of point operations
+and returns; [`mul_scalar_yielding`] wraps that in a future that yields between
+chunks. A 285 ms stall becomes 643 µs, and the **total cost rises by only
+~0.2%** — measured 18 240 763 cycles blocking vs 18 267 935 chunked.
+
+```rust
+// Blocking: 285 ms with the executor frozen.
+let pk = point.mul_scalar(&p384::CURVE, &k);
+
+// Yielding: same result, longest hold ~643 µs.
+let pk = mul_scalar_yielding(&p384::CURVE, &point, &k, 1).await;
+
+// Or drive it manually, e.g. from a state machine:
+let mut st = ScalarMul::new(&p384::CURVE, &point, &k);
+while st.step(&p384::CURVE, 4).is_none() { /* do something else */ }
+```
+
+`ecdh::derive_public_key_yielding` / `shared_secret_yielding` expose the same
+thing at the ECDH level, validating the peer point *before* any yielding so a
+hostile input is rejected immediately rather than after partial work.
+
+The yield future is six lines of `core::future` — no async runtime dependency,
+so it works under embassy or anything else.
+
+**Chunking does not weaken the timing guarantee.** The total number of point
+operations is fixed by the curve and never by the scalar
+(`ScalarMul::total_ops`), so every scalar takes the same number of steps and
+the same number of yields. There is a test asserting exactly that across five
+very different scalars.
+
+⚠️ The state holds a 16-entry precomputed table: ~1.6 KiB for P-256, ~2.6 KiB
+for P-384. It lives in the future, so place it deliberately rather than deep on
+a small task stack.
+
 ## Design
 
 Performance on a 32-bit MCU is decided almost entirely by one operation, so the
