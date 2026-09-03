@@ -24,17 +24,18 @@ remain:
 
 | operation | fiat-crypto | nistp-mcu | Emill | verdict |
 |---|---|---|---|---|
-| P-256 modular multiply | 2246 | 1411 | **415** | **Emill wins, 3.39×** |
-| P-384 modular multiply | 3857 | **2834** | n/a | **we win, 1.36×** |
+| P-256 modular multiply | 2246 | **993** | **415** | Emill wins, 2.39× |
+| P-384 modular multiply | 3838 | **1951** | n/a | **we win, 1.96×** |
 
 **ESP32-S3 (Xtensa LX7) @ CCOUNT — exact hardware cycles, 1000 ops each:**
 
 | operation | fiat-crypto | nistp-mcu | verdict |
 |---|---|---|---|
-| P-256 modular multiply | 2795 | **1703** | **we win, 1.64×** |
-| P-384 modular multiply | 8538 | **3823** | **we win, 2.23×** |
+| P-256 modular multiply | 2795 | **1272** | **we win, 2.20×** |
+| P-384 modular multiply | 8538 | **2884** | **we win, 2.96×** |
 
-**This is the best result in the project, and the ESP is where it matters most**
+**P-384 on the ESP is the best result in the project, and the ESP is where it
+matters most**
 — no ECC accelerator on the chip, and no other optimised implementation exists.
 Note *why* the margin is so much bigger here than on Cortex-M4: fiat-crypto's
 P-384 costs 3857 cycles on Cortex-M4 but **8538 on Xtensa (2.2× worse)**, while
@@ -77,7 +78,7 @@ against ours before timing anything, so this compares identical work.
 
 ### Read this before using it
 
-**On Cortex-M4, use Emill for P-256.** He is 3.4× faster (measured) and this crate does not
+**On Cortex-M4, use Emill for P-256.** He is 2.39× faster (measured) and this crate does not
 change that. The measured reason is memory traffic: our CIOS inner step is four
 instructions (`ldr`, `ldr`, `umaal`, `str`) where his is essentially one,
 because he keeps the accumulator in registers — using the **FPU registers as
@@ -87,9 +88,10 @@ tweak, and it is the main open work item.
 
 Where this crate is actually the best option available:
 
-- **P-384 on any MCU** — 1.36× faster than fiat-crypto on real silicon, and no
+- **P-384 on any MCU** — 1.96× (Cortex-M4) and 2.96× (Xtensa) over fiat-crypto
+  on real silicon, and no
   hand-optimised P-384 to compete with. This is the real gap it fills.
-- **Xtensa LX7 (ESP32-S2/S3)** — 1.64× (P-256) and **2.23× (P-384)** over
+- **Xtensa LX7 (ESP32-S2/S3)** — 2.20× (P-256) and **2.96× (P-384)** over
   fiat-crypto on real silicon, the largest margins measured anywhere here, on a
   chip with no ECC accelerator at all.
 - **Anywhere you want one implementation across arches**, with the portable
@@ -198,6 +200,14 @@ add hi,hi,c   | add lo,lo,C    | saltu c,lo,C | add hi,hi,c
 
 That 8:1 ratio is the honest ceiling on how close Xtensa can get to Cortex-M4.
 
+**FIOS, not CIOS.** CIOS makes two passes over the accumulator per outer
+iteration — accumulate `a*b[i]`, then reduce — so every limb is loaded and
+stored twice. FIOS fuses them into one pass over `t[]`. The cost is a second
+carry chain, needing one more register than either core has spare, so both
+backends fully unroll the outer loop to free the counter. Worth ~24% on
+Cortex-M4 and ~15% on Xtensa. A side effect: with no loop left, the assembly
+contains **zero branches**.
+
 The assembly is **generated** (`gen/gen_asm_*.py`), not hand-maintained — the
 alternative is hand-editing hundreds of carry-chained instructions, which is how
 silent carry bugs happen.
@@ -210,8 +220,8 @@ silent carry bugs happen.
 | Cortex-M4 (QEMU `mps2-an386`) | ✅ 128 KAT + 500 differential / curve | ✅ |
 | Cortex-M7 (QEMU `mps2-an500`) | ✅ same binary, all pass | — |
 | Xtensa LX7 (QEMU `esp32s3`) | ✅ 128 vectors / curve | ✅ |
-| **nRF52840, real silicon** | ✅ 128 KAT + 500 differential / curve | ✅ 1.59× / 1.36× vs fiat-crypto |
-| **ESP32-S3, real silicon** | ✅ 128 vectors / curve | ✅ 1.64× / **2.23×** vs fiat-crypto |
+| **nRF52840, real silicon** | ✅ 128 KAT + 500 differential / curve | ✅ 2.24× / 1.96× vs fiat-crypto |
+| **ESP32-S3, real silicon** | ✅ 128 vectors / curve | ✅ 2.20× / **2.96×** vs fiat-crypto |
 | constant time, real silicon | ✅ **0 cycles of spread**, both curves | — |
 
 **Every test harness has been mutation-tested** — a deliberate bug was injected
