@@ -15,7 +15,34 @@
 
 #define UART0_FIFO (*(volatile uint32_t *)0x60000000)
 
+/* Results land at a fixed address so a debugger can read them out: the
+ * Heltec-V3 has no USB serial, only a J-Link, so UART output is invisible on
+ * real hardware. Under QEMU the UART path still works and both agree. */
+#define R_MAGIC 0u
+#define R_P256_FAILS 1u
+#define R_P384_FAILS 2u
+#define R_P256_CYCLES 3u
+#define R_P384_CYCLES 4u
+#define R_ITERS 5u
+#define R_DONE 6u
+volatile uint32_t g_results[8] __attribute__((used, section(".results")));
+
+/* Xtensa cycle counter. Free-running at the CPU clock; exact, unlike the
+ * SysTick fallback QEMU forced on the Cortex-M side. */
+static inline uint32_t ccount(void) {
+    uint32_t c;
+    __asm__ __volatile__("rsr.ccount %0" : "=r"(c));
+    return c;
+}
+
+/* On real hardware started from `reset halt`, peripheral clocks are off and
+ * touching the UART registers bus-faults. The results block is the only output
+ * that works there; under QEMU the UART is live and both agree. */
+#ifdef NO_UART
+static void putc_(char c) { (void)c; }
+#else
 static void putc_(char c) { UART0_FIFO = (uint32_t)(unsigned char)c; }
+#endif
 static void puts_(const char *s) { while (*s) putc_(*s++); }
 static void putu_(uint32_t v) {
     char b[12];
@@ -82,16 +109,48 @@ static int run_curve(const char *name, int n, mulfn mul, const uint32_t *P,
     return fails;
 }
 
+/* Cycles for ITERS Montgomery multiplies. */
+#define BENCH_ITERS 1000u
+static uint32_t bench(int n, mulfn mul, const uint32_t *P, const uint32_t *a,
+                      const uint32_t *b) {
+    uint32_t out[12];
+    for (unsigned i = 0; i < 16; i++) mul(out, a, b, P, scratch);   /* warm */
+    uint32_t t0 = ccount();
+    for (unsigned i = 0; i < BENCH_ITERS; i++) mul(out, a, b, P, scratch);
+    uint32_t t1 = ccount();
+    (void)n;
+    return t1 - t0;
+}
+
 void xmain(void) {
+    g_results[R_MAGIC] = 0x4E495354u; /* "NIST" */
+    g_results[R_DONE] = 0;
+    g_results[R_ITERS] = BENCH_ITERS;
+
     puts_("nistp-mcu Xtensa LX7 on-target tests\n");
     puts_("backend: xtensa-lx7 (SALTU)\n");
 
-    int fails = 0;
-    fails += run_curve("p256", P256_N, nistp_mul_mont_8, P256_P, P256_R2,
-                       P256_ONE, (const uint32_t *)P256_CASES, P256_NCASES);
-    fails += run_curve("p384", P384_N, nistp_mul_mont_12, P384_P, P384_R2,
-                       P384_ONE, (const uint32_t *)P384_CASES, P384_NCASES);
+    int f256 = run_curve("p256", P256_N, nistp_mul_mont_8, P256_P, P256_R2,
+                         P256_ONE, (const uint32_t *)P256_CASES, P256_NCASES);
+    int f384 = run_curve("p384", P384_N, nistp_mul_mont_12, P384_P, P384_R2,
+                         P384_ONE, (const uint32_t *)P384_CASES, P384_NCASES);
+    g_results[R_P256_FAILS] = (uint32_t)f256;
+    g_results[R_P384_FAILS] = (uint32_t)f384;
 
-    if (!fails) puts_("ALL PASS\n");
-    else { puts_("FAILURES: "); putu_((uint32_t)fails); putc_('\n'); }
+    /* Benchmark on Montgomery-form operands (case 8 is a random pair). */
+    uint32_t am[12], bm[12];
+    nistp_mul_mont_8(am, P256_CASES[8][0], P256_R2, P256_P, scratch);
+    nistp_mul_mont_8(bm, P256_CASES[8][1], P256_R2, P256_P, scratch);
+    g_results[R_P256_CYCLES] = bench(8, nistp_mul_mont_8, P256_P, am, bm);
+
+    nistp_mul_mont_12(am, P384_CASES[8][0], P384_R2, P384_P, scratch);
+    nistp_mul_mont_12(bm, P384_CASES[8][1], P384_R2, P384_P, scratch);
+    g_results[R_P384_CYCLES] = bench(12, nistp_mul_mont_12, P384_P, am, bm);
+
+    if (!(f256 + f384)) puts_("ALL PASS\n");
+    else { puts_("FAILURES: "); putu_((uint32_t)(f256 + f384)); putc_('\n'); }
+    puts_("p256 cycles/1000: "); putu_(g_results[R_P256_CYCLES]); putc_('\n');
+    puts_("p384 cycles/1000: "); putu_(g_results[R_P384_CYCLES]); putc_('\n');
+
+    g_results[R_DONE] = 0xD09E0000u;
 }

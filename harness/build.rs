@@ -1,6 +1,17 @@
 fn main() {
     let out = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap());
-    std::fs::write(out.join("memory.x"), include_bytes!("memory.x")).unwrap();
+    // NOTE: there must be NO `memory.x` in the crate root. cortex-m-rt's
+    // link.x does `INCLUDE memory.x`, which the linker resolves from the
+    // working directory FIRST -- a root copy silently wins over the generated
+    // one and you link for the wrong address map.
+    // NISTP_MEMORY_X selects the layout: default is the QEMU mps2 map; set it
+    // to memory-nrf-ram.x to run from RAM on a real nRF52840 without writing
+    // a single byte of flash.
+    let which = std::env::var("NISTP_MEMORY_X").unwrap_or_else(|_| "memory-qemu-mps2.x".into());
+    println!("cargo:rerun-if-env-changed=NISTP_MEMORY_X");
+    println!("cargo:rerun-if-changed={which}");
+    let layout = std::fs::read(&which).unwrap_or_else(|e| panic!("{which}: {e}"));
+    std::fs::write(out.join("memory.x"), layout).unwrap();
     println!("cargo:rustc-link-search={}", out.display());
     println!("cargo:rerun-if-changed=memory.x");
 

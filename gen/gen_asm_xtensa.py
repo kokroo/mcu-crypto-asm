@@ -91,6 +91,15 @@ def emit_mul(n):
     e(f"{name}:")
     if WINDOWED:
         e("	entry	a1, 32			# no stack locals; scratch is an argument")
+    else:
+        # call0 ABI: a12-a15 are CALLEE-SAVED. The windowed path never needs
+        # this because ENTRY gives it a fresh window; forgetting it here
+        # corrupts the caller and crashes on the first call.
+        e("	addi	a1, a1, -16		# call0: preserve a12-a15")
+        e("	s32i	a12, a1, 0")
+        e("	s32i	a13, a1, 4")
+        e("	s32i	a14, a1, 8")
+        e("	s32i	a15, a1, 12")
 
     # zero t[0..n+1]
     e("	movi	a9, 0")
@@ -197,7 +206,15 @@ def emit_mul(n):
         e("	xor	a9, a9, a11		# select, branchlessly")
         e(f"	s32i	a9, a2, {j*4}")
 
-    e("	retw" if WINDOWED else "	ret")
+    if WINDOWED:
+        e("	retw")
+    else:
+        e("	l32i	a12, a1, 0")
+        e("	l32i	a13, a1, 4")
+        e("	l32i	a14, a1, 8")
+        e("	l32i	a15, a1, 12")
+        e("	addi	a1, a1, 16")
+        e("	ret")
     e(f"	.size	{name}, .-{name}")
     return "\n".join(L)
 
@@ -209,7 +226,8 @@ for n in (8, 12):
     out.append(emit_mul(n))
 out.append("")
 
-dst = pathlib.Path(__file__).resolve().parent.parent / "asm" / "xtensa_lx7.S"
+name = "xtensa_lx7_call0.S" if not WINDOWED else "xtensa_lx7.S"
+dst = pathlib.Path(__file__).resolve().parent.parent / "asm" / name
 dst.parent.mkdir(exist_ok=True)
 dst.write_text("\n".join(out))
 txt = dst.read_text()

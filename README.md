@@ -18,7 +18,40 @@ remain:
 
 ## Results
 
-### Speed — vs `fiat-crypto`, emulated Cortex-M4
+### Speed — measured on real silicon
+
+**nRF52840 (Cortex-M4) @ DWT CYCCNT — exact hardware cycles, 1000 ops each:**
+
+| operation | fiat-crypto | nistp-mcu | Emill | verdict |
+|---|---|---|---|---|
+| P-256 modular multiply | 2246 | 1411 | **415** | **Emill wins, 3.39×** |
+| P-384 modular multiply | 3857 | **2834** | n/a | **we win, 1.36×** |
+
+**ESP32-S3 (Xtensa LX7) @ CCOUNT — exact hardware cycles:**
+
+| operation | nistp-mcu | vs Cortex-M4 |
+|---|---|---|
+| P-256 modular multiply | 1703 | 1.21× more cycles |
+| P-384 modular multiply | 3823 | 1.35× more cycles |
+
+Two things worth reading off these numbers:
+
+**QEMU overstated our advantage.** Instruction-count ratios predicted 1.88× /
+1.62× over fiat-crypto; real cycles gave **1.59× / 1.36×**. Our implementation
+is memory-heavy, and loads and stores cost more on real silicon than an
+instruction count suggests. Emulation was right about the *ordering* and wrong
+about the *margin* — which is exactly why the hardware run mattered.
+
+**Xtensa does far better than the instruction ratio implies.** The CIOS inner
+step costs 8 Xtensa instructions against 1 `UMAAL`, yet the measured gap is only
+1.21×. The reason is that the Cortex-M4 version is memory-bound, so most of the
+`UMAAL` advantage is spent waiting on `ldr`/`str` — the same bottleneck that
+loses us the Emill comparison, showing up twice.
+
+Measurements were taken running from RAM, so flash wait states are excluded;
+absolute numbers running from flash will be higher, ratios roughly similar.
+
+### Historical: emulated Cortex-M4
 
 `fiat-crypto`'s `p256_32`/`p384_32` is the formally-verified generated Montgomery
 arithmetic that the RustCrypto `p256`/`p384` crates vendor internally, so
@@ -36,7 +69,7 @@ against ours before timing anything, so this compares identical work.
 
 ### Read this before using it
 
-**On Cortex-M4, use Emill for P-256.** He is 3.7× faster and this crate does not
+**On Cortex-M4, use Emill for P-256.** He is 3.4× faster (measured) and this crate does not
 change that. The measured reason is memory traffic: our CIOS inner step is four
 instructions (`ldr`, `ldr`, `umaal`, `str`) where his is essentially one,
 because he keeps the accumulator in registers — using the **FPU registers as
@@ -46,7 +79,7 @@ tweak, and it is the main open work item.
 
 Where this crate is actually the best option available:
 
-- **P-384 on any MCU** — 1.62× faster than fiat-crypto, and there is no
+- **P-384 on any MCU** — 1.36× faster than fiat-crypto on real silicon, and no
   hand-optimised P-384 to compete with. This is the real gap it fills.
 - **Xtensa LX7 (ESP32-S2/S3)** — the only optimised implementation, on a chip
   with no ECC accelerator at all.
@@ -81,13 +114,15 @@ subtraction — and compares against an interleaved **control group** that measu
 the *same* input repeatedly:
 
 ```
-ok p256: operand spread 1 tick  ==  same-input noise floor 1 tick  (19050..19051)
-ok p384: operand spread 1 tick  ==  same-input noise floor 1 tick  (38700..38701)
+ok p256: operand spread 0 tick(s) ... noise floor 0  (1412023..1412023)
+ok p384: operand spread 0 tick(s) ... noise floor 0  (2839017..2839017)
 ```
 
-The control group is what makes this meaningful: it shows the 1-tick variation is
-SysTick quantisation, present even for identical inputs, and not operand
-dependence.
+That is **real hardware with a true cycle counter**: 16 operand classes × 1000
+repetitions produce byte-identical cycle totals, to the cycle. Under QEMU the
+same test showed a 1-tick spread, which the interleaved control group proved was
+SysTick quantisation (identical inputs varied by the same 1 tick) rather than
+operand dependence. Hardware removes the ambiguity entirely.
 
 ## Beyond the field layer
 
@@ -163,19 +198,18 @@ silent carry bugs happen.
 | | correctness | speed |
 |---|---|---|
 | portable (host) | ✅ vs `num-bigint`, incl. carry edge cases | — |
-| Cortex-M4 (QEMU `mps2-an386`) | ✅ 128 KAT + 500 differential / curve | ✅ 1.88× / 1.62× vs fiat-crypto |
+| Cortex-M4 (QEMU `mps2-an386`) | ✅ 128 KAT + 500 differential / curve | ✅ |
 | Cortex-M7 (QEMU `mps2-an500`) | ✅ same binary, all pass | — |
-| Xtensa LX7 (QEMU `esp32s3`) | ✅ 128 vectors / curve | ⏳ pending |
-| real hardware | ⏳ pending | ⏳ pending |
+| Xtensa LX7 (QEMU `esp32s3`) | ✅ 128 vectors / curve | ✅ |
+| **nRF52840, real silicon** | ✅ 128 KAT + 500 differential / curve | ✅ 1.59× / 1.36× vs fiat-crypto |
+| **ESP32-S3, real silicon** | ✅ 128 vectors / curve | ✅ 1703 / 3823 cycles |
+| constant time, real silicon | ✅ **0 cycles of spread**, both curves | — |
 
 **Every test harness has been mutation-tested** — a deliberate bug was injected
 and each harness confirmed to fail — so a green run means something.
 
 ### Not done yet
 
-- **Hardware cycle counts.** The bench boards (nRF52840 Cortex-M4 + ESP32-S3,
-  both on J-Link) were in use; nothing has been flashed. The same benchmark
-  binary reports exact DWT CYCCNT cycles when run there.
 - **Register-resident accumulator (the big one).** Now measured: Emill is 3.68×
   faster on P-256 purely because his accumulator never touches memory. Getting
   close needs `t[]` held in registers, which on Cortex-M4 means using the FPU
