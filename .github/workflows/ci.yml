@@ -1,0 +1,56 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  host:
+    name: host tests (oracles + constant-time audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo test --verbose
+      - run: cargo test --features force-portable --verbose
+      - run: cargo fmt --check
+      - run: cargo clippy -- -D warnings
+
+  cross:
+    name: cross-compile (assembly backends must build)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - thumbv7em-none-eabihf   # Cortex-M4 / M7
+          - thumbv7em-none-eabi
+          - thumbv8m.main-none-eabihf   # Cortex-M33
+          - thumbv7m-none-eabi      # Cortex-M3: must fall back to portable
+          - thumbv6m-none-eabi      # Cortex-M0+: portable
+          - riscv32imc-unknown-none-elf
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup target add ${{ matrix.target }}
+      - run: cargo build --release --target ${{ matrix.target }}
+
+  emulated:
+    name: on-target tests under QEMU (M4 + M7)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y qemu-system-arm gcc-arm-none-eabi
+      - run: rustup target add thumbv7em-none-eabihf
+      - name: correctness + constant time + benchmark
+        working-directory: harness
+        run: |
+          cargo build --release
+          for m in "mps2-an386 cortex-m4" "mps2-an500 cortex-m7"; do
+            set -- $m
+            echo "=== $1 ($2) ==="
+            qemu-system-arm -machine $1 -cpu $2 -nographic \
+              -semihosting-config enable=on,target=native \
+              -kernel target/thumbv7em-none-eabihf/release/nistp-harness
+          done
+      - name: constant-time (deterministic instruction counting)
+        working-directory: harness
+        run: |
+          qemu-system-arm -machine mps2-an386 -cpu cortex-m4 -icount shift=0 \
+            -nographic -semihosting-config enable=on,target=native \
+            -kernel target/thumbv7em-none-eabihf/release/ct

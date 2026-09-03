@@ -31,7 +31,7 @@ fn instructions(src: &str, comment: char) -> Vec<(usize, String)> {
         .filter(|(_, l)| {
             !l.is_empty()
                 && !l.starts_with('.')      // directives
-                && !l.ends_with(':')        // labels
+                && !l.ends_with(':') // labels
         })
         .collect()
 }
@@ -121,8 +121,12 @@ fn cortex_m4_has_no_data_dependent_memory_addressing() {
         if !matches!(op, "ldr" | "str" | "ldrd" | "strd") {
             continue;
         }
-        let start = insn.find('[').unwrap_or_else(|| panic!("line {line_no}: {insn}"));
-        let end = insn.find(']').unwrap_or_else(|| panic!("line {line_no}: {insn}"));
+        let start = insn
+            .find('[')
+            .unwrap_or_else(|| panic!("line {line_no}: {insn}"));
+        let end = insn
+            .find(']')
+            .unwrap_or_else(|| panic!("line {line_no}: {insn}"));
         let operand = &insn[start..=end];
         assert!(
             re_ok(operand),

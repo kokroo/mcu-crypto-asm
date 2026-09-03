@@ -13,7 +13,6 @@
 
 use crate::{mul_scalar_yielding, CurveParams, Fe, Point};
 
-
 /// Why an ECDH operation was refused.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
@@ -32,12 +31,7 @@ fn be_to_limbs<const N: usize>(bytes: &[u8], out: &mut [u32; N]) -> Result<(), E
     }
     for i in 0..N {
         let off = (N - 1 - i) * 4;
-        out[i] = u32::from_be_bytes([
-            bytes[off],
-            bytes[off + 1],
-            bytes[off + 2],
-            bytes[off + 3],
-        ]);
+        out[i] = u32::from_be_bytes([bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]]);
     }
     Ok(())
 }
@@ -172,7 +166,6 @@ fn less_than<const N: usize>(a: &[u32; N], b: &[u32]) -> bool {
     }
     borrow == 1
 }
-
 
 // ---------------------------------------------------------------------------
 // Yielding variants

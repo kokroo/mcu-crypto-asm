@@ -21,7 +21,14 @@ run "Cortex-M7: correctness"  qemu-system-arm -machine mps2-an500 -cpu cortex-m7
       -kernel harness/target/thumbv7em-none-eabihf/release/nistp-harness
 run "Cortex-M4: constant time" "${QEMU_ARM[@]}" -icount shift=0 -kernel harness/target/thumbv7em-none-eabihf/release/ct
 run "Cortex-M4: benchmark"     "${QEMU_ARM[@]}" -icount shift=0 -kernel harness/target/thumbv7em-none-eabihf/release/bench
-run "Xtensa LX7: correctness"  ./harness-xtensa/run.sh
+if [ -x "${ESP_QEMU:-/tmp/espqemu/qemu/bin/qemu-system-xtensa}" ]; then
+  run "Xtensa LX7: correctness"  ./harness-xtensa/run.sh
+else
+  echo; echo "=== Xtensa LX7: correctness ==="
+  echo "SKIP - Espressif's qemu-system-xtensa not installed (optional)."
+  echo "      Only its fork has an esp32s3 machine; vanilla QEMU lacks SALTU."
+  echo "      Get it from github.com/espressif/qemu and set ESP_QEMU."
+fi
 
 echo; [ $fail -eq 0 ] && echo "ALL CHECKS PASSED" || echo "SOME CHECKS FAILED"
 exit $fail

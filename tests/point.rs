@@ -24,7 +24,10 @@ fn check<const N: usize>(
                 "{name} case {i}: got identity, expected a finite point"
             ),
             Some((x, y)) => {
-                assert!(!*want_inf, "{name} case {i}: expected identity, got a point");
+                assert!(
+                    !*want_inf,
+                    "{name} case {i}: expected identity, got a point"
+                );
                 assert_eq!(&x, want_x, "{name} case {i}: x mismatch");
                 assert_eq!(&y, want_y, "{name} case {i}: y mismatch");
             }
@@ -130,7 +133,8 @@ fn comb_agrees_with_general_scalar_mul() {
     let g4 = Point::<{ p384::N }>::generator(&p384::CURVE);
     assert_eq!(
         p384::mul_base(&sparse).to_affine(&p384::CURVE.field),
-        g4.mul_scalar(&p384::CURVE, &sparse).to_affine(&p384::CURVE.field),
+        g4.mul_scalar(&p384::CURVE, &sparse)
+            .to_affine(&p384::CURVE.field),
         "p384 comb vs general disagreed on a sparse scalar"
     );
 }

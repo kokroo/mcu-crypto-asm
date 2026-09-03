@@ -144,7 +144,11 @@ fn async_ecdh_matches_blocking_and_still_validates() {
     let mut ss_async = vec![0u8; 4 * N];
     ecdh::shared_secret::<N>(c, &sk, &pk_sync, &mut ss_sync).unwrap();
     block_on(ecdh::shared_secret_yielding::<N>(
-        c, &sk, &pk_sync, &mut ss_async, 8,
+        c,
+        &sk,
+        &pk_sync,
+        &mut ss_async,
+        8,
     ))
     .0
     .unwrap();
@@ -154,7 +158,11 @@ fn async_ecdh_matches_blocking_and_still_validates() {
     let mut bad = pk_sync.clone();
     bad[1 + 8 * N - 1] ^= 1;
     let (r, y) = block_on(ecdh::shared_secret_yielding::<N>(
-        c, &sk, &bad, &mut ss_async, 8,
+        c,
+        &sk,
+        &bad,
+        &mut ss_async,
+        8,
     ));
     assert_eq!(r, Err(ecdh::Error::BadPoint));
     assert_eq!(y, 0, "validation must reject before doing any work");

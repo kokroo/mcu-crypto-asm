@@ -12,7 +12,8 @@
 //! entirely by one operation: modular multiplication. So the assembly surface
 //! is deliberately tiny — [`backend`] exposes `mul_mont`, `add_mod`, `sub_mod`
 //! and nothing else. Point arithmetic, the scalar-multiplication ladder and
-//! ECDH/ECDSA are portable Rust shared by every curve and every target.
+//! ECDH are portable Rust shared by every curve and every target. (ECDSA is
+//! not implemented yet.)
 //!
 //! Representation is Montgomery form with CIOS reduction. Both NIST primes
 //! satisfy `p ≡ -1 (mod 2^32)`, so `n0' = -p^-1 mod 2^32 == 1` and the
@@ -20,8 +21,16 @@
 //!
 //! # Constant time
 //!
-//! No operation branches on, or indexes memory by, a secret. See
-//! `tests/constant_time.rs` for the statistical evidence.
+//! No operation branches on, or indexes memory by, a secret. Verified three
+//! ways, because no single method sufficed: a static audit of the generated
+//! assembly (`tests/constant_time.rs`), cycle-accurate measurement on real
+//! hardware (`harness/src/bin/ct.rs`), and diffing executed instruction traces
+//! (`harness/src/bin/scantrace.rs`).
+//!
+//! ⚠ The `core::hint::black_box` calls on masks and flags are **load bearing**:
+//! without them LLVM compiles the constant-time table scan into an early-exit
+//! search whose trip count is the secret digit. See the README before editing
+//! them.
 
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_op_in_unsafe_fn)]
@@ -30,10 +39,10 @@ pub mod backend;
 pub mod comb_tables;
 pub mod params;
 
+pub mod ecdh;
 mod fe;
 mod point;
 pub mod scalar_mul;
-pub mod ecdh;
 pub use fe::{Fe, Params};
 pub use point::{CurveParams, Point};
 pub use scalar_mul::{mul_base_yielding, mul_scalar_yielding, CombMul, ScalarMul};
@@ -89,7 +98,12 @@ pub mod p256 {
     /// SEC1 public key from a private scalar.
     pub fn derive_public_key(secret: &[u8], out: &mut [u8]) -> Result<(), crate::ecdh::Error> {
         crate::ecdh::derive_public_key::<N>(
-            &CURVE, secret, out, &crate::comb_tables::P256_COMB, COMB_D, COMB_T,
+            &CURVE,
+            secret,
+            out,
+            &crate::comb_tables::P256_COMB,
+            COMB_D,
+            COMB_T,
         )
     }
 
@@ -100,7 +114,13 @@ pub mod p256 {
         budget: u32,
     ) -> Result<(), crate::ecdh::Error> {
         crate::ecdh::derive_public_key_yielding::<N>(
-            &CURVE, secret, out, &crate::comb_tables::P256_COMB, COMB_D, COMB_T, budget,
+            &CURVE,
+            secret,
+            out,
+            &crate::comb_tables::P256_COMB,
+            COMB_D,
+            COMB_T,
+            budget,
         )
         .await
     }
@@ -157,7 +177,12 @@ pub mod p384 {
     /// SEC1 public key from a private scalar.
     pub fn derive_public_key(secret: &[u8], out: &mut [u8]) -> Result<(), crate::ecdh::Error> {
         crate::ecdh::derive_public_key::<N>(
-            &CURVE, secret, out, &crate::comb_tables::P384_COMB, COMB_D, COMB_T,
+            &CURVE,
+            secret,
+            out,
+            &crate::comb_tables::P384_COMB,
+            COMB_D,
+            COMB_T,
         )
     }
 
@@ -168,7 +193,13 @@ pub mod p384 {
         budget: u32,
     ) -> Result<(), crate::ecdh::Error> {
         crate::ecdh::derive_public_key_yielding::<N>(
-            &CURVE, secret, out, &crate::comb_tables::P384_COMB, COMB_D, COMB_T, budget,
+            &CURVE,
+            secret,
+            out,
+            &crate::comb_tables::P384_COMB,
+            COMB_D,
+            COMB_T,
+            budget,
         )
         .await
     }

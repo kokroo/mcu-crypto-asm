@@ -217,8 +217,15 @@ impl<const N: usize> CombMul<N> {
                 return Some(self.acc);
             }
             self.i -= 1;
-            self.acc =
-                Point::comb_iteration(c, &self.acc, &self.k, self.table, self.d, self.ntables, self.i);
+            self.acc = Point::comb_iteration(
+                c,
+                &self.acc,
+                &self.k,
+                self.table,
+                self.d,
+                self.ntables,
+                self.i,
+            );
         }
         if self.i == 0 {
             Some(self.acc)

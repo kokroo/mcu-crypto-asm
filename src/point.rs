@@ -144,7 +144,11 @@ impl<const N: usize> Point<N> {
 
         let z3 = z3.add(f, &t1);
 
-        Self { x: x3, y: y3, z: z3 }
+        Self {
+            x: x3,
+            y: y3,
+            z: z3,
+        }
     }
 
     /// Addition where `rhs` is affine (`Z2 == 1`), as every comb table entry
@@ -220,7 +224,11 @@ impl<const N: usize> Point<N> {
 
         let z3 = z3.add(f, &t1);
 
-        Self { x: x3, y: y3, z: z3 }
+        Self {
+            x: x3,
+            y: y3,
+            z: z3,
+        }
     }
 
     /// Branchless select: returns `b` when `choice` is all-ones, `a` when zero.
