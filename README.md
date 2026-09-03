@@ -128,6 +128,36 @@ random scalars at the fast end. A sparse scalar leaves the accumulator at the
 identity for nearly the whole loop — yet `identity+identity` addition is
 provably flat, so the two facts do not yet reconcile.
 
+**Localised to the table scan.** `harness/src/bin/diag.rs` runs `mul_base`
+with selectable ablations (`Point::mul_base_diag`), comparing a sparse scalar
+against a dense one:
+
+| ablation | diff | verdict |
+|---|---|---|
+| full comb | 3 | leaks |
+| real scan, **fixed addend** | 4 | **leaks — accumulator irrelevant** |
+| no scan, fixed addend | 0 | clean |
+| scan + addend, no doubling | 3 | leaks |
+
+Keeping the scan but feeding the addition a fixed point — so the accumulator
+evolves identically for every scalar — still leaks; removing the scan is
+clean. So it is the digit-driven masked table scan, not the point arithmetic
+(which is provably flat) and not the accumulator.
+
+⚠️ A "force the digit constant" ablation looks clean but is a **useless
+control**: LLVM then constant-folds the mask computation and collapses the
+scan to a direct load, so it measures flat for the wrong reason.
+
+**This reproduces under QEMU with `-icount`** (diff 3–4 against a noise floor
+of 0), so it can be iterated on with no hardware — which is the practical
+opening for whoever picks it up.
+
+**Five attempted fixes all made it worse**, not better: optimisation barriers
+on the digit, the accumulator, the scan mask and the table (3 → 9, 21), and
+folding `Z` into the scan (3 → 83). The unmodified code has the *smallest*
+diff. That pattern says codegen artifact rather than a discrete branch, and
+is why none of the barrier-based reasoning paid off.
+
 `tools/audit_compiled.sh` disassembles `mul_base` and shows its conditional
 control flow. Everything it finds so far is benign — loop back-edges comparing
 against public constants (the 4-table loop, the 1536-byte table-scan bound)

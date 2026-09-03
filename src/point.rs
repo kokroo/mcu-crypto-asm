@@ -405,6 +405,86 @@ impl<const N: usize> Point<N> {
         acc
     }
 
+    /// Diagnostic-only comb with selectable ablations, for localising the
+    /// open scalar-dependent timing signal. Mirrors [`mul_base`](Self::mul_base)
+    /// exactly at `mode == 0`.
+    ///
+    /// - 0 — full comb (baseline)
+    /// - 1 — real scan, FIXED addend: the accumulator then evolves identically
+    ///   for every scalar, so a leak here is in the SCAN
+    /// - 2 — no scan, fixed addend (control; should be flat)
+    /// - 4 — real scan and addend, doubling skipped
+    ///
+    /// ⚠ There is deliberately no "constant digit" mode: forcing the digit lets
+    /// LLVM constant-fold the mask computation and collapse the scan to a
+    /// direct load, so it measures flat for the wrong reason. It was a useless
+    /// control and is not worth re-adding.
+    ///
+    /// Not part of the supported API.
+    #[doc(hidden)]
+    pub fn mul_base_diag(
+        c: &CurveParams,
+        k: &[u32],
+        table: &[([u32; N], [u32; N])],
+        d: usize,
+        ntables: usize,
+        mode: u32,
+    ) -> Self {
+        let fixed = Self::generator(c);
+        let mut acc = Self::identity(&c.field);
+        for i in (0..d).rev() {
+            if mode != 4 {
+                acc = acc.add(c, &acc);
+            }
+            for t in 0..ntables {
+                let mut digit = 0u32;
+                for b in 0..4usize {
+                    let bit = (t * 4 + b) * d + i;
+                    digit |= ((k[bit / 32] >> (bit % 32)) & 1) << b;
+                }
+                let digit = core::hint::black_box(digit);
+                let sel = if mode == 2 {
+                    fixed
+                } else {
+                    let tt = &table[t * 16..t * 16 + 16];
+                    let mut px = [0u32; N];
+                    let mut py = [0u32; N];
+                    for (j, entry) in tt.iter().enumerate() {
+                        let dd = (j as u32) ^ digit;
+                        let nz = dd | dd.wrapping_neg();
+                        let mask = ((nz >> 31) & 1).wrapping_sub(1);
+                        for q in 0..N {
+                            px[q] |= entry.0[q] & mask;
+                            py[q] |= entry.1[q] & mask;
+                        }
+                    }
+                    let is_zero = {
+                        let nz = digit | digit.wrapping_neg();
+                        ((nz >> 31) & 1).wrapping_sub(1)
+                    };
+                    let mut z = [0u32; N];
+                    z.copy_from_slice(c.field.one);
+                    for q in 0..N {
+                        z[q] &= !is_zero;
+                    }
+                    Self {
+                        x: Fe::from_mont_limbs(px),
+                        y: Fe::from_mont_limbs(py),
+                        z: Fe::from_mont_limbs(z),
+                    }
+                };
+                let addend = if mode == 1 {
+                    core::hint::black_box(&sel);
+                    fixed
+                } else {
+                    sel
+                };
+                acc = acc.add(c, &addend);
+            }
+        }
+        acc
+    }
+
     /// Convert to affine `(x, y)` as plain integers. Returns `None` for the
     /// identity, which has no affine representation.
     pub fn to_affine(&self, f: &Params) -> Option<([u32; N], [u32; N])> {
