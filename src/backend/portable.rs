@@ -189,8 +189,7 @@ pub fn sub_mod_n<const N: usize>(a: &[u32; N], b: &[u32; N], p: &[u32], out: &mu
 /// 8-cycle leak. Rewriting in XOR form did not help; LLVM reconstructs the
 /// select. Instead this subtracts a MASKED modulus, the same shape as
 /// `sub_mod_n`, which measured clean and needs no optimisation barrier:
-///
-///     out = t - (p & mask)
+/// `out = t - (p & mask)`.
 ///
 /// The modulus is subtracted twice-over in cost (once to test, once to
 /// apply), which is still cheaper than a barrier around the select.
