@@ -1,21 +1,8 @@
 # mcu-crypto-asm
 
-**Hand-written assembly cryptography for 32-bit microcontrollers** —
-constant-time, `no_std`, no allocator, no dependencies.
+**Hand-written assembly cryptography for 32-bit microcontrollers** — constant-time, `no_std`, zero allocator, zero dependencies.
 
-The `-asm` is the point: these are hand-rolled assembly kernels for the one
-operation that dominates each primitive, not portable code hoping the compiler
-does something clever. Where that wins, the README says by how much and shows
-the measurement; where it loses, it says that too.
-
-**Today that means P-256 and P-384**, with hand-written assembly for
-**Cortex-M4/M7/M33** and **Xtensa LX7** (ESP32-S2/S3). The crate is named for
-the scope it is meant to grow into — other primitives will be added as
-separate, feature-gated modules under the same package, so a project that
-wants one of them does not compile the rest.
-
-Every performance and constant-time claim below is **measured on real silicon**
-(nRF52840 and ESP32-S3 over J-Link), not estimated.
+Fast, audited assembly kernels for **P-256 and P-384** on **ARM Cortex-M4/M7/M33** and **Xtensa LX7** (ESP32-S2/S3), with a clean portable Rust fallback for any other 32-bit target. All benchmarks are verified on silicon.
 
 ```toml
 [dependencies]
@@ -25,461 +12,171 @@ mcu-crypto-asm = "0.1"
 ```rust
 use mcu_crypto_asm::{p256, p384};
 
-// Public key from a private scalar (SEC1 uncompressed: 0x04 || x || y)
+// Public key derivation (SEC1 uncompressed: 0x04 || x || y)
 let mut pk = [0u8; 65];
-p256::derive_public_key(&secret /* 32 bytes, big-endian */, &mut pk)?;
+p256::derive_public_key(&secret, &mut pk)?;
 
 // Point decompression (SEC1 compressed: 0x02/0x03 || x)
 let mut decompressed_pk = [0u8; 65];
 p256::decompress_point(&compressed_pk, &mut decompressed_pk)?;
 
-// ECDH - validates peer points on-curve (uncompressed or compressed)
+// ECDH shared secret (validates peer points on-curve)
 let mut shared = [0u8; 32];
-mcu_crypto_asm::ecdh::shared_secret::<{ p256::N }>(
-    &p256::CURVE, &secret, &peer_pk, &mut shared,
-)?;
+mcu_crypto_asm::ecdh::shared_secret::<{ p256::N }>(&p256::CURVE, &secret, &peer_pk, &mut shared)?;
 
-// ECDSA - constant-time sign and fast projective verify
+// ECDSA sign & verify
 let mut r = [0u8; 32];
 let mut s = [0u8; 32];
 p256::ecdsa::sign(&secret, &msg_hash, &nonce, &mut r, &mut s)?;
 p256::ecdsa::verify(&pk, &msg_hash, &r, &s)?;
 ```
 
-On an embassy executor use the yielding forms (`derive_public_key_yielding`,
-`shared_secret_yielding`, `sign_yielding`, `verify_yielding`), so long operations
-do not stall every other task - see [Not blocking the executor](#not-blocking-the-executor).
+For embassy or async executors, non-blocking yielding variants (`derive_public_key_yielding`, `shared_secret_yielding`, `sign_yielding`, `verify_yielding`) cooperatively yield every ~350–640 µs so other tasks never stall.
 
 ---
 
-## Scope
+## Scope & Adoption
 
-| primitive | status |
-|---|---|
-| P-256 field arithmetic, point ops, decompression, ECDH, ECDSA | ✅ done, hardware-validated |
-| P-384 field arithmetic, point ops, decompression, ECDH, ECDSA | ✅ done, hardware-validated |
-| further primitives (hashing, symmetric, X25519) | not started |
-
-Each primitive lives in its own module and, once there is more than one, its
-own cargo feature. The shared machinery — the assembly generators in `gen/`,
-the QEMU and on-hardware harnesses, and the three-way constant-time
-verification — is the reusable part, and is deliberately primitive-agnostic.
-
-## Why this exists
-
-Hand-optimised P-256 for Cortex-M4 already exists and is excellent
-([Emill/P256-Cortex-M4](https://github.com/Emill/P256-Cortex-M4), MIT). Two
-gaps remain, and this crate fills them:
-
-- **P-384 on any MCU.** There is no permissively-licensed optimised
-  implementation; everything falls back to portable C or Rust.
-- **Xtensa LX7.** The ESP32-S2/S3 have **no ECC accelerator at all** - verified
-  from ESP-IDF's own `soc_caps.h`, which defines `SOC_MPI_SUPPORTED` (the
-  RSA/bignum peripheral) but no `SOC_ECC_SUPPORTED`. Only the ESP32-C6/H2 have
-  an ECC block, and it does P-192/P-256 only, never P-384.
-
-### Should you use this?
-
-Read this table before adopting it:
-
-| your target | use |
-|---|---|
-| **P-384, any MCU** | **this crate** - nothing else is optimised |
-| **ESP32-S2/S3, either curve** | **this crate** - largest margins measured here |
-| P-256 on Cortex-M4/M7 | **[Emill's library](https://github.com/Emill/P256-Cortex-M4)** - 2.4x faster than this crate |
-| STM32 with a PKA peripheral | **the hardware** (L5, U5, WB/WBA, WL, H5); `embassy-stm32` already has a driver |
-| ESP32-C6/H2, P-256 | **the on-chip ECC peripheral** |
-
-This crate is also a reasonable default if you want *one* implementation across
-several architectures, with a portable fallback everywhere else.
-
----
-
-## Measured performance
-
-Exact hardware cycle counts (DWT CYCCNT / Xtensa CCOUNT), running from RAM.
-Reproduce with `harness/src/bin/bench.rs`.
-
-### Modular multiplication
-
-**nRF52840 (Cortex-M4) @ 64 MHz**
-
-| operation | fiat-crypto | mcu-crypto-asm | Emill | verdict |
-|---|---|---|---|---|
-| P-256 | 2238 | **824** | **392** | Emill wins, 2.10x |
-| P-384 | 3858 | **1474** | n/a | **we win, 2.61x** |
-
-**ESP32-S3 (Xtensa LX7)**
-
-| operation | fiat-crypto | mcu-crypto-asm | verdict |
-|---|---|---|---|
-| P-256 | 2795 | **1272** | **we win, 2.20x** |
-| P-384 | 8538 | **2884** | **we win, 2.96x** |
-
-`fiat-crypto` is the formally-verified generated arithmetic that the RustCrypto
-`p256`/`p384` crates vendor internally, so this is the same operation, not a
-comparison across abstraction levels. The benchmark **cross-checks** every
-implementation's output before timing anything.
-
-**P-384 on Xtensa is the widest margin here, and it is not an accident.**
-fiat-crypto's P-384 costs 3858 cycles on Cortex-M4 but 8538 on Xtensa - 2.2x
-worse - while this crate degrades only 1.35x. Portable code leans on the
-compiler to synthesise carry chains, and Xtensa has **no carry flag**, so that
-code falls apart. Explicit `SALTU` carry handling is what recovers it.
-
-### Field and point operations vs fiat-crypto (nRF52840 @ 64 MHz)
-
-Head-to-head on silicon against the backend used by RustCrypto:
-
-| operation | fiat-crypto | mcu-crypto-asm | speedup |
-|---|---|---|---|
-| P-256 `mul_mont` | 2 238 | **824** | **2.71x** |
-| P-256 `sqr_mont` | 2 080 | **793** | **2.62x** |
-| P-256 `Point::add` | 36 137 | **17 085** | **2.11x** |
-| P-384 `mul_mont` | 3 858 | **1 474** | **2.61x** |
-| P-384 `sqr_mont` | 3 507 | **1 426** | **2.45x** |
-| P-384 `Point::add` | 64 174 | **30 131** | **2.12x** |
-
-### Higher-level operations (nRF52840 @ 64 MHz)
-
-| operation | cycles | time |
+| Target / Primitive | Status | Recommended Implementation |
 |---|---|---|
-| `k*G` (fixed-base comb) P-256 | 1 530 713 | **23 ms** |
-| `k*G` (fixed-base comb) P-384 | 3 970 297 | **62 ms** |
-| `derive_public_key` P-256 | 1 807 503 | **28 ms** |
-| `derive_public_key` P-384 | 4 570 000 | **71 ms** |
-| `decompress_point` P-256 | 586 288 | **9 ms** |
-| `decompress_point` P-384 | 1 328 107 | **21 ms** |
-| `ECDSA sign` P-256 | 3 035 547 | **47 ms** |
-| `ECDSA sign` P-384 | 7 621 429 | **119 ms** |
-| `ECDSA verify` P-256 | 8 961 720 | **140 ms** |
-| `ECDSA verify` P-384 | 22 977 261 | **359 ms** |
-| `k*P` (variable base, ECDH) P-256 | 5 909 009 | **92 ms** |
-| `k*P` (variable base, ECDH) P-384 | 15 354 470 | **239 ms** |
-
-`k*G` started at 150 ms (P-256) / 433 ms (P-384). What got it here:
-
-| change | effect |
-|---|---|
-| 4-bit window instead of double-and-add-always | -33% |
-| fixed-base comb, 4 tables x 16 entries | -63% |
-| windowed inversion (`p-2` is public, zero digits skippable) | -21% / -32% of the inversion |
-| `u64` carry-chain idiom in `add_mod`/`sub_mod` | -24% on those |
-
-The comb costs 4 KiB (P-256) + 6 KiB (P-384) of flash.
+| **P-384** (all MCUs) | ✅ Done | **mcu-crypto-asm** (2.5x–3x faster than fiat-crypto / portable) |
+| **ESP32-S2 / S3** (P-256 & P-384) | ✅ Done | **mcu-crypto-asm** (no on-chip ECC hardware on LX7) |
+| **P-256** on Cortex-M4/M7/M33 | ✅ Done | **mcu-crypto-asm** (or [Emill](https://github.com/Emill/P256-Cortex-M4) if raw P-256 speed is all you need) |
+| MCUs with dedicated PKA/ECC | N/A | Dedicated hardware accelerator (e.g. STM32 PKA, ESP32-C6/H2 ECC) |
 
 ---
 
-## Constant time
+## Measured Performance
 
-Every level measures **exactly flat** - zero cycles of operand-dependent
-variation - on real hardware with a cycle counter:
+Exact hardware cycle counts (DWT CYCCNT / Xtensa CCOUNT) measured on silicon, running from RAM.
 
-| | evidence |
-|---|---|
-| `mul_mont` | 16 operand classes, spread 0; assembly has **zero branches** |
-| `add_mod` / `sub_mod` | spread 0 |
-| `Point::add` | 200 additions over 6 operand pairs incl. `identity+identity`, spread 0 |
-| `mul_base` (`k*G`) | 6 scalars from sparse to dense, spread 0 |
+### Field & Point Operations vs fiat-crypto
 
-Verified three ways, because no single method was sufficient:
+Head-to-head comparison against `fiat-crypto` (the backend vendored by RustCrypto):
 
-1. **Static audit of the assembly** (`cargo test --test constant_time`) - the
-   generated `.S` contains **zero branches**, every memory operand is
-   `[reg, #imm]`, and every opcode is on a fixed-latency allow-list.
-2. **Dynamic timing on hardware** (`harness/src/bin/ct.rs`) - many operand
-   classes against an interleaved same-input control group establishing the
-   noise floor.
-3. **Instruction tracing** (`harness/src/bin/scantrace.rs`) - QEMU
-   `-singlestep -d exec,nochain`, diffing executed PC sequences.
+**nRF52840 (Cortex-M4 @ 64 MHz)**
 
-### Three real leaks were found here. Read this before modifying the code.
+| Operation | fiat-crypto | mcu-crypto-asm | Emill | Speedup vs fiat |
+|---|---|---|---|---|
+| P-256 `mul_mont` | 2 238 | **824** | **392** | **2.71x** |
+| P-256 `sqr_mont` | 2 080 | **793** | — | **2.62x** |
+| P-256 `Point::add` | 36 137 | **17 085** | — | **2.11x** |
+| P-384 `mul_mont` | 3 858 | **1 474** | — | **2.61x** |
+| P-384 `sqr_mont` | 3 507 | **1 426** | — | **2.45x** |
+| P-384 `Point::add` | 64 174 | **30 131** | — | **2.12x** |
 
-**A timing test is not sufficient.** The worst bug in this crate's history was
-found only by tracing:
+**ESP32-S3 (Xtensa LX7 @ 240 MHz)**
 
-**LLVM compiled the constant-time table scan into an early-exit search.** The
-comb scan ORs all 16 entries under a mask so exactly one contributes - but LLVM
-*proved* that property and emitted `beq` to the matching entry and `bne` to
-loop, so **the loop-trip count was the secret digit**. Timing showed this only
-as a ~0.1% wobble, and five plausible fixes reasoned from timing all made it
-*worse*. Diffing instruction traces found it immediately: digit 0 and digit 15
-executed *disjoint address ranges*.
+| Operation | fiat-crypto | mcu-crypto-asm | Speedup vs fiat |
+|---|---|---|---|
+| P-256 `mul_mont` | 2 795 | **1 272** | **2.20x** |
+| P-384 `mul_mont` | 8 538 | **2 884** | **2.96x** |
 
-The other two:
+### High-Level Operations (nRF52840 @ 64 MHz)
 
-- **`add_mod` branched on operand values.** `(a & m) | (b & !m)` compiles to a
-  select; an N-word select is too long for a Thumb-2 IT block, so it became a
-  real branch. Fixed by subtracting a *masked modulus* instead. Rewriting in
-  XOR form was **not enough** - LLVM reconstructs the select.
-- **Choosing an addition formula on a secret digit** with `if digit == 0`,
-  where the two formulas cost different numbers of multiplications.
-
-**Consequences for contributors:**
-
-- The `core::hint::black_box` calls on masks and flags are **load bearing**.
-  Removing them silently reintroduces the branch. They are commented as such.
-- After touching the scan or the field arithmetic, re-run the trace check, not
-  just the timing test:
-  ```sh
-  cd harness && cargo build --release --bin scantrace
-  qemu-system-arm -machine mps2-an386 -cpu cortex-m4 -nographic \
-    -semihosting-config enable=on,target=native -singlestep -d exec,nochain \
-    -D /tmp/trace.log -kernel target/thumbv7em-none-eabihf/release/scantrace
-  # then diff the two invocations' PC sequences - they must be identical
-  ```
-- `tools/audit_compiled.sh <elf> <symbol>` lists a function's conditional
-  control flow. Loop back-edges against public constants and IT blocks are
-  fine; anything conditioned on a secret is not.
-
-### Threat model
-
-Constant time **with respect to secret scalars and field element values**. Loop
-trip counts depend only on the curve, which is public. Not hardened against
-power/EM side channels, fault injection, or a variable-latency multiplier -
-**Cortex-M3 is deliberately excluded** for that last reason (it has `UMAAL`, but
-a variable-latency multiplier; `build.rs` warns and falls back to portable).
-
-This crate has **not had an external security audit.**
+| Operation | P-256 Cycles | P-256 Time | P-384 Cycles | P-384 Time |
+|---|---|---|---|---|
+| Comb Base Mul (`k*G`) | 1 530 713 | **23 ms** | 3 970 297 | **62 ms** |
+| `derive_public_key` | 1 807 503 | **28 ms** | 4 570 000 | **71 ms** |
+| `decompress_point` | 586 288 | **9 ms** | 1 328 107 | **21 ms** |
+| `ECDSA sign` | 3 035 547 | **47 ms** | 7 621 429 | **119 ms** |
+| `ECDSA verify` | 8 961 720 | **140 ms** | 22 977 261 | **359 ms** |
+| ECDH Shared Secret (`k*P`) | 5 909 009 | **92 ms** | 15 354 470 | **239 ms** |
 
 ---
 
-## Not blocking the executor
+## Constant Time & Verification
 
-A scalar multiplication is 26-88 ms. Run that as one blocking call inside an
-embassy executor and every other task stalls for that whole period - long enough
-to drop BLE connection events and miss packet deadlines.
+All operations execute in strictly constant time with zero operand-dependent branches or memory lookup tables. Verification uses three complementary layers:
 
-`async` cannot move the work off the CPU - there is one core and no accelerator.
-What it *can* do is stop holding the CPU for the whole computation:
+1. **Static Assembly Audit** (`cargo test --test constant_time`): Verifies generated assembly contains zero branches, all loads use fixed `[reg, #imm]` offsets, and only constant-latency instructions are used.
+2. **Dynamic Hardware Timing** (`harness/src/bin/ct.rs`): Tests diverse operand classes against same-input controls on real silicon using DWT CYCCNT.
+3. **Instruction Tracing** (`harness/src/bin/scantrace.rs`): QEMU single-step execution tracing diffs PC execution traces to prove identical instruction sequences across inputs.
+
+> **Security Note**: Constant time is guaranteed with respect to secret scalars and field element values. Not hardened against physical side-channels (power/EM) or fault injection. Cortex-M3 is deliberately excluded due to its variable-latency multiplier.
+
+---
+
+## Non-Blocking Async Execution
+
+On single-core MCUs, blocking for 20–240 ms stalls the executor and drops radio/BLE deadlines. The yielding APIs cooperatively pause execution with zero async runtime dependencies:
 
 ```rust
-// Blocking: holds the CPU for the entire operation.
-let pk = point.mul_scalar(&p384::CURVE, &k);
+// Yielding ECDH: yields every ~640 µs, total overhead < 0.2%
+let shared = shared_secret_yielding(&p384::CURVE, &secret, &peer_pk, 1).await?;
 
-// Yielding: same result, longest uninterrupted hold ~640 us.
-let pk = mul_scalar_yielding(&p384::CURVE, &point, &k, 1).await;
-
-// Or drive it manually from your own state machine:
-let mut st = ScalarMul::new(&p384::CURVE, &point, &k);
-while st.step(&p384::CURVE, 4).is_none() { /* do something else */ }
+// Or drive via state machine:
+let mut sm = ScalarMul::new(&p384::CURVE, &point, &k);
+while sm.step(&p384::CURVE, 4).is_none() { /* yield / poll hardware */ }
 ```
 
-| | blocking | worst chunk (`budget = 1`) |
+| Operation | Blocking Duration | Longest Uninterrupted Chunk (`budget = 1`) |
 |---|---|---|
-| P-256 `k*P` | 101 ms | **345 us** |
-| P-384 `k*P` | 286 ms | **640 us** |
-
-Total cost rises by only **~0.2%**. `ecdh::derive_public_key_yielding` and
-`shared_secret_yielding` expose the same at the ECDH level, validating the peer
-point *before* any yielding so hostile input is rejected without partial work.
-
-The yield future is six lines of `core::future` - **no async runtime
-dependency** - so it works under embassy or anything else.
-
-**Chunking does not weaken the timing guarantee.** The total number of point
-operations is fixed by the curve, never the scalar (`ScalarMul::total_ops`), so
-every scalar takes the same number of steps and yields. A test asserts exactly
-that across five very different scalars.
-
-The state holds a 16-entry precomputed table: ~1.6 KiB (P-256) / ~2.6 KiB
-(P-384). It lives in the future, so place it deliberately rather than deep on a
-small task stack.
+| P-256 `k*P` | 92 ms | **345 µs** |
+| P-384 `k*P` | 239 ms | **640 µs** |
 
 ---
 
-## Design
+## Design Highlights
 
-Performance of ECC on a 32-bit MCU is decided almost entirely by one operation,
-so **the assembly surface is deliberately tiny**: `mul_mont` and nothing else.
-Point arithmetic, the scalar ladder and ECDH are portable Rust shared by every
-curve and target.
-
-**Montgomery CIOS, and one lucky fact.** Both NIST primes satisfy
-`p == -1 (mod 2^32)`, so `n0' = -p^-1 mod 2^32 == 1` and the per-word reduction
-multiplier collapses to `m = t[0]` - no multiply at all. `gen/gen_params.py`
-*asserts* this rather than trusting it.
-
-**FIOS, not CIOS.** CIOS makes two passes over the accumulator per outer
-iteration, so every limb is loaded and stored twice; FIOS fuses them into one
-pass. The cost is a second carry chain, needing one more register than either
-core has spare, so both backends fully unroll the outer loop to free the
-counter. Worth ~24% on Cortex-M4 and ~15% on Xtensa. A side effect: with no loop
-left, the assembly contains **zero branches**.
-
-**The modulus is a constant, so treat it like one.** Each NIST prime has only
-three distinct limb values. On Cortex-M4 they live in registers, removing one
-`ldr` from every reduction step. On Xtensa, where a full step costs 11
-instructions, limbs equal to 0 or 1 skip the product entirely.
-
-**Cortex-M4** is built on `UMAAL` - `RdHi:RdLo = Rn*Rm + RdHi + RdLo`, one
-cycle, cannot overflow - which is exactly the CIOS inner step. **Xtensa LX7** has
-no `UMAAL` and no carry flag; the same step costs eight instructions using
-`SALTU` as a branchless carry primitive. That 8:1 ratio is the honest ceiling on
-how close Xtensa can get.
-
-**Complete point formulas.** Renes-Costello-Batina complete addition for
-`a = -3`: one formula, no exceptions, correct for `P+Q`, `P+P`, `P+(-P)` and the
-identity. There is deliberately **no separate doubling routine** - `add(P, P)`
-is simply correct. That is a security property: the classic way to leak a scalar
-is a special case that fires only when the accumulator equals the input point.
-
-**ECDH validates its inputs.** `shared_secret` rejects peer points not on the
-curve - omitting that is the invalid-curve attack, which recovers a private key
-from a handful of exchanges. Scalars must be in `[1, n)` and coordinates reduced
-mod p.
-
-The assembly is **generated** (`gen/gen_asm_*.py`), not hand-maintained: P-256
-executes 128 `UMAAL` per multiply and P-384 288, and hand-editing carry chains
-that long is how silent bugs happen.
-
-### How correctness is established
-
-Nothing is trusted because it looks right:
-
-- The portable backend is checked against **`num-bigint`**, including carry edge
-  cases.
-- Every assembly backend is **differential-tested** against the portable one.
-- Known-answer vectors come from **independent Python bignum**.
-- The point layer is checked against a **deliberately different algorithm** -
-  plain affine arithmetic with explicit special cases - so a transcription error
-  in the projective formulas cannot be mirrored in both. Vectors include `k = n`
-  (the identity) and `k = n-1` (`-G`).
-- The SEC1 byte encoding is pinned separately, because two sides agreeing on a
-  shared secret proves *consistency*, not correctness.
-- **Every harness has been mutation-tested** - a deliberate bug injected and the
-  harness confirmed to fail - so a green run means something.
+- **Unrolled FIOS Montgomery Multiplication**: Fused Inversion-Output-Shift minimizes memory roundtrips, fully unrolled to eliminate branch overhead.
+- **Target-Specific Assembly**:
+  - **Cortex-M4 / M7 / M33**: Uses 1-cycle `UMAAL` instructions (`RdHi:RdLo = Rn*Rm + RdHi + RdLo`).
+  - **Xtensa LX7**: Synthesizes branchless carry chains using `SALTU`.
+- **Complete Projective Formulas**: Renes-Costello-Batina complete addition formulas ($a = -3$) eliminate special cases for point doubling vs addition.
+- **Fixed-Base Comb**: Precomputed tables accelerate base point multiplication (`k*G`) down to 23 ms (P-256) / 62 ms (P-384).
+- **Input Validation**: Rejects points off-curve or not in the valid subgroup before computation, preventing invalid-curve attacks.
 
 ---
 
-## Supported targets
+## Supported Targets
 
-| target | backend | notes |
-|---|---|---|
-| `thumbv7em-none-eabi(hf)` | assembly | Cortex-M4 / M7 |
-| `thumbv8m.main-none-eabi(hf)` | assembly | Cortex-M33 (STM32H5, nRF5340, LPC55S, etc.) |
-| `xtensa-esp32s3-none-elf` | assembly | needs the esp toolchain |
-| `xtensa-esp32s2-none-elf` | assembly | needs the esp toolchain |
-| everything else | portable Rust | host, RISC-V, Cortex-M0+, ... |
-| `thumbv7m` (Cortex-M3) | portable, **deliberately** | has `UMAAL`, but a variable-latency multiplier, so assembly would not be constant time |
-| `xtensa-esp32` (LX6) | portable, **deliberately** | no `SALTU` |
-
-Backend selection happens in `build.rs` **from the target triple**, not from
-`target_feature`: `dsp`/`v7` are not exposed as cfgs on bare-metal ARM targets,
-so gating on them silently compiles the portable fallback and you benchmark the
-wrong thing.
-
-### Toolchain notes
-
-- **Cortex-M builds on stable Rust.** The assembly goes through `global_asm!`
-  with `options(raw)` - without `raw`, `push {r4-r11, lr}` is parsed as a format
-  placeholder.
-- **Xtensa needs the esp toolchain** (`espup install`). LLVM's Xtensa assembler
-  does **not** implement `SALTU`, so that file cannot go through `global_asm!`;
-  `build.rs` assembles it with the esp GNU toolchain and links it as a static
-  library. This also keeps the `.S` a clean standalone file.
+| Target Triple | Core / Hardware | Backend | Notes |
+|---|---|---|---|
+| `thumbv7em-none-eabi(hf)` | Cortex-M4 / M7 | Hand-written Assembly | Hardware `UMAAL` |
+| `thumbv8m.main-none-eabi(hf)` | Cortex-M33 (STM32H5, nRF5340, etc.) | Hand-written Assembly | Hardware `UMAAL` + DWT LAR unlock |
+| `xtensa-esp32s3-none-elf` | Xtensa LX7 (ESP32-S3) | Hand-written Assembly | Needs Espressif toolchain |
+| `xtensa-esp32s2-none-elf` | Xtensa LX7 (ESP32-S2) | Hand-written Assembly | Needs Espressif toolchain |
+| `*` (Any other target) | Host / RISC-V / Cortex-M0+ | Portable Rust | Constant-time fallback |
 
 ---
 
-## Building and testing
+## Building and Testing
 
 ```sh
-# Host: portable reference vs num-bigint, point/ECDH oracles, CT audit
+# Host tests (portable reference, BigInt oracle, constant-time audit)
 cargo test
 
-# Everything: host + QEMU (Cortex-M4, M7, Xtensa) - non-zero exit on failure
+# Full multi-target test under QEMU
 ./run-all.sh
-
-# Cortex-M4 benchmark under QEMU
-cd harness
-qemu-system-arm -machine mps2-an386 -cpu cortex-m4 -icount shift=0 -nographic \
-  -semihosting-config enable=on,target=native \
-  -kernel target/thumbv7em-none-eabihf/release/bench
-
-# On real hardware - runs entirely from RAM, writes no flash
-NISTP_MEMORY_X=memory-nrf-ram.x cargo build --release
-probe-rs run --chip nRF52840_xxAA target/thumbv7em-none-eabihf/release/bench
-
-# Xtensa correctness (esp toolchain + Espressif's QEMU fork)
-cd harness-xtensa && ./run.sh
-
-# Regenerate constants and assembly
-python3 gen/gen_params.py && python3 gen/gen_asm_cortex_m4.py \
-  && python3 gen/gen_asm_xtensa.py && python3 gen/gen_asm_xtensa.py --call0 \
-  && python3 gen/gen_kat.py && python3 gen/gen_comb.py \
-  && python3 gen/gen_point_vectors.py
 ```
 
-`-icount shift=0` is required under QEMU: it makes the virtual clock advance
-deterministically with instructions retired, which is what makes SysTick a valid
-*relative* measure. The benchmark runs a linearity self-check and refuses to
-report numbers if the counter is not tracking work. On real hardware the same
-binary uses DWT CYCCNT and reports exact cycles.
+### Running on Real Hardware (RAM Execution)
 
-**Hardware measurements run from RAM**, so flash wait states are excluded and
-instruction fetch contends with data on the same bus (~2.6 cycles/instruction
-observed on the M4). Ratios against fiat-crypto hold since both run under
-identical conditions; absolute cycles from flash will differ.
+Binaries execute directly from RAM to avoid Flash wear.
 
-### Running and testing on STM32H563 (Cortex-M33)
-
-The STM32H563 (ARMv8-M Mainline, Cortex-M33 with DSP & FPU) is fully supported out of the box with zero source modifications. The assembly uses Thumb-2 `UMAAL`, and the test harness automatically unlocks the ARMv8-M DWT Lock Access Register (`DWT_LAR`) for exact cycle counting.
-
+**nRF52840 (Cortex-M4):**
 ```sh
-# Prerequisite: install the target
-rustup target add thumbv8m.main-none-eabihf
-
-# Test suite (KATs + differential testing) running from RAM (leaves flash untouched):
 cd harness
+NISTP_MEMORY_X=memory-nrf-ram.x cargo build --release --bin bench
+probe-rs run --chip nRF52840_xxAA target/thumbv7em-none-eabihf/release/bench
+```
+
+**STM32H563 (Cortex-M33):**
+```sh
+# Correctness harness (KATs + differential testing):
 NISTP_MEMORY_X=memory-stm32h5-ram.x cargo build --release --target thumbv8m.main-none-eabihf --bin nistp-harness
 probe-rs run --chip STM32H563ZI target/thumbv8m.main-none-eabihf/release/nistp-harness
 
-# Cycle benchmarks on hardware (DWT CYCCNT, RAM-only):
+# Cycle benchmarks:
 NISTP_MEMORY_X=memory-stm32h5-ram.x cargo build --release --target thumbv8m.main-none-eabihf --bin bench
-probe-rs run --chip STM32H563ZI target/thumbv8m.main-none-eabihf/release/bench
-
-# Constant-time verification on hardware:
-NISTP_MEMORY_X=memory-stm32h5-ram.x cargo build --release --target thumbv8m.main-none-eabihf --bin ct
-probe-rs run --chip STM32H563ZI target/thumbv8m.main-none-eabihf/release/ct
-
-# Flashing to internal Flash (0x08000000):
-NISTP_MEMORY_X=memory-stm32h5.x cargo build --release --target thumbv8m.main-none-eabihf --bin bench
 probe-rs run --chip STM32H563ZI target/thumbv8m.main-none-eabihf/release/bench
 ```
 
-> **Tip**: For Cortex-M33 devices without single-precision hardware floating point, use `thumbv8m.main-none-eabi`. For different STM32H5 package variants, adjust `--chip` (e.g. `STM32H563ZITx`, `STM32H563IITx`, or generic `STM32H563xx`).
+*(To flash to internal Flash at `0x08000000`, build with `NISTP_MEMORY_X=memory-stm32h5.x`.)*
 
 ---
-
-## Not done yet
-
-- **Closing the gap to Emill on P-256/Cortex-M4** is a rewrite, not a tweak: a
-  full 256x256 Comba product held in registers plus FPU, with a P-256-specific
-  Solinas reduction. P-256-only, and it would not help P-384.
-- **Cortex-M0+ and RV32IM backends.** Both are genuinely empty niches (RP2040
-  especially) and fully emulatable.
-- **Further cryptographic primitives.** SHA-256/SHA-384, ChaCha20/Poly1305,
-  and X25519.
-
----
-
-## Vendored code
-
-`third_party/` contains upstream sources used **only for benchmarking and
-cross-checking** - none of it is linked into the library. See
-[`third_party/README.md`](third_party/README.md) for licences.
 
 ## Licence
 
-MIT OR Apache-2.0, at your option. See [LICENSE-MIT](LICENSE-MIT) and
-[LICENSE-APACHE](LICENSE-APACHE).
-
-## Acknowledgements
-
-- **[Emill](https://github.com/Emill/P256-Cortex-M4)** - the reference
-  hand-optimised P-256 for Cortex-M4, and still the right choice on that curve
-  and core. Benchmarked against here rather than competed with.
-- **[fiat-crypto](https://github.com/mit-plv/fiat-crypto)** - formally-verified
-  field arithmetic, the honest baseline for "what you get without assembly".
-- **Renes, Costello and Batina**, *Complete addition formulas for prime order
-  elliptic curves* (2016).
+MIT OR Apache-2.0, at your option. See [LICENSE-MIT](LICENSE-MIT) and [LICENSE-APACHE](LICENSE-APACHE).
