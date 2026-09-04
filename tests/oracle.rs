@@ -139,6 +139,19 @@ fn check_curve<const N: usize>(f: &Params, name: &str) {
         // Montgomery form of 1 must equal R mod p from the generated params.
         assert_eq!(one.as_mont_limbs().as_slice(), f.one, "{name}: R constant");
     }
+
+    // --- square root ---
+    for _ in 0..100 {
+        let a = rng.field_elem::<N>(&p);
+        let fa = Fe::<N>::from_int(f, &from_big::<N>(&a));
+        let sqr = fa.sqr(f);
+        let root = sqr.sqrt(f).expect("quadratic residue must have sqrt");
+        assert!(root.sqr(f).ct_eq(&sqr), "{name}: root^2 == sqr");
+    }
+    assert!(
+        Fe::<N>::ZERO.sqrt(f).unwrap().is_zero(),
+        "{name}: sqrt(0) == 0"
+    );
 }
 
 #[test]
@@ -160,4 +173,71 @@ fn n0inv_is_one_for_both_primes() {
         // -p^-1 mod 2^32 == 1  <=>  p * 1 == -1 mod 2^32
         assert_eq!(f.p[0].wrapping_mul(f.n0inv), 0xFFFF_FFFF, "{name}");
     }
+}
+
+fn check_scalar<const N: usize>(c: &mcu_crypto_asm::CurveParams, name: &str) {
+    let order = to_big(c.order);
+    let mut rng = Rng(0x1337_CAFE_DEAD_BEEF);
+
+    // --- round trip ---
+    for _ in 0..100 {
+        let s = rng.field_elem::<N>(&order);
+        let sc = mcu_crypto_asm::Scalar::<N>::from_int(c, &from_big::<N>(&s));
+        assert_eq!(to_big(&sc.to_int(c)), s, "{name}: scalar round trip");
+    }
+
+    // --- add / sub / mul / sqr ---
+    for _ in 0..200 {
+        let a = rng.field_elem::<N>(&order);
+        let b = rng.field_elem::<N>(&order);
+        let sa = mcu_crypto_asm::Scalar::<N>::from_int(c, &from_big::<N>(&a));
+        let sb = mcu_crypto_asm::Scalar::<N>::from_int(c, &from_big::<N>(&b));
+
+        assert_eq!(
+            to_big(&sa.add(c, &sb).to_int(c)),
+            (&a + &b) % &order,
+            "{name}: scalar add"
+        );
+        assert_eq!(
+            to_big(&sa.sub(c, &sb).to_int(c)),
+            (&a + &order - &b) % &order,
+            "{name}: scalar sub"
+        );
+        assert_eq!(
+            to_big(&sa.mul(c, &sb).to_int(c)),
+            (&a * &b) % &order,
+            "{name}: scalar mul"
+        );
+        assert_eq!(
+            to_big(&sa.sqr(c).to_int(c)),
+            (&a * &a) % &order,
+            "{name}: scalar sqr"
+        );
+    }
+
+    // --- inversion ---
+    for _ in 0..50 {
+        let a = rng.field_elem::<N>(&order);
+        if a.is_zero() {
+            continue;
+        }
+        let sa = mcu_crypto_asm::Scalar::<N>::from_int(c, &from_big::<N>(&a));
+        let inv = sa.invert(c).expect("nonzero scalar has inverse");
+        let one = sa.mul(c, &inv);
+        assert_eq!(
+            to_big(&one.to_int(c)),
+            BigUint::one(),
+            "{name}: a * a^-1 == 1 mod order"
+        );
+    }
+}
+
+#[test]
+fn p256_scalar_matches_bigint() {
+    check_scalar::<{ p256::N }>(&p256::CURVE, "p256 scalar");
+}
+
+#[test]
+fn p384_scalar_matches_bigint() {
+    check_scalar::<{ p384::N }>(&p384::CURVE, "p384 scalar");
 }

@@ -10,6 +10,8 @@ pub mod p256 {
     pub const N: usize = 8;
     /// -p^-1 mod 2^32. Exactly 1 for this prime; asm relies on it.
     pub const N0INV: u32 = 1;
+    /// -order^-1 mod 2^32. Used for scalar field Montgomery reduction.
+    pub const ORDER_N0INV: u32 = 0xee00bc4f;
 
     /// Field modulus p.
     pub const P: [u32; 8] = [
@@ -21,6 +23,18 @@ pub mod p256 {
     pub const ORDER: [u32; 8] = [
         0xfc632551, 0xf3b9cac2, 0xa7179e84, 0xbce6faad, 0xffffffff, 0xffffffff, 0x00000000,
         0xffffffff,
+    ];
+
+    /// R mod order == 1 in Montgomery form for scalar field.
+    pub const ORDER_R_MONT: [u32; 8] = [
+        0x039cdaaf, 0x0c46353d, 0x58e8617b, 0x43190552, 0x00000000, 0x00000000, 0xffffffff,
+        0x00000000,
+    ];
+
+    /// R^2 mod order. Converts scalars into Montgomery form.
+    pub const ORDER_R2_MONT: [u32; 8] = [
+        0xbe79eea2, 0x83244c95, 0x49bd6fa6, 0x4699799c, 0x2b6bec59, 0x2845b239, 0xf3d95620,
+        0x66e12d94,
     ];
 
     /// R mod p == 1 in Montgomery form.
@@ -72,6 +86,8 @@ pub mod p384 {
     pub const N: usize = 12;
     /// -p^-1 mod 2^32. Exactly 1 for this prime; asm relies on it.
     pub const N0INV: u32 = 1;
+    /// -order^-1 mod 2^32. Used for scalar field Montgomery reduction.
+    pub const ORDER_N0INV: u32 = 0xe88fdc45;
 
     /// Field modulus p.
     pub const P: [u32; 12] = [
@@ -83,6 +99,18 @@ pub mod p384 {
     pub const ORDER: [u32; 12] = [
         0xccc52973, 0xecec196a, 0x48b0a77a, 0x581a0db2, 0xf4372ddf, 0xc7634d81, 0xffffffff,
         0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+    ];
+
+    /// R mod order == 1 in Montgomery form for scalar field.
+    pub const ORDER_R_MONT: [u32; 12] = [
+        0x333ad68d, 0x1313e695, 0xb74f5885, 0xa7e5f24d, 0x0bc8d220, 0x389cb27e, 0x00000000,
+        0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    ];
+
+    /// R^2 mod order. Converts scalars into Montgomery form.
+    pub const ORDER_R2_MONT: [u32; 12] = [
+        0x19b409a9, 0x2d319b24, 0xdf1aa419, 0xff3d81e5, 0xfcb82947, 0xbc3e483a, 0x4aab1cc5,
+        0xd40d4917, 0x28266895, 0x3fb05b7a, 0x2b39bf21, 0x0c84ee01,
     ];
 
     /// R mod p == 1 in Montgomery form.

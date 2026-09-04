@@ -22,6 +22,11 @@ use mcu_crypto_asm::{backend, p256, p384, Fe, Params, Point};
 
 use panic_semihosting as _;
 
+#[cfg(emill)]
+extern "C" {
+    fn emill_p256_mulmod(out: *mut u32, a: *const u32, b: *const u32);
+}
+
 const SYST_CSR: *mut u32 = 0xE000_E010 as *mut u32;
 const SYST_RVR: *mut u32 = 0xE000_E014 as *mut u32;
 const SYST_CVR: *mut u32 = 0xE000_E018 as *mut u32;
@@ -240,6 +245,90 @@ does not exceed the same-input noise floor {} tick(s)",
     }
 }
 
+#[cfg(emill)]
+fn check_emill() -> u32 {
+    let f = &p256::FIELD;
+    let mut rng = Rng(0xDEAD_BEEF_1234_5678);
+    let mut inputs: [([u32; 8], [u32; 8]); 16] = [([0; 8], [0; 8]); 16];
+
+    let mut pm1 = [0u32; 8];
+    pm1.copy_from_slice(f.p);
+    pm1[0] = pm1[0].wrapping_sub(1);
+
+    let mut one = [0u32; 8];
+    one[0] = 1;
+    let ones = [0xFFFF_FFFFu32; 8];
+    let mut half = [0u32; 8];
+    half.copy_from_slice(f.p);
+    for i in 0..8 {
+        half[i] >>= 1;
+    }
+
+    inputs[0] = ([0; 8], [0; 8]);
+    inputs[1] = (one, one);
+    inputs[2] = (pm1, pm1);
+    inputs[3] = (pm1, one);
+    inputs[4] = (half, half);
+    inputs[5] = (ones, ones);
+    inputs[6] = (pm1, half);
+    inputs[7] = (one, pm1);
+    for slot in inputs.iter_mut().skip(8) {
+        let mut a = [0u32; 8];
+        let mut b = [0u32; 8];
+        for i in 0..8 {
+            a[i] = rng.next_u32();
+            b[i] = rng.next_u32();
+        }
+        *slot = (a, b);
+    }
+
+    let mut out = [0u32; 8];
+    let mut measure_emill = |a: &[u32; 8], b: &[u32; 8]| -> u32 {
+        for _ in 0..16 {
+            unsafe { emill_p256_mulmod(out.as_mut_ptr(), a.as_ptr(), b.as_ptr()) };
+        }
+        let s = ticks();
+        for _ in 0..REPS {
+            unsafe { emill_p256_mulmod(out.as_mut_ptr(), a.as_ptr(), b.as_ptr()) };
+        }
+        ticks().wrapping_sub(s)
+    };
+
+    let mut dmin = u32::MAX;
+    let mut dmax = 0u32;
+    let mut cmin = u32::MAX;
+    let mut cmax = 0u32;
+
+    for (a, b) in inputs.iter() {
+        let t = measure_emill(a, b);
+        if t < dmin { dmin = t; }
+        if t > dmax { dmax = t; }
+
+        let c = measure_emill(&inputs[0].0, &inputs[0].1);
+        if c < cmin { cmin = c; }
+        if c > cmax { cmax = c; }
+    }
+
+    let data_spread = dmax - dmin;
+    let noise_floor = (cmax - cmin).max(if unsafe { USE_DWT } { 0 } else { 1 });
+
+    if data_spread <= noise_floor {
+        hprintln!(
+            "  ok   Emill P256_mulmod: {} input classes x {} reps -- operand spread {} tick(s) <= noise floor {} tick(s)",
+            inputs.len(), REPS, data_spread, noise_floor
+        );
+        hprintln!("       (totals {}..{}, control {}..{})", dmin, dmax, cmin, cmax);
+        0
+    } else {
+        hprintln!(
+            "  FAIL Emill P256_mulmod: operand spread {} ticks EXCEEDS same-input noise floor {} ticks",
+            data_spread, noise_floor
+        );
+        hprintln!("       (totals {}..{}, control {}..{})", dmin, dmax, cmin, cmax);
+        1
+    }
+}
+
 /// Constant-time check at the SCALAR MULTIPLICATION level.
 ///
 /// The field-level check below cannot see a leak in the point layer. This is
@@ -379,6 +468,10 @@ fn main() -> ! {
     hprintln!("field arithmetic:");
     fails += check_curve::<{ p256::N }>(&p256::FIELD, "p256");
     fails += check_curve::<{ p384::N }>(&p384::FIELD, "p384");
+    #[cfg(emill)]
+    {
+        fails += check_emill();
+    }
 
     hprintln!("");
     hprintln!("point layer:");

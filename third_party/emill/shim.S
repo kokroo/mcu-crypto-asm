@@ -15,9 +15,7 @@ emill_p256_mulmod:
 	@ (the out pointer) is stashed at [sp] because P256_mulmod clobbers r12.
 	push	{r0, r4-r11, lr}
 	@ r1 and r2 are already the operand pointers Emill's routine expects.
-	bl	P256_mulmod		@ result comes back in r0-r7
-	ldr	r12, [sp]
-	stm	r12, {r0-r7}
-	add	sp, sp, #4
-	pop	{r4-r11, pc}
+	p256_mulmod_core 1		@ result comes back in r0-r7, out pointer pre-loaded into lr
+	stm	lr, {r0-r7}
+	pop	{r0, r4-r11, pc}
 	.size	emill_p256_mulmod, .-emill_p256_mulmod

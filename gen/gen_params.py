@@ -62,15 +62,25 @@ for cname, c in CURVES.items():
     assert n0inv == 1, f"{cname}: n0inv is {n0inv}, asm assumes 1"
     assert p % (1 << 32) == 0xFFFFFFFF
 
+    # Scalar field (modulo order) constants
+    order = c["order"]
+    order_n0inv = (-pow(order, -1, 1 << 32)) % (1 << 32)
+    order_r = (1 << (32 * n)) % order
+    order_r2 = (order_r * order_r) % order
+
     out.append(f"/// {cname} ({32*n}-bit prime field).")
     out.append(f"pub mod {cname.lower()} {{")
     out.append(f"    /// Number of 32-bit limbs.")
     out.append(f"    pub const N: usize = {n};")
     out.append(f"    /// -p^-1 mod 2^32. Exactly 1 for this prime; asm relies on it.")
     out.append(f"    pub const N0INV: u32 = {n0inv};")
+    out.append(f"    /// -order^-1 mod 2^32. Used for scalar field Montgomery reduction.")
+    out.append(f"    pub const ORDER_N0INV: u32 = 0x{order_n0inv:08x};")
     out.append("")
     out.append(fmt("P", p, n, "Field modulus p."))
     out.append(fmt("ORDER", c["order"], n, "Order of the base point."))
+    out.append(fmt("ORDER_R_MONT", order_r, n, "R mod order == 1 in Montgomery form for scalar field."))
+    out.append(fmt("ORDER_R2_MONT", order_r2, n, "R^2 mod order. Converts scalars into Montgomery form."))
     out.append(fmt("R_MONT", one_mont, n, "R mod p == 1 in Montgomery form."))
     out.append(fmt("R2_MONT", R2, n, "R^2 mod p. Converts into Montgomery form."))
     out.append(fmt("R3_MONT", R3, n, "R^3 mod p. Used by Montgomery inversion."))

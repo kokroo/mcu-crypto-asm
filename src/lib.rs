@@ -9,11 +9,10 @@
 //! # Design
 //!
 //! The performance of an ECC implementation on a 32-bit MCU is decided almost
-//! entirely by one operation: modular multiplication. So the assembly surface
-//! is deliberately tiny — [`backend`] exposes `mul_mont`, `add_mod`, `sub_mod`
-//! and nothing else. Point arithmetic, the scalar-multiplication ladder and
-//! ECDH are portable Rust shared by every curve and every target. (ECDSA is
-//! not implemented yet.)
+//! entirely by one operation: modular multiplication. The assembly surface
+//! provides hand-optimized `mul_mont`, `sqr_mont`, `add_mod`, and `sub_mod`.
+//! Point arithmetic, the scalar-multiplication ladder, ECDH, and ECDSA are
+//! portable Rust shared by every curve and every target.
 //!
 //! Representation is Montgomery form with CIOS reduction. Both NIST primes
 //! satisfy `p ≡ -1 (mod 2^32)`, so `n0' = -p^-1 mod 2^32 == 1` and the
@@ -34,17 +33,21 @@
 
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_op_in_unsafe_fn)]
+#![allow(clippy::needless_range_loop)]
 
 pub mod backend;
 pub mod comb_tables;
 pub mod params;
 
 pub mod ecdh;
+pub mod ecdsa;
 mod fe;
 mod point;
+pub mod scalar;
 pub mod scalar_mul;
 pub use fe::{Fe, Params};
 pub use point::{CurveParams, Point};
+pub use scalar::Scalar;
 pub use scalar_mul::{mul_base_yielding, mul_scalar_yielding, CombMul, ScalarMul};
 
 /// P-256 (secp256r1) field arithmetic.
@@ -76,6 +79,9 @@ pub mod p256 {
         gx_mont: &c::GX_MONT,
         gy_mont: &c::GY_MONT,
         order: &c::ORDER,
+        order_n0inv: c::ORDER_N0INV,
+        order_r2: &c::ORDER_R2_MONT,
+        order_r: &c::ORDER_R_MONT,
     };
 
     /// Construct a field element from a plain (non-Montgomery) integer.
@@ -124,6 +130,125 @@ pub mod p256 {
         )
         .await
     }
+
+    /// A P-256 scalar element in Montgomery form.
+    pub type ScalarP256 = crate::Scalar<{ c::N }>;
+
+    /// SEC1 compressed public key from a private scalar (0x02/0x03 || x).
+    pub fn derive_public_key_compressed(
+        secret: &[u8],
+        out: &mut [u8],
+    ) -> Result<(), crate::ecdh::Error> {
+        crate::ecdh::derive_public_key_compressed::<N>(
+            &CURVE,
+            secret,
+            out,
+            &crate::comb_tables::P256_COMB,
+            COMB_D,
+            COMB_T,
+        )
+    }
+
+    /// Decode a point from a SEC1 octet string (uncompressed 0x04 or compressed 0x02/0x03).
+    pub fn decode_point(bytes: &[u8]) -> Result<PointP256, crate::ecdh::Error> {
+        PointP256::decode(&CURVE, bytes)
+    }
+
+    /// Decompress an affine point from x-coordinate and parity bit of y.
+    pub fn decompress_point(x_limbs: &[u32; N], y_is_odd: bool) -> Option<PointP256> {
+        PointP256::decompress(&CURVE, x_limbs, y_is_odd)
+    }
+
+    /// ECDSA for P-256.
+    pub mod ecdsa {
+        use super::*;
+
+        /// Verify an ECDSA signature `(r, s)` against public key `pk` and message hash `msg_hash`.
+        pub fn verify(
+            pk: &[u8],
+            msg_hash: &[u8],
+            r: &[u8],
+            s: &[u8],
+        ) -> Result<(), crate::ecdsa::Error> {
+            crate::ecdsa::verify::<N>(
+                &CURVE,
+                pk,
+                msg_hash,
+                r,
+                s,
+                &crate::comb_tables::P256_COMB,
+                COMB_D,
+                COMB_T,
+            )
+        }
+
+        /// Sign a message hash `msg_hash` with private key `sk` and nonce `k_nonce`.
+        pub fn sign(
+            sk: &[u8],
+            msg_hash: &[u8],
+            k_nonce: &[u8],
+            out_r: &mut [u8],
+            out_s: &mut [u8],
+        ) -> Result<(), crate::ecdsa::Error> {
+            crate::ecdsa::sign::<N>(
+                &CURVE,
+                sk,
+                msg_hash,
+                k_nonce,
+                &crate::comb_tables::P256_COMB,
+                COMB_D,
+                COMB_T,
+                out_r,
+                out_s,
+            )
+        }
+
+        /// Yielding variant of [`verify`].
+        pub async fn verify_yielding(
+            pk: &[u8],
+            msg_hash: &[u8],
+            r: &[u8],
+            s: &[u8],
+            budget: u32,
+        ) -> Result<(), crate::ecdsa::Error> {
+            crate::ecdsa::verify_yielding::<N>(
+                &CURVE,
+                pk,
+                msg_hash,
+                r,
+                s,
+                &crate::comb_tables::P256_COMB,
+                COMB_D,
+                COMB_T,
+                budget,
+            )
+            .await
+        }
+
+        /// Yielding variant of [`sign`].
+        pub async fn sign_yielding(
+            sk: &[u8],
+            msg_hash: &[u8],
+            k_nonce: &[u8],
+            out_r: &mut [u8],
+            out_s: &mut [u8],
+            budget: u32,
+        ) -> Result<(), crate::ecdsa::Error> {
+            crate::ecdsa::sign_yielding::<N>(
+                &CURVE,
+                sk,
+                msg_hash,
+                k_nonce,
+                &crate::comb_tables::P256_COMB,
+                COMB_D,
+                COMB_T,
+                out_r,
+                out_s,
+                budget,
+            )
+            .await
+        }
+    }
 }
 
 /// P-384 (secp384r1) field arithmetic.
@@ -155,6 +280,9 @@ pub mod p384 {
         gx_mont: &c::GX_MONT,
         gy_mont: &c::GY_MONT,
         order: &c::ORDER,
+        order_n0inv: c::ORDER_N0INV,
+        order_r2: &c::ORDER_R2_MONT,
+        order_r: &c::ORDER_R_MONT,
     };
 
     /// Construct a field element from a plain (non-Montgomery) integer.
@@ -202,5 +330,124 @@ pub mod p384 {
             budget,
         )
         .await
+    }
+
+    /// A P-384 scalar element in Montgomery form.
+    pub type ScalarP384 = crate::Scalar<{ c::N }>;
+
+    /// SEC1 compressed public key from a private scalar (0x02/0x03 || x).
+    pub fn derive_public_key_compressed(
+        secret: &[u8],
+        out: &mut [u8],
+    ) -> Result<(), crate::ecdh::Error> {
+        crate::ecdh::derive_public_key_compressed::<N>(
+            &CURVE,
+            secret,
+            out,
+            &crate::comb_tables::P384_COMB,
+            COMB_D,
+            COMB_T,
+        )
+    }
+
+    /// Decode a point from a SEC1 octet string (uncompressed 0x04 or compressed 0x02/0x03).
+    pub fn decode_point(bytes: &[u8]) -> Result<PointP384, crate::ecdh::Error> {
+        PointP384::decode(&CURVE, bytes)
+    }
+
+    /// Decompress an affine point from x-coordinate and parity bit of y.
+    pub fn decompress_point(x_limbs: &[u32; N], y_is_odd: bool) -> Option<PointP384> {
+        PointP384::decompress(&CURVE, x_limbs, y_is_odd)
+    }
+
+    /// ECDSA for P-384.
+    pub mod ecdsa {
+        use super::*;
+
+        /// Verify an ECDSA signature `(r, s)` against public key `pk` and message hash `msg_hash`.
+        pub fn verify(
+            pk: &[u8],
+            msg_hash: &[u8],
+            r: &[u8],
+            s: &[u8],
+        ) -> Result<(), crate::ecdsa::Error> {
+            crate::ecdsa::verify::<N>(
+                &CURVE,
+                pk,
+                msg_hash,
+                r,
+                s,
+                &crate::comb_tables::P384_COMB,
+                COMB_D,
+                COMB_T,
+            )
+        }
+
+        /// Sign a message hash `msg_hash` with private key `sk` and nonce `k_nonce`.
+        pub fn sign(
+            sk: &[u8],
+            msg_hash: &[u8],
+            k_nonce: &[u8],
+            out_r: &mut [u8],
+            out_s: &mut [u8],
+        ) -> Result<(), crate::ecdsa::Error> {
+            crate::ecdsa::sign::<N>(
+                &CURVE,
+                sk,
+                msg_hash,
+                k_nonce,
+                &crate::comb_tables::P384_COMB,
+                COMB_D,
+                COMB_T,
+                out_r,
+                out_s,
+            )
+        }
+
+        /// Yielding variant of [`verify`].
+        pub async fn verify_yielding(
+            pk: &[u8],
+            msg_hash: &[u8],
+            r: &[u8],
+            s: &[u8],
+            budget: u32,
+        ) -> Result<(), crate::ecdsa::Error> {
+            crate::ecdsa::verify_yielding::<N>(
+                &CURVE,
+                pk,
+                msg_hash,
+                r,
+                s,
+                &crate::comb_tables::P384_COMB,
+                COMB_D,
+                COMB_T,
+                budget,
+            )
+            .await
+        }
+
+        /// Yielding variant of [`sign`].
+        pub async fn sign_yielding(
+            sk: &[u8],
+            msg_hash: &[u8],
+            k_nonce: &[u8],
+            out_r: &mut [u8],
+            out_s: &mut [u8],
+            budget: u32,
+        ) -> Result<(), crate::ecdsa::Error> {
+            crate::ecdsa::sign_yielding::<N>(
+                &CURVE,
+                sk,
+                msg_hash,
+                k_nonce,
+                &crate::comb_tables::P384_COMB,
+                COMB_D,
+                COMB_T,
+                out_r,
+                out_s,
+                budget,
+            )
+            .await
+        }
     }
 }

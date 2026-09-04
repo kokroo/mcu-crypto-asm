@@ -23,21 +23,32 @@ mcu-crypto-asm = "0.1"
 ```
 
 ```rust
-use mcu_crypto_asm::p256;
+use mcu_crypto_asm::{p256, p384};
 
 // Public key from a private scalar (SEC1 uncompressed: 0x04 || x || y)
 let mut pk = [0u8; 65];
 p256::derive_public_key(&secret /* 32 bytes, big-endian */, &mut pk)?;
 
-// ECDH - rejects peer points that are not on the curve
+// Point decompression (SEC1 compressed: 0x02/0x03 || x)
+let mut decompressed_pk = [0u8; 65];
+p256::decompress_point(&compressed_pk, &mut decompressed_pk)?;
+
+// ECDH - validates peer points on-curve (uncompressed or compressed)
 let mut shared = [0u8; 32];
 mcu_crypto_asm::ecdh::shared_secret::<{ p256::N }>(
     &p256::CURVE, &secret, &peer_pk, &mut shared,
 )?;
+
+// ECDSA - constant-time sign and fast projective verify
+let mut r = [0u8; 32];
+let mut s = [0u8; 32];
+p256::ecdsa::sign(&secret, &msg_hash, &nonce, &mut r, &mut s)?;
+p256::ecdsa::verify(&pk, &msg_hash, &r, &s)?;
 ```
 
-On an embassy executor use the yielding form, so a 31 ms operation does not
-stall every other task - see [Not blocking the executor](#not-blocking-the-executor).
+On an embassy executor use the yielding forms (`derive_public_key_yielding`,
+`shared_secret_yielding`, `sign_yielding`, `verify_yielding`), so long operations
+do not stall every other task - see [Not blocking the executor](#not-blocking-the-executor).
 
 ---
 
@@ -45,9 +56,8 @@ stall every other task - see [Not blocking the executor](#not-blocking-the-execu
 
 | primitive | status |
 |---|---|
-| P-256 field arithmetic, point ops, ECDH | ✅ done, hardware-validated |
-| P-384 field arithmetic, point ops, ECDH | ✅ done, hardware-validated |
-| ECDSA (both curves) | planned |
+| P-256 field arithmetic, point ops, ECDH, ECDSA | ✅ done, hardware-validated |
+| P-384 field arithmetic, point ops, ECDH, ECDSA | ✅ done, hardware-validated |
 | further primitives (hashing, symmetric, X25519) | not started |
 
 Each primitive lives in its own module and, once there is more than one, its
@@ -96,8 +106,8 @@ Reproduce with `harness/src/bin/bench.rs`.
 
 | operation | fiat-crypto | mcu-crypto-asm | Emill | verdict |
 |---|---|---|---|---|
-| P-256 | 2248 | **998** | **418** | Emill wins, 2.38x |
-| P-384 | 3858 | **1951** | n/a | **we win, 1.97x** |
+| P-256 | 2250 | **830** | **392** | Emill wins, 2.11x |
+| P-384 | 3858 | **1474** | n/a | **we win, 2.61x** |
 
 **ESP32-S3 (Xtensa LX7)**
 
@@ -121,12 +131,16 @@ code falls apart. Explicit `SALTU` carry handling is what recovers it.
 
 | operation | cycles | time |
 |---|---|---|
-| `k*G` (fixed-base comb) P-256 | 1 675 431 | **26 ms** |
-| `k*G` (fixed-base comb) P-384 | 4 690 419 | **73 ms** |
-| `derive_public_key` P-256 | 1 986 800 | **31 ms** |
-| `derive_public_key` P-384 | 5 642 494 | **88 ms** |
-| `k*P` (variable base, ECDH) P-256 | 6 513 216 | 101 ms |
-| `k*P` (variable base, ECDH) P-384 | 18 308 596 | 286 ms |
+| `k*G` (fixed-base comb) P-256 | 1 530 713 | **23 ms** |
+| `k*G` (fixed-base comb) P-384 | 3 976 781 | **62 ms** |
+| `derive_public_key` P-256 | 1 807 503 | **28 ms** |
+| `derive_public_key` P-384 | 4 574 168 | **71 ms** |
+| `ECDSA sign` P-256 | 3 035 547 | **47 ms** |
+| `ECDSA sign` P-384 | 7 725 068 | **120 ms** |
+| `ECDSA verify` P-256 | 8 961 720 | **140 ms** |
+| `ECDSA verify` P-384 | 23 092 304 | **360 ms** |
+| `k*P` (variable base, ECDH) P-256 | 5 909 009 | 92 ms |
+| `k*P` (variable base, ECDH) P-384 | 15 351 020 | 239 ms |
 
 `k*G` started at 150 ms (P-256) / 433 ms (P-384). What got it here:
 
@@ -396,16 +410,13 @@ identical conditions; absolute cycles from flash will differ.
 
 ## Not done yet
 
-- **ECDSA.** ECDH is complete; signing and verification are not implemented.
-- **Dedicated squaring and doubling.** `sqr` routes through `mul_mont`; the comb
-  uses the general addition for doubling. Together worth maybe 10-15%.
-- **Assembly `add_mod`/`sub_mod`.** Still portable Rust at 208/176 cycles
-  against 998 for a full multiply - the largest single remaining item, ~10%.
 - **Closing the gap to Emill on P-256/Cortex-M4** is a rewrite, not a tweak: a
   full 256x256 Comba product held in registers plus FPU, with a P-256-specific
   Solinas reduction. P-256-only, and it would not help P-384.
 - **Cortex-M0+ and RV32IM backends.** Both are genuinely empty niches (RP2040
   especially) and fully emulatable.
+- **Further cryptographic primitives.** SHA-256/SHA-384, ChaCha20/Poly1305,
+  and X25519.
 
 ---
 

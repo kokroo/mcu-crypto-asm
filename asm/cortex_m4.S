@@ -405,6 +405,400 @@ nistp_mul_mont_8:
 	pop	{r4-r11, pc}
 	.size	nistp_mul_mont_8, .-nistp_mul_mont_8
 
+@ void nistp_sqr_mont_8(uint32_t out[8], const uint32_t a[8], const uint32_t p[8]);
+@ out = a^2 * R^-1 mod p,  R = 2^256.  FIOS squaring with VFP registers.
+	.globl	nistp_sqr_mont_8
+	.p2align 2
+	.thumb_func
+	.type	nistp_sqr_mont_8, %function
+nistp_sqr_mont_8:
+	push	{r4-r11, lr}
+	sub	sp, sp, #4
+	vpush	{d8}
+	vmov	s17, r0		@ park `out` in VFP
+	vldm	r1, {s0-s7}	@ load operand `a` once
+	mov	r11, #0			@ permanent zero
+	mov	r12, #1
+	mvn	lr, #0			@ 0xffffffff
+	@ ---- i = 0 ----
+	vmov	r5, s0		@ a[0]
+	vmov	r8, s0
+	mov	r6, #0			@ C1 = 0
+	mov	r7, #0
+	umaal	r7, r6, r8, r5		@ S = a[0]*b[0]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	vmov	r8, s1
+	mov	r7, #0
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, lr
+	vmov	s8, r7		@ t[0] = S
+	vmov	r8, r10, s2, s3
+	mov	r7, #0
+	mov	r3, #0
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, r11
+	vmov	s9, s10, r7, r3
+	vmov	r8, r10, s4, s5
+	mov	r7, #0
+	mov	r3, #0
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, r11
+	vmov	s11, s12, r7, r3
+	vmov	r8, r10, s6, s7
+	mov	r7, #0
+	mov	r3, #0
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	vmov	s13, s14, r7, r3
+	adds	r7, r6, r0
+	adc.w	r8, r11, r11
+	vmov	s15, s16, r7, r8
+	@ ---- i = 1 ----
+	vmov	r5, s1		@ a[1]
+	vmov	r8, s0
+	vmov	r7, s8
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	vmov	r8, s1
+	vmov	r7, s9
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, lr
+	vmov	s8, r7		@ t[0] = S
+	vmov	r8, r10, s2, s3
+	vmov	r7, r3, s10, s11
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, r11
+	vmov	s9, s10, r7, r3
+	vmov	r8, r10, s4, s5
+	vmov	r7, r3, s12, s13
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, r11
+	vmov	s11, s12, r7, r3
+	vmov	r8, r10, s6, s7
+	vmov	r7, r3, s14, s15
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	vmov	s13, s14, r7, r3
+	vmov	r7, s16
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	add	r8, r8, r10
+	vmov	s15, s16, r7, r8
+	@ ---- i = 2 ----
+	vmov	r5, s2		@ a[2]
+	vmov	r8, s0
+	vmov	r7, s8
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	vmov	r8, s1
+	vmov	r7, s9
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, lr
+	vmov	s8, r7		@ t[0] = S
+	vmov	r8, r10, s2, s3
+	vmov	r7, r3, s10, s11
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, r11
+	vmov	s9, s10, r7, r3
+	vmov	r8, r10, s4, s5
+	vmov	r7, r3, s12, s13
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, r11
+	vmov	s11, s12, r7, r3
+	vmov	r8, r10, s6, s7
+	vmov	r7, r3, s14, s15
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	vmov	s13, s14, r7, r3
+	vmov	r7, s16
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	add	r8, r8, r10
+	vmov	s15, s16, r7, r8
+	@ ---- i = 3 ----
+	vmov	r5, s3		@ a[3]
+	vmov	r8, s0
+	vmov	r7, s8
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	vmov	r8, s1
+	vmov	r7, s9
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, lr
+	vmov	s8, r7		@ t[0] = S
+	vmov	r8, r10, s2, s3
+	vmov	r7, r3, s10, s11
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, r11
+	vmov	s9, s10, r7, r3
+	vmov	r8, r10, s4, s5
+	vmov	r7, r3, s12, s13
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, r11
+	vmov	s11, s12, r7, r3
+	vmov	r8, r10, s6, s7
+	vmov	r7, r3, s14, s15
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	vmov	s13, s14, r7, r3
+	vmov	r7, s16
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	add	r8, r8, r10
+	vmov	s15, s16, r7, r8
+	@ ---- i = 4 ----
+	vmov	r5, s4		@ a[4]
+	vmov	r8, s0
+	vmov	r7, s8
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	vmov	r8, s1
+	vmov	r7, s9
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, lr
+	vmov	s8, r7		@ t[0] = S
+	vmov	r8, r10, s2, s3
+	vmov	r7, r3, s10, s11
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, r11
+	vmov	s9, s10, r7, r3
+	vmov	r8, r10, s4, s5
+	vmov	r7, r3, s12, s13
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, r11
+	vmov	s11, s12, r7, r3
+	vmov	r8, r10, s6, s7
+	vmov	r7, r3, s14, s15
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	vmov	s13, s14, r7, r3
+	vmov	r7, s16
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	add	r8, r8, r10
+	vmov	s15, s16, r7, r8
+	@ ---- i = 5 ----
+	vmov	r5, s5		@ a[5]
+	vmov	r8, s0
+	vmov	r7, s8
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	vmov	r8, s1
+	vmov	r7, s9
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, lr
+	vmov	s8, r7		@ t[0] = S
+	vmov	r8, r10, s2, s3
+	vmov	r7, r3, s10, s11
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, r11
+	vmov	s9, s10, r7, r3
+	vmov	r8, r10, s4, s5
+	vmov	r7, r3, s12, s13
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, r11
+	vmov	s11, s12, r7, r3
+	vmov	r8, r10, s6, s7
+	vmov	r7, r3, s14, s15
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	vmov	s13, s14, r7, r3
+	vmov	r7, s16
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	add	r8, r8, r10
+	vmov	s15, s16, r7, r8
+	@ ---- i = 6 ----
+	vmov	r5, s6		@ a[6]
+	vmov	r8, s0
+	vmov	r7, s8
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	vmov	r8, s1
+	vmov	r7, s9
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, lr
+	vmov	s8, r7		@ t[0] = S
+	vmov	r8, r10, s2, s3
+	vmov	r7, r3, s10, s11
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, r11
+	vmov	s9, s10, r7, r3
+	vmov	r8, r10, s4, s5
+	vmov	r7, r3, s12, s13
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, r11
+	vmov	s11, s12, r7, r3
+	vmov	r8, r10, s6, s7
+	vmov	r7, r3, s14, s15
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	vmov	s13, s14, r7, r3
+	vmov	r7, s16
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	add	r8, r8, r10
+	vmov	s15, s16, r7, r8
+	@ ---- i = 7 ----
+	vmov	r5, s7		@ a[7]
+	vmov	r8, s0
+	vmov	r7, s8
+	mov	r6, #0			@ C1 = 0
+	umaal	r7, r6, r8, r5		@ S = t[0] + a[0]*b[i]
+	mov	r9, r7			@ m = S   (n0' == 1)
+	mov	r0, #0			@ C2 = 0
+	umaal	r7, r0, r9, lr		@ low word cancels
+	vmov	r8, s1
+	vmov	r7, s9
+	umaal	r7, r6, r8, r5
+	umaal	r7, r0, r9, lr
+	vmov	s8, r7		@ t[0] = S
+	vmov	r8, r10, s2, s3
+	vmov	r7, r3, s10, s11
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, lr
+	umaal	r3, r0, r9, r11
+	vmov	s9, s10, r7, r3
+	vmov	r8, r10, s4, s5
+	vmov	r7, r3, s12, s13
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r11
+	umaal	r3, r0, r9, r11
+	vmov	s11, s12, r7, r3
+	vmov	r8, r10, s6, s7
+	vmov	r7, r3, s14, s15
+	umaal	r7, r6, r8, r5
+	umaal	r3, r6, r10, r5
+	umaal	r7, r0, r9, r12
+	umaal	r3, r0, r9, lr
+	vmov	s13, s14, r7, r3
+	vmov	r7, s16
+	adds	r7, r7, r6
+	adc.w	r8, r11, r11
+	adds	r7, r7, r0
+	adc.w	r10, r11, r11
+	add	r8, r8, r10
+	vmov	s15, s16, r7, r8
+	vmov	r0, s17		@ recover `out`
+	vmov	r7, s8
+	subs	r7, r7, lr
+	vmov	r7, s9
+	sbcs	r7, r7, lr
+	vmov	r7, s10
+	sbcs	r7, r7, lr
+	vmov	r7, s11
+	sbcs	r7, r7, r11
+	vmov	r7, s12
+	sbcs	r7, r7, r11
+	vmov	r7, s13
+	sbcs	r7, r7, r11
+	vmov	r7, s14
+	sbcs	r7, r7, r12
+	vmov	r7, s15
+	sbcs	r7, r7, lr
+	vmov	r7, s16
+	sbcs	r7, r7, r11
+	sbc	r10, r10, r10		@ -1 if borrow, 0 if no borrow
+	mvn	r10, r10		@ 0 if borrow, all-ones if no borrow
+	and	r12, r12, r10
+	and	lr, lr, r10
+	vmov	r7, r8, s8, s9
+	subs	r7, r7, lr
+	sbcs	r8, r8, lr
+	strd	r7, r8, [r0, #0]
+	vmov	r7, r8, s10, s11
+	sbcs	r7, r7, lr
+	sbcs	r8, r8, r11
+	strd	r7, r8, [r0, #8]
+	vmov	r7, r8, s12, s13
+	sbcs	r7, r7, r11
+	sbcs	r8, r8, r11
+	strd	r7, r8, [r0, #16]
+	vmov	r7, r8, s14, s15
+	sbcs	r7, r7, r12
+	sbcs	r8, r8, lr
+	strd	r7, r8, [r0, #24]
+	vpop	{d8}
+	add	sp, sp, #4
+	pop	{r4-r11, pc}
+	.size	nistp_sqr_mont_8, .-nistp_sqr_mont_8
+
 @ void nistp_add_mod_8(uint32_t out[8], const uint32_t a[8],
 @                const uint32_t b[8], const uint32_t p[8]);
 @ out = a + b mod p.
@@ -1220,6 +1614,698 @@ nistp_mul_mont_12:
 	add	sp, sp, #4
 	pop	{r4-r11, pc}
 	.size	nistp_mul_mont_12, .-nistp_mul_mont_12
+
+@ void nistp_sqr_mont_12(uint32_t out[12], const uint32_t a[12], const uint32_t p[12]);
+@ Circular-buffer Montgomery squaring for NIST P-384 on Cortex-M4.
+	.globl	nistp_sqr_mont_12
+	.p2align 2
+	.thumb_func
+	.type	nistp_sqr_mont_12, %function
+nistp_sqr_mont_12:
+	push	{r4-r11, lr}
+	sub	sp, sp, #4			@ align sp to 8 bytes for vpush
+	vpush	{d8-d11}
+	sub	sp, sp, #56			@ 48 bytes for m[0..11], 4 for `out`, 4 pad
+	str	r0, [sp, #48]			@ park `out` on stack
+	vldm	r1, {d0-d5}			@ load all 12 words of `a` into s0..s11
+	mov	r11, #0				@ permanent zero
+	mov	r4, #0				@ initial carry = 0
+	vmov	s12, s13, r11, r11
+	vmov	s14, s15, r11, r11
+	vmov	s16, s17, r11, r11
+	vmov	s18, s19, r11, r11
+	vmov	s20, s21, r11, r11
+	vmov	s22, s23, r11, r11
+	mov	r0, #0				@ m window init
+	mov	r1, #0
+	mov	r3, #0
+	mov	r12, #0
+	@ ==================== OUTER LOOP i = 0 ====================
+	vmov	r5, s0		@ a[0]
+	vmov	r8, r10, s0, s1
+	vmov	r7, lr, s12, s13
+	mov	r6, #0				@ mul carry = 0
+	umaal	r7, r6, r8, r5			@ t0 = T_circ[0] + a[0]*b[0]
+	umaal	lr, r6, r10, r5			@ t1 = T_circ[1] + a[1]*b[0]
+	vmov	s13, lr
+	mov	r8, #0
+	subs	r7, r7, r4
+	sbc	r8, r8, r4, asr #31
+	subs	r4, r11, r8			@ new carry = -r8
+	str	r7, [sp, #0]		@ store m[0] for final reduction
+	mov	r0, r7			@ save m[0] into r0
+	vmov	r8, r10, s2, s3
+	vmov	r7, lr, s14, s15
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s14, s15, r7, lr
+	vmov	r8, r10, s4, s5
+	vmov	r7, lr, s16, s17
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s16, s17, r7, lr
+	vmov	r8, r10, s6, s7
+	vmov	r7, lr, s18, s19
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s18, s19, r7, lr
+	vmov	r8, r10, s8, s9
+	vmov	r7, lr, s20, s21
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s20, s21, r7, lr
+	vmov	r8, r10, s10, s11
+	vmov	r7, lr, s22, s23
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s22, s23, r7, lr
+	vmov	s12, r6
+	@ ==================== OUTER LOOP i = 1 ====================
+	vmov	r5, s1		@ a[1]
+	vmov	r8, r10, s0, s1
+	vmov	r7, lr, s13, s14
+	mov	r6, #0				@ mul carry = 0
+	umaal	r7, r6, r8, r5			@ t0 = T_circ[1] + a[0]*b[1]
+	umaal	lr, r6, r10, r5			@ t1 = T_circ[2] + a[1]*b[1]
+	vmov	s14, lr
+	adds	r7, r7, r0			@ + m[0]
+	adc.w	r8, r11, r11
+	subs	r7, r7, r4
+	sbc	r8, r8, r4, asr #31
+	subs	r4, r11, r8			@ new carry = -r8
+	str	r7, [sp, #4]		@ store m[1] for final reduction
+	mov	r1, r7			@ save m[1] into r1
+	vmov	r8, r10, s2, s3
+	vmov	r7, lr, s15, s16
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s15, s16, r7, lr
+	vmov	r8, r10, s4, s5
+	vmov	r7, lr, s17, s18
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s17, s18, r7, lr
+	vmov	r8, r10, s6, s7
+	vmov	r7, lr, s19, s20
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s19, s20, r7, lr
+	vmov	r8, r10, s8, s9
+	vmov	r7, lr, s21, s22
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s21, s22, r7, lr
+	vmov	r8, r10, s10, s11
+	vmov	r7, s23
+	vmov	lr, s12
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s23, r7
+	vmov	s12, lr
+	vmov	s13, r6
+	@ ==================== OUTER LOOP i = 2 ====================
+	vmov	r5, s2		@ a[2]
+	vmov	r8, r10, s0, s1
+	vmov	r7, lr, s14, s15
+	mov	r6, #0				@ mul carry = 0
+	umaal	r7, r6, r8, r5			@ t0 = T_circ[2] + a[0]*b[2]
+	umaal	lr, r6, r10, r5			@ t1 = T_circ[3] + a[1]*b[2]
+	vmov	s15, lr
+	adds	r7, r7, r1			@ + m[1]
+	adc.w	r8, r11, r11
+	subs	r7, r7, r4
+	sbc	r8, r8, r4, asr #31
+	subs	r4, r11, r8			@ new carry = -r8
+	str	r7, [sp, #8]		@ store m[2] for final reduction
+	mov	r3, r7			@ save m[2] into r3
+	vmov	r8, r10, s2, s3
+	vmov	r7, lr, s16, s17
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s16, s17, r7, lr
+	vmov	r8, r10, s4, s5
+	vmov	r7, lr, s18, s19
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s18, s19, r7, lr
+	vmov	r8, r10, s6, s7
+	vmov	r7, lr, s20, s21
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s20, s21, r7, lr
+	vmov	r8, r10, s8, s9
+	vmov	r7, lr, s22, s23
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s22, s23, r7, lr
+	vmov	r8, r10, s10, s11
+	vmov	r7, lr, s12, s13
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s12, s13, r7, lr
+	vmov	s14, r6
+	@ ==================== OUTER LOOP i = 3 ====================
+	vmov	r5, s3		@ a[3]
+	vmov	r8, r10, s0, s1
+	vmov	r7, lr, s15, s16
+	mov	r6, #0				@ mul carry = 0
+	umaal	r7, r6, r8, r5			@ t0 = T_circ[3] + a[0]*b[3]
+	umaal	lr, r6, r10, r5			@ t1 = T_circ[4] + a[1]*b[3]
+	vmov	s16, lr
+	adds	r7, r7, r3			@ + m[2]
+	adc.w	r8, r11, r11
+	subs	r7, r7, r0			@ - m[0]
+	sbc	r8, r8, r11
+	subs	r7, r7, r4
+	sbc	r8, r8, r4, asr #31
+	subs	r4, r11, r8			@ new carry = -r8
+	str	r7, [sp, #12]		@ store m[3] for final reduction
+	mov	r12, r7			@ save m[3] into r12
+	vmov	r8, r10, s2, s3
+	vmov	r7, lr, s17, s18
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s17, s18, r7, lr
+	vmov	r8, r10, s4, s5
+	vmov	r7, lr, s19, s20
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s19, s20, r7, lr
+	vmov	r8, r10, s6, s7
+	vmov	r7, lr, s21, s22
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s21, s22, r7, lr
+	vmov	r8, r10, s8, s9
+	vmov	r7, s23
+	vmov	lr, s12
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s23, r7
+	vmov	s12, lr
+	vmov	r8, r10, s10, s11
+	vmov	r7, lr, s13, s14
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s13, s14, r7, lr
+	vmov	s15, r6
+	@ ==================== OUTER LOOP i = 4 ====================
+	vmov	r5, s4		@ a[4]
+	vmov	r8, r10, s0, s1
+	vmov	r7, lr, s16, s17
+	mov	r6, #0				@ mul carry = 0
+	umaal	r7, r6, r8, r5			@ t0 = T_circ[4] + a[0]*b[4]
+	umaal	lr, r6, r10, r5			@ t1 = T_circ[5] + a[1]*b[4]
+	vmov	s17, lr
+	adds	r7, r7, r12			@ + m[3]
+	adc.w	r8, r11, r11
+	subs	r7, r7, r1			@ - m[1]
+	sbc	r8, r8, r11
+	subs	r7, r7, r0			@ - m[0]
+	sbc	r8, r8, r11
+	subs	r7, r7, r4
+	sbc	r8, r8, r4, asr #31
+	subs	r4, r11, r8			@ new carry = -r8
+	str	r7, [sp, #16]		@ store m[4] for final reduction
+	mov	r0, r7			@ save m[4] into r0
+	vmov	r8, r10, s2, s3
+	vmov	r7, lr, s18, s19
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s18, s19, r7, lr
+	vmov	r8, r10, s4, s5
+	vmov	r7, lr, s20, s21
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s20, s21, r7, lr
+	vmov	r8, r10, s6, s7
+	vmov	r7, lr, s22, s23
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s22, s23, r7, lr
+	vmov	r8, r10, s8, s9
+	vmov	r7, lr, s12, s13
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s12, s13, r7, lr
+	vmov	r8, r10, s10, s11
+	vmov	r7, lr, s14, s15
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s14, s15, r7, lr
+	vmov	s16, r6
+	@ ==================== OUTER LOOP i = 5 ====================
+	vmov	r5, s5		@ a[5]
+	vmov	r8, r10, s0, s1
+	vmov	r7, lr, s17, s18
+	mov	r6, #0				@ mul carry = 0
+	umaal	r7, r6, r8, r5			@ t0 = T_circ[5] + a[0]*b[5]
+	umaal	lr, r6, r10, r5			@ t1 = T_circ[6] + a[1]*b[5]
+	vmov	s18, lr
+	adds	r7, r7, r0			@ + m[4]
+	adc.w	r8, r11, r11
+	subs	r7, r7, r3			@ - m[2]
+	sbc	r8, r8, r11
+	subs	r7, r7, r1			@ - m[1]
+	sbc	r8, r8, r11
+	subs	r7, r7, r4
+	sbc	r8, r8, r4, asr #31
+	subs	r4, r11, r8			@ new carry = -r8
+	str	r7, [sp, #20]		@ store m[5] for final reduction
+	mov	r1, r7			@ save m[5] into r1
+	vmov	r8, r10, s2, s3
+	vmov	r7, lr, s19, s20
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s19, s20, r7, lr
+	vmov	r8, r10, s4, s5
+	vmov	r7, lr, s21, s22
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s21, s22, r7, lr
+	vmov	r8, r10, s6, s7
+	vmov	r7, s23
+	vmov	lr, s12
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s23, r7
+	vmov	s12, lr
+	vmov	r8, r10, s8, s9
+	vmov	r7, lr, s13, s14
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s13, s14, r7, lr
+	vmov	r8, r10, s10, s11
+	vmov	r7, lr, s15, s16
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s15, s16, r7, lr
+	vmov	s17, r6
+	@ ==================== OUTER LOOP i = 6 ====================
+	vmov	r5, s6		@ a[6]
+	vmov	r8, r10, s0, s1
+	vmov	r7, lr, s18, s19
+	mov	r6, #0				@ mul carry = 0
+	umaal	r7, r6, r8, r5			@ t0 = T_circ[6] + a[0]*b[6]
+	umaal	lr, r6, r10, r5			@ t1 = T_circ[7] + a[1]*b[6]
+	vmov	s19, lr
+	adds	r7, r7, r1			@ + m[5]
+	adc.w	r8, r11, r11
+	subs	r7, r7, r12			@ - m[3]
+	sbc	r8, r8, r11
+	subs	r7, r7, r3			@ - m[2]
+	sbc	r8, r8, r11
+	subs	r7, r7, r4
+	sbc	r8, r8, r4, asr #31
+	subs	r4, r11, r8			@ new carry = -r8
+	str	r7, [sp, #24]		@ store m[6] for final reduction
+	mov	r3, r7			@ save m[6] into r3
+	vmov	r8, r10, s2, s3
+	vmov	r7, lr, s20, s21
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s20, s21, r7, lr
+	vmov	r8, r10, s4, s5
+	vmov	r7, lr, s22, s23
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s22, s23, r7, lr
+	vmov	r8, r10, s6, s7
+	vmov	r7, lr, s12, s13
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s12, s13, r7, lr
+	vmov	r8, r10, s8, s9
+	vmov	r7, lr, s14, s15
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s14, s15, r7, lr
+	vmov	r8, r10, s10, s11
+	vmov	r7, lr, s16, s17
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s16, s17, r7, lr
+	vmov	s18, r6
+	@ ==================== OUTER LOOP i = 7 ====================
+	vmov	r5, s7		@ a[7]
+	vmov	r8, r10, s0, s1
+	vmov	r7, lr, s19, s20
+	mov	r6, #0				@ mul carry = 0
+	umaal	r7, r6, r8, r5			@ t0 = T_circ[7] + a[0]*b[7]
+	umaal	lr, r6, r10, r5			@ t1 = T_circ[8] + a[1]*b[7]
+	vmov	s20, lr
+	adds	r7, r7, r3			@ + m[6]
+	adc.w	r8, r11, r11
+	subs	r7, r7, r0			@ - m[4]
+	sbc	r8, r8, r11
+	subs	r7, r7, r12			@ - m[3]
+	sbc	r8, r8, r11
+	subs	r7, r7, r4
+	sbc	r8, r8, r4, asr #31
+	subs	r4, r11, r8			@ new carry = -r8
+	str	r7, [sp, #28]		@ store m[7] for final reduction
+	mov	r12, r7			@ save m[7] into r12
+	vmov	r8, r10, s2, s3
+	vmov	r7, lr, s21, s22
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s21, s22, r7, lr
+	vmov	r8, r10, s4, s5
+	vmov	r7, s23
+	vmov	lr, s12
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s23, r7
+	vmov	s12, lr
+	vmov	r8, r10, s6, s7
+	vmov	r7, lr, s13, s14
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s13, s14, r7, lr
+	vmov	r8, r10, s8, s9
+	vmov	r7, lr, s15, s16
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s15, s16, r7, lr
+	vmov	r8, r10, s10, s11
+	vmov	r7, lr, s17, s18
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s17, s18, r7, lr
+	vmov	s19, r6
+	@ ==================== OUTER LOOP i = 8 ====================
+	vmov	r5, s8		@ a[8]
+	vmov	r8, r10, s0, s1
+	vmov	r7, lr, s20, s21
+	mov	r6, #0				@ mul carry = 0
+	umaal	r7, r6, r8, r5			@ t0 = T_circ[8] + a[0]*b[8]
+	umaal	lr, r6, r10, r5			@ t1 = T_circ[9] + a[1]*b[8]
+	vmov	s21, lr
+	adds	r7, r7, r12			@ + m[7]
+	adc.w	r8, r11, r11
+	subs	r7, r7, r1			@ - m[5]
+	sbc	r8, r8, r11
+	subs	r7, r7, r0			@ - m[4]
+	sbc	r8, r8, r11
+	subs	r7, r7, r4
+	sbc	r8, r8, r4, asr #31
+	subs	r4, r11, r8			@ new carry = -r8
+	str	r7, [sp, #32]		@ store m[8] for final reduction
+	mov	r0, r7			@ save m[8] into r0
+	vmov	r8, r10, s2, s3
+	vmov	r7, lr, s22, s23
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s22, s23, r7, lr
+	vmov	r8, r10, s4, s5
+	vmov	r7, lr, s12, s13
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s12, s13, r7, lr
+	vmov	r8, r10, s6, s7
+	vmov	r7, lr, s14, s15
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s14, s15, r7, lr
+	vmov	r8, r10, s8, s9
+	vmov	r7, lr, s16, s17
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s16, s17, r7, lr
+	vmov	r8, r10, s10, s11
+	vmov	r7, lr, s18, s19
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s18, s19, r7, lr
+	vmov	s20, r6
+	@ ==================== OUTER LOOP i = 9 ====================
+	vmov	r5, s9		@ a[9]
+	vmov	r8, r10, s0, s1
+	vmov	r7, lr, s21, s22
+	mov	r6, #0				@ mul carry = 0
+	umaal	r7, r6, r8, r5			@ t0 = T_circ[9] + a[0]*b[9]
+	umaal	lr, r6, r10, r5			@ t1 = T_circ[10] + a[1]*b[9]
+	vmov	s22, lr
+	adds	r7, r7, r0			@ + m[8]
+	adc.w	r8, r11, r11
+	subs	r7, r7, r3			@ - m[6]
+	sbc	r8, r8, r11
+	subs	r7, r7, r1			@ - m[5]
+	sbc	r8, r8, r11
+	subs	r7, r7, r4
+	sbc	r8, r8, r4, asr #31
+	subs	r4, r11, r8			@ new carry = -r8
+	str	r7, [sp, #36]		@ store m[9] for final reduction
+	mov	r1, r7			@ save m[9] into r1
+	vmov	r8, r10, s2, s3
+	vmov	r7, s23
+	vmov	lr, s12
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s23, r7
+	vmov	s12, lr
+	vmov	r8, r10, s4, s5
+	vmov	r7, lr, s13, s14
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s13, s14, r7, lr
+	vmov	r8, r10, s6, s7
+	vmov	r7, lr, s15, s16
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s15, s16, r7, lr
+	vmov	r8, r10, s8, s9
+	vmov	r7, lr, s17, s18
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s17, s18, r7, lr
+	vmov	r8, r10, s10, s11
+	vmov	r7, lr, s19, s20
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s19, s20, r7, lr
+	vmov	s21, r6
+	@ ==================== OUTER LOOP i = 10 ====================
+	vmov	r5, s10		@ a[10]
+	vmov	r8, r10, s0, s1
+	vmov	r7, lr, s22, s23
+	mov	r6, #0				@ mul carry = 0
+	umaal	r7, r6, r8, r5			@ t0 = T_circ[10] + a[0]*b[10]
+	umaal	lr, r6, r10, r5			@ t1 = T_circ[11] + a[1]*b[10]
+	vmov	s23, lr
+	adds	r7, r7, r1			@ + m[9]
+	adc.w	r8, r11, r11
+	subs	r7, r7, r12			@ - m[7]
+	sbc	r8, r8, r11
+	subs	r7, r7, r3			@ - m[6]
+	sbc	r8, r8, r11
+	subs	r7, r7, r4
+	sbc	r8, r8, r4, asr #31
+	subs	r4, r11, r8			@ new carry = -r8
+	str	r7, [sp, #40]		@ store m[10] for final reduction
+	mov	r3, r7			@ save m[10] into r3
+	vmov	r8, r10, s2, s3
+	vmov	r7, lr, s12, s13
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s12, s13, r7, lr
+	vmov	r8, r10, s4, s5
+	vmov	r7, lr, s14, s15
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s14, s15, r7, lr
+	vmov	r8, r10, s6, s7
+	vmov	r7, lr, s16, s17
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s16, s17, r7, lr
+	vmov	r8, r10, s8, s9
+	vmov	r7, lr, s18, s19
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s18, s19, r7, lr
+	vmov	r8, r10, s10, s11
+	vmov	r7, lr, s20, s21
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s20, s21, r7, lr
+	vmov	s22, r6
+	@ ==================== OUTER LOOP i = 11 ====================
+	vmov	r5, s11		@ a[11]
+	vmov	r8, r10, s0, s1
+	vmov	r7, s23
+	vmov	lr, s12
+	mov	r6, #0				@ mul carry = 0
+	umaal	r7, r6, r8, r5			@ t0 = T_circ[11] + a[0]*b[11]
+	umaal	lr, r6, r10, r5			@ t1 = T_circ[0] + a[1]*b[11]
+	vmov	s12, lr
+	adds	r7, r7, r3			@ + m[10]
+	adc.w	r8, r11, r11
+	subs	r7, r7, r0			@ - m[8]
+	sbc	r8, r8, r11
+	subs	r7, r7, r12			@ - m[7]
+	sbc	r8, r8, r11
+	subs	r7, r7, r4
+	sbc	r8, r8, r4, asr #31
+	subs	r4, r11, r8			@ new carry = -r8
+	str	r7, [sp, #44]		@ store m[11] for final reduction
+	mov	r12, r7			@ save m[11] into r12
+	vmov	r8, r10, s2, s3
+	vmov	r7, lr, s13, s14
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s13, s14, r7, lr
+	vmov	r8, r10, s4, s5
+	vmov	r7, lr, s15, s16
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s15, s16, r7, lr
+	vmov	r8, r10, s6, s7
+	vmov	r7, lr, s17, s18
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s17, s18, r7, lr
+	vmov	r8, r10, s8, s9
+	vmov	r7, lr, s19, s20
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s19, s20, r7, lr
+	vmov	r8, r10, s10, s11
+	vmov	r7, lr, s21, s22
+	umaal	r7, r6, r8, r5
+	umaal	lr, r6, r10, r5
+	vmov	s21, s22, r7, lr
+	vmov	s23, r6
+
+	@ ==================== FINAL REDUCTION ====================
+	adds	r8, r0, r1			@ m8 + m9
+	adc.w	r2, r11, r11			@ r2 = carry out
+	adds	r8, r8, r4			@ + carry
+	adcs	r2, r2, r4, asr #31
+	subs	r8, r8, r12			@ - m11 -> r8 is d0
+	sbc	r2, r2, r11			@ r2 = c0
+	adds	r9, r1, r3			@ m9 + m10
+	adc.w	r5, r11, r11
+	adds	r9, r9, r2			@ + c0 -> r9 is d1
+	adcs	r5, r5, r2, asr #31		@ r5 = c1
+	adds	r10, r3, r12			@ m10 + m11
+	adc.w	r2, r11, r11
+	adds	r10, r10, r5			@ + c1 -> r10 is d2
+	adcs	r2, r2, r5, asr #31		@ r2 = c2
+	adds	lr, r12, r2			@ lr is d3
+	adc.w	r4, r11, r11
+	add	r4, r4, r2, asr #31		@ r4 is d4
+	vmov	r6, r7, s12, s13	@ Thi[0], Thi[1]
+	ldrd	r0, r1, [sp, #0]		@ m[0], m[1]
+	adds	r6, r6, r0
+	adcs	r7, r7, r1
+	vmov	s12, s13, r6, r7
+	vmov	r6, r7, s14, s15	@ Thi[2], Thi[3]
+	ldrd	r0, r1, [sp, #8]		@ m[2], m[3]
+	adcs	r6, r6, r0
+	adcs	r7, r7, r1
+	vmov	s14, s15, r6, r7
+	vmov	r6, r7, s16, s17	@ Thi[4], Thi[5]
+	ldrd	r0, r1, [sp, #16]		@ m[4], m[5]
+	adcs	r6, r6, r0
+	adcs	r7, r7, r1
+	vmov	s16, s17, r6, r7
+	vmov	r6, r7, s18, s19	@ Thi[6], Thi[7]
+	ldrd	r0, r1, [sp, #24]		@ m[6], m[7]
+	adcs	r6, r6, r0
+	adcs	r7, r7, r1
+	vmov	s18, s19, r6, r7
+	vmov	r6, r7, s20, s21	@ Thi[8], Thi[9]
+	ldrd	r0, r1, [sp, #32]		@ m[8], m[9]
+	adcs	r6, r6, r0
+	adcs	r7, r7, r1
+	vmov	s20, s21, r6, r7
+	vmov	r6, r7, s22, s23	@ Thi[10], Thi[11]
+	ldrd	r0, r1, [sp, #40]		@ m[10], m[11]
+	adcs	r6, r6, r0
+	adcs	r7, r7, r1
+	vmov	s22, s23, r6, r7
+	adc.w	r3, r11, r11			@ r3 = sum_carry
+	vmov	r6, r7, s12, s13
+	subs	r6, r6, r8			@ Sum[0] - d0
+	sbcs	r7, r7, r9			@ Sum[1] - d1
+	vmov	s12, s13, r6, r7
+	vmov	r6, r7, s14, s15
+	sbcs	r6, r6, r10			@ Sum[2] - d2
+	sbcs	r7, r7, lr			@ Sum[3] - d3
+	vmov	s14, s15, r6, r7
+	vmov	r6, r7, s16, s17
+	sbcs	r6, r6, r4			@ Sum[4] - d4
+	sbcs	r7, r7, r11			@ Sum[5] - 0
+	vmov	s16, s17, r6, r7
+	vmov	r6, r7, s18, s19
+	sbcs	r6, r6, r11
+	sbcs	r7, r7, r11
+	vmov	s18, s19, r6, r7
+	vmov	r6, r7, s20, s21
+	sbcs	r6, r6, r11
+	sbcs	r7, r7, r11
+	vmov	s20, s21, r6, r7
+	vmov	r6, r7, s22, s23
+	sbcs	r6, r6, r11
+	sbcs	r7, r7, r11
+	vmov	s22, s23, r6, r7
+	sbcs	r3, r3, r11			@ r3 = final_carry
+	mvn	lr, #0				@ 0xffffffff
+	mvn	r12, #1				@ 0xfffffffe
+	vmov	r6, r7, s12, s13
+	subs	r6, r6, lr
+	sbcs	r7, r7, r11
+	vmov	r8, r9, s14, s15
+	sbcs	r8, r8, r11
+	sbcs	r9, r9, lr
+	vmov	r8, r9, s16, s17
+	sbcs	r8, r8, r12
+	sbcs	r9, r9, lr
+	vmov	r8, r9, s18, s19
+	sbcs	r8, r8, lr
+	sbcs	r9, r9, lr
+	vmov	r8, r9, s20, s21
+	sbcs	r8, r8, lr
+	sbcs	r9, r9, lr
+	vmov	r8, r9, s22, s23
+	sbcs	r8, r8, lr
+	sbcs	r9, r9, lr
+	sbcs	r3, r3, r11
+	sbc	r10, r10, r10			@ -1 if Z < p, 0 if Z >= p
+	mvn	r10, r10			@ 0 if Z < p, all-ones if Z >= p
+	and	r12, r12, r10
+	and	lr, lr, r10
+	ldr	r0, [sp, #48]			@ recover `out`
+	vmov	r6, r7, s12, s13
+	subs	r6, r6, lr
+	sbcs	r7, r7, r11
+	strd	r6, r7, [r0, #0]
+	vmov	r6, r7, s14, s15
+	sbcs	r6, r6, r11
+	sbcs	r7, r7, lr
+	strd	r6, r7, [r0, #8]
+	vmov	r6, r7, s16, s17
+	sbcs	r6, r6, r12
+	sbcs	r7, r7, lr
+	strd	r6, r7, [r0, #16]
+	vmov	r6, r7, s18, s19
+	sbcs	r6, r6, lr
+	sbcs	r7, r7, lr
+	strd	r6, r7, [r0, #24]
+	vmov	r6, r7, s20, s21
+	sbcs	r6, r6, lr
+	sbcs	r7, r7, lr
+	strd	r6, r7, [r0, #32]
+	vmov	r6, r7, s22, s23
+	sbcs	r6, r6, lr
+	sbcs	r7, r7, lr
+	strd	r6, r7, [r0, #40]
+	add	sp, sp, #56
+	vpop	{d8-d11}
+	add	sp, sp, #4
+	pop	{r4-r11, pc}
+	.size	nistp_sqr_mont_12, .-nistp_sqr_mont_12
 
 @ void nistp_add_mod_12(uint32_t out[12], const uint32_t a[12],
 @                const uint32_t b[12], const uint32_t p[12]);

@@ -198,17 +198,13 @@ P256_sqrmod:
 // *r1 = in1, *r2 = in2
 // out: r0-r7
 // clobbers all other registers
-	.type P256_mulmod, %function
-P256_mulmod:
-	push {lr}
-	//frame push {lr}
-	
-	vmov s4,r2
+	.macro p256_mulmod_core is_shim=0
+	add r12,r2,#16
+	vmov s4,r12
 	vldm r1,{s8-s15}
 	
-	ldm r2,{r2,r3,r4,r5}
-	
 	vmov r0,r10,s8,s9
+	ldm r2,{r2,r3,r4,r5}
 	umull r6,r1,r2,r0
 	
 	umull r7,r12,r3,r0
@@ -220,11 +216,9 @@ P256_mulmod:
 	umaal r8,r1,r3,r10
 	
 	umull r9,r7,r5,r0
-	umaal r9,r1,r4,r10
-	
-	umaal r1,r7,r5,r10
-	
 	vmov lr,r0,s10,s11
+	umaal r9,r1,r4,r10
+	umaal r1,r7,r5,r10
 	
 	umaal r8,r12,r2,lr
 	umaal r9,r12,r3,lr
@@ -252,7 +246,7 @@ P256_mulmod:
 	umaal r7,r10,r4,lr
 	umaal r9,r10,r5,lr
 	
-	vmov r8,s14
+	vmov r8,r0,s14,s15
 	mov lr,#0
 	umaal lr,r6,r2,r8
 	umaal r7,r6,r3,r8
@@ -261,20 +255,17 @@ P256_mulmod:
 	
 	//_ _ _ _ _ 6 10 9| 7 | lr 12 1 _ _ _ _
 	
-	vmov r8,s15
 	mov r11,#0
-	umaal r7,r11,r2,r8
-	umaal r9,r11,r3,r8
-	umaal r10,r11,r4,r8
-	umaal r6,r11,r5,r8
+	umaal r7,r11,r2,r0
+	umaal r9,r11,r3,r0
+	umaal r10,r11,r4,r0
+	umaal r6,r11,r5,r0
 	
 	//_ _ _ _ 11 6 10 9| 7 | lr 12 1 _ _ _ _
 	
 	vmov r2,s4
-	adds r2,r2,#16
-	ldm r2,{r2,r3,r4,r5}
-	
 	vmov r8,s8
+	ldm r2,{r2,r3,r4,r5}
 	movs r0,#0
 	umaal r1,r0,r2,r8
 	vmov s4,r1
@@ -383,36 +374,32 @@ P256_mulmod:
 	vmov r3,s15
 
 	adds r0,lr,r12
-	adcs r1,r1,#0
-	mov r12,#0
-	adcs r12,r12,#0
+	mov lr,#0
 
 	//adds r7,r4 (added above instead)
-	adcs r8,r8,r5
+	adds r8,r8,r5
 	adcs r9,r9,r6
 	adcs r10,r10,r4
 	adcs r11,r11,r5
 	adcs r0,r0,r4
 	adcs r1,r1,r5
-	adcs r2,r2,r12
-	adcs r3,r3,#0
-	mov r12,#0
-	adcs r12,r12,#0
+	adcs r2,r2,lr
+	adcs r3,r3,lr
 
-	adcs r10,r10,r7
-	adcs r11,r11,#0
+	adds r10,r10,r7
+	adcs r11,r11,lr
 	adcs r0,r0,r6
 	adcs r1,r1,r7
 	adcs r2,r2,r6
 	adcs r3,r3,r7
-	adcs r12,r12,#0
+	adcs r12,lr,lr
 
 	subs r11,r4
 	sbcs r0,r0,r5
 	sbcs r1,r1,r6
 	sbcs r2,r2,r7
-	sbcs r3,r3,#0
-	sbcs r12,r12,#0
+	sbcs r3,r3,lr
+	sbcs r12,r12,lr
 	
 	// now (T + mN) / R is
 	// 8 9 10 11 0 1 2 3 12 (lsb -> msb)
@@ -420,22 +407,30 @@ P256_mulmod:
 	subs r8,r8,#0xffffffff
 	sbcs r9,r9,#0xffffffff
 	sbcs r10,r10,#0xffffffff
-	sbcs r11,r11,#0
-	sbcs r4,r0,#0
-	sbcs r5,r1,#0
+	sbcs r11,r11,lr
+	sbcs r4,r0,lr
+	sbcs r5,r1,lr
 	sbcs r6,r2,#1
 	sbcs r7,r3,#0xffffffff
-	sbc r12,r12,#0
+	sbc r12,r12,lr
 	
 	adds r0,r8,r12
 	adcs r1,r9,r12
 	adcs r2,r10,r12
-	adcs r3,r11,#0
-	adcs r4,r4,#0
-	adcs r5,r5,#0
+	adcs r3,r11,lr
+	adcs r4,r4,lr
+	adcs r5,r5,lr
+.if \is_shim
+	ldr lr,[sp]
+.endif
 	adcs r6,r6,r12, lsr #31
 	adcs r7,r7,r12
-	
+	.endm
+
+	.type P256_mulmod, %function
+P256_mulmod:
+	push {lr}
+	p256_mulmod_core 0
 	pop {pc}
 	.size P256_mulmod, .-P256_mulmod
 	

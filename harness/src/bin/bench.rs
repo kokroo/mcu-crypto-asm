@@ -20,9 +20,9 @@ use mcu_crypto_asm::{backend, p256, p384, Point, ScalarMul};
 
 use panic_semihosting as _;
 
-/// Emill's hand-optimised P-256 Montgomery multiply, wrapped in AAPCS by
-/// `third_party/emill/shim.S`. This is the reference implementation for P-256
-/// on Cortex-M4 — the thing to actually beat.
+// Emill's hand-optimised P-256 Montgomery multiply, wrapped in AAPCS by
+// `third_party/emill/shim.S`. This is the reference implementation for P-256
+// on Cortex-M4 — the thing to actually beat.
 #[cfg(emill)]
 extern "C" {
     fn emill_p256_mulmod(out: *mut u32, a: *const u32, b: *const u32);
@@ -246,7 +246,10 @@ fn main() -> ! {
         }
     }
 
-    hprintln!("field add/sub (portable Rust, no assembly):");
+    hprintln!("field add/sub/sqr:");
+    let _ = bench!("P-256 sqr_mont", ITERS, {
+        black_box(black_box(&a256).sqr(&p256::FIELD));
+    });
     let _ = bench!("P-256 add_mod", ITERS, {
         black_box(black_box(&a256).add(&p256::FIELD, black_box(&b256)));
     });
@@ -274,6 +277,15 @@ fn main() -> ! {
     let mut go = Fp384([0; 12]);
     let fiat384 = bench!("fiat-crypto p384_32", ITERS, {
         fiat_p384_mul(black_box(&mut go), black_box(&ga), black_box(&gb));
+    });
+    let _ = bench!("P-384 sqr_mont", ITERS, {
+        black_box(black_box(&a384).sqr(&p384::FIELD));
+    });
+    let _ = bench!("P-384 add_mod", ITERS, {
+        black_box(black_box(&a384).add(&p384::FIELD, black_box(&b384)));
+    });
+    let _ = bench!("P-384 sub_mod", ITERS, {
+        black_box(black_box(&a384).sub(&p384::FIELD, black_box(&b384)));
     });
 
     // --- scalar multiplication: what actually blocks an executor ---
@@ -339,6 +351,48 @@ fn main() -> ! {
     }
 
     hprintln!("");
+    hprintln!("ECDSA sign & verify:");
+    {
+        let d256 = [0x11u8; 32];
+        let mut pk256 = [0u8; 65];
+        p256::derive_public_key(&d256, &mut pk256).unwrap();
+        let msg = [0x42u8; 32];
+        let k = [0x77u8; 32];
+        let mut r = [0u8; 32];
+        let mut s = [0u8; 32];
+
+        let s0 = cyccnt();
+        p256::ecdsa::sign(&d256, &msg, &k, &mut r, &mut s).unwrap();
+        let c_sign = cyccnt().wrapping_sub(s0);
+
+        let s0 = cyccnt();
+        p256::ecdsa::verify(&pk256, &msg, &r, &s).unwrap();
+        let c_ver = cyccnt().wrapping_sub(s0);
+
+        hprintln!("  P-256 sign    {:>10} cycles  ({} ms @ 64 MHz)", c_sign, c_sign / 64_000);
+        hprintln!("  P-256 verify  {:>10} cycles  ({} ms @ 64 MHz)", c_ver, c_ver / 64_000);
+
+        let d384 = [0x11u8; 48];
+        let mut pk384 = [0u8; 97];
+        p384::derive_public_key(&d384, &mut pk384).unwrap();
+        let msg384 = [0x42u8; 48];
+        let k384 = [0x77u8; 48];
+        let mut r384 = [0u8; 48];
+        let mut s384 = [0u8; 48];
+
+        let s0 = cyccnt();
+        p384::ecdsa::sign(&d384, &msg384, &k384, &mut r384, &mut s384).unwrap();
+        let c_sign384 = cyccnt().wrapping_sub(s0);
+
+        let s0 = cyccnt();
+        p384::ecdsa::verify(&pk384, &msg384, &r384, &s384).unwrap();
+        let c_ver384 = cyccnt().wrapping_sub(s0);
+
+        hprintln!("  P-384 sign    {:>10} cycles  ({} ms @ 64 MHz)", c_sign384, c_sign384 / 64_000);
+        hprintln!("  P-384 verify  {:>10} cycles  ({} ms @ 64 MHz)", c_ver384, c_ver384 / 64_000);
+    }
+
+    hprintln!("");
     hprintln!("resumable: longest single step (budget = 1 point op):");
     {
         let k256 = [0x9e37_79b9u32, 0x7f4a_7c15, 0x1234_5678, 0x9abc_def0,
@@ -384,17 +438,18 @@ fn main() -> ! {
 
     #[cfg(emill)]
     unsafe {
-        if EMILL_TICKS != 0 {
+        let emill_ticks = core::ptr::read_volatile(&raw const EMILL_TICKS);
+        if emill_ticks != 0 {
             hprintln!("");
             hprintln!("vs Emill P256-Cortex-M4 (hand-optimised P-256 reference):");
-            if EMILL_TICKS <= ours256 {
-                let h = (ours256 as u64 * 100) / EMILL_TICKS as u64;
+            if emill_ticks <= ours256 {
+                let h = (ours256 as u64 * 100) / emill_ticks as u64;
                 hprintln!(
                     "  P-256: Emill is {}.{:02}x FASTER than us ({} vs {} ticks)",
-                    h / 100, h % 100, EMILL_TICKS, ours256
+                    h / 100, h % 100, emill_ticks, ours256
                 );
             } else {
-                report("P-256", EMILL_TICKS, ours256);
+                report("P-256", emill_ticks, ours256);
             }
             hprintln!("  P-384: no comparison exists - Emill implements P-256 only");
         }

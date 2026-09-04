@@ -108,7 +108,9 @@ fn cortex_m4_has_no_data_dependent_memory_addressing() {
         let inner = operand.trim_start_matches('[').trim_end_matches(']').trim();
         let mut parts = inner.split(',').map(str::trim);
         let base = parts.next().unwrap_or("");
-        if !(base == "sp" || (base.starts_with('r') && base[1..].chars().all(|c| c.is_ascii_digit()))) {
+        if !(base == "sp"
+            || (base.starts_with('r') && base[1..].chars().all(|c| c.is_ascii_digit())))
+        {
             return false;
         }
         match parts.next() {

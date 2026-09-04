@@ -51,12 +51,14 @@ pub fn mul_mont(a: &[u32], b: &[u32], p: &[u32], n0inv: u32, out: &mut [u32]) {
 }
 
 /// `out = a^2 * R^-1 mod p`
-///
-/// Currently routed through [`mul_mont`]. A dedicated squaring routine skips
-/// roughly half the partial products and is a worthwhile follow-up, but it is
-/// a pure optimisation: correctness never depends on it.
 #[inline]
 pub fn sqr_mont(a: &[u32], p: &[u32], n0inv: u32, out: &mut [u32]) {
+    #[cfg(nistp_asm_cm4)]
+    {
+        if cortex_m4::try_sqr_mont(a, p, n0inv, out) {
+            return;
+        }
+    }
     mul_mont(a, a, p, n0inv, out)
 }
 
@@ -82,4 +84,28 @@ pub fn sub_mod(a: &[u32], b: &[u32], p: &[u32], out: &mut [u32]) {
         }
     }
     portable::sub_mod(a, b, p, out)
+}
+
+/// `out = a + b mod p` with fixed compile-time limb count `N`.
+#[inline]
+pub fn add_mod_n<const N: usize>(a: &[u32; N], b: &[u32; N], p: &[u32], out: &mut [u32; N]) {
+    #[cfg(nistp_asm_cm4)]
+    {
+        if cortex_m4::try_add_mod(a, b, p, out) {
+            return;
+        }
+    }
+    portable::add_mod_n(a, b, p, out);
+}
+
+/// `out = a - b mod p` with fixed compile-time limb count `N`.
+#[inline]
+pub fn sub_mod_n<const N: usize>(a: &[u32; N], b: &[u32; N], p: &[u32], out: &mut [u32; N]) {
+    #[cfg(nistp_asm_cm4)]
+    {
+        if cortex_m4::try_sub_mod(a, b, p, out) {
+            return;
+        }
+    }
+    portable::sub_mod_n(a, b, p, out);
 }

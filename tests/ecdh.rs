@@ -139,4 +139,16 @@ fn p256_public_key_encoding_matches_oracle() {
         0xd2, 0x53, 0x16, 0xd2, 0x0e,
     ];
     assert_eq!(pk.as_slice(), &want[..], "SEC1 encoding of k*G");
+
+    let mut pk_comp = vec![0u8; 1 + 4 * N];
+    p256::derive_public_key_compressed(&sk, &mut pk_comp).unwrap();
+    assert_eq!(pk_comp[0], 0x02);
+    assert_eq!(&pk_comp[1..], &want[1..33]);
+
+    // Decoding both should succeed and match
+    let p_uncomp = p256::decode_point(&pk).unwrap();
+    let p_comp = p256::decode_point(&pk_comp).unwrap();
+    let aff_uncomp = p_uncomp.to_affine(&c.field).unwrap();
+    let aff_comp = p_comp.to_affine(&c.field).unwrap();
+    assert_eq!(aff_uncomp, aff_comp);
 }

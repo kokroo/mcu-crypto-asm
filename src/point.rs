@@ -39,6 +39,12 @@ pub struct CurveParams {
     pub gy_mont: &'static [u32],
     /// Order of the base point, plain integer limbs.
     pub order: &'static [u32],
+    /// -order^-1 mod 2^32.
+    pub order_n0inv: u32,
+    /// R^2 mod order, for converting scalars into Montgomery form.
+    pub order_r2: &'static [u32],
+    /// R mod order (1 in Montgomery form for the scalar field).
+    pub order_r: &'static [u32],
 }
 
 impl<const N: usize> Point<N> {
@@ -552,5 +558,137 @@ impl<const N: usize> Point<N> {
         let x = self.x.mul(f, &zinv);
         let y = self.y.mul(f, &zinv);
         Some((x.to_int(f), y.to_int(f)))
+    }
+
+    /// Check if this point lies on the curve `y^2 = x^3 - 3x + b`.
+    pub fn is_on_curve(&self, c: &CurveParams) -> bool {
+        if self.is_identity() {
+            return true;
+        }
+        let f = &c.field;
+        let (x, y) = match self.to_affine(f) {
+            Some(coords) => (
+                Fe::<N>::from_int(f, &coords.0),
+                Fe::<N>::from_int(f, &coords.1),
+            ),
+            None => return true,
+        };
+        let mut b = [0u32; N];
+        b.copy_from_slice(c.b_mont);
+        let b = Fe::<N>::from_mont_limbs(b);
+
+        let lhs = y.sqr(f);
+        let x3 = x.sqr(f).mul(f, &x);
+        let three_x = x.add(f, &x).add(f, &x);
+        let rhs = x3.sub(f, &three_x).add(f, &b);
+        lhs.ct_eq(&rhs)
+    }
+
+    /// Decompress an affine point from an x-coordinate and parity bit of y.
+    ///
+    /// Computes y = sqrt(x^3 - 3x + b mod p).
+    /// If no square root exists (point not on curve), returns `None`.
+    /// Otherwise negates y if its parity does not match `y_is_odd`.
+    pub fn decompress(c: &CurveParams, x_limbs: &[u32; N], y_is_odd: bool) -> Option<Self> {
+        let f = &c.field;
+        // x must be < p
+        let mut borrow = 0u32;
+        for i in 0..N {
+            let (r1, b1) = x_limbs[i].overflowing_sub(f.p[i]);
+            let (_, b2) = r1.overflowing_sub(borrow);
+            borrow = (b1 as u32) | (b2 as u32);
+        }
+        if borrow == 0 {
+            return None; // x >= p
+        }
+
+        let x = Fe::<N>::from_int(f, x_limbs);
+
+        let mut b = [0u32; N];
+        b.copy_from_slice(c.b_mont);
+        let b = Fe::<N>::from_mont_limbs(b);
+
+        // x^3 - 3x + b
+        let x2 = x.sqr(f);
+        let x3 = x2.mul(f, &x);
+        let three_x = x.add(f, &x).add(f, &x);
+        let rhs = x3.sub(f, &three_x).add(f, &b);
+
+        let mut y = rhs.sqrt(f)?;
+
+        let y_int = y.to_int(f);
+        let cur_odd = (y_int[0] & 1) == 1;
+        if cur_odd != y_is_odd {
+            y = Fe::<N>::ZERO.sub(f, &y);
+        }
+
+        let mut one = [0u32; N];
+        one.copy_from_slice(f.one);
+        Some(Self {
+            x,
+            y,
+            z: Fe::from_mont_limbs(one),
+        })
+    }
+
+    /// Decode a point from a SEC1 octet string.
+    ///
+    /// Accepts uncompressed (`0x04 || x || y`, length `1 + 8*N`) and
+    /// compressed (`0x02/0x03 || x`, length `1 + 4*N`) encodings.
+    /// Rejects invalid tags, malformed lengths, coordinates `>= p`, and points off the curve.
+    pub fn decode(c: &CurveParams, bytes: &[u8]) -> Result<Self, crate::ecdh::Error> {
+        if bytes.len() == 1 + 8 * N {
+            if bytes[0] != 0x04 {
+                return Err(crate::ecdh::Error::BadPoint);
+            }
+            let mut xi = [0u32; N];
+            let mut yi = [0u32; N];
+            for (i, chunk) in bytes[1..1 + 4 * N].rchunks(4).enumerate() {
+                xi[i] = u32::from_be_bytes(chunk.try_into().unwrap());
+            }
+            for (i, chunk) in bytes[1 + 4 * N..].rchunks(4).enumerate() {
+                yi[i] = u32::from_be_bytes(chunk.try_into().unwrap());
+            }
+            let f = &c.field;
+            let mut borrow_x = 0u32;
+            let mut borrow_y = 0u32;
+            for i in 0..N {
+                let (r1, b1) = xi[i].overflowing_sub(f.p[i]);
+                let (_, b2) = r1.overflowing_sub(borrow_x);
+                borrow_x = (b1 as u32) | (b2 as u32);
+
+                let (r3, b3) = yi[i].overflowing_sub(f.p[i]);
+                let (_, b4) = r3.overflowing_sub(borrow_y);
+                borrow_y = (b3 as u32) | (b4 as u32);
+            }
+            if borrow_x == 0 || borrow_y == 0 {
+                return Err(crate::ecdh::Error::BadPoint);
+            }
+
+            let x = Fe::<N>::from_int(f, &xi);
+            let y = Fe::<N>::from_int(f, &yi);
+            let mut one = [0u32; N];
+            one.copy_from_slice(f.one);
+            let pt = Self {
+                x,
+                y,
+                z: Fe::from_mont_limbs(one),
+            };
+            if !pt.is_on_curve(c) {
+                return Err(crate::ecdh::Error::BadPoint);
+            }
+            Ok(pt)
+        } else if bytes.len() == 1 + 4 * N {
+            if bytes[0] != 0x02 && bytes[0] != 0x03 {
+                return Err(crate::ecdh::Error::BadPoint);
+            }
+            let mut xi = [0u32; N];
+            for (i, chunk) in bytes[1..].rchunks(4).enumerate() {
+                xi[i] = u32::from_be_bytes(chunk.try_into().unwrap());
+            }
+            Self::decompress(c, &xi, bytes[0] == 0x03).ok_or(crate::ecdh::Error::BadPoint)
+        } else {
+            Err(crate::ecdh::Error::BadLength)
+        }
     }
 }

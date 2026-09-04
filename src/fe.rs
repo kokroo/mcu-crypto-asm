@@ -91,7 +91,7 @@ impl<const N: usize> Fe<N> {
     #[inline]
     pub fn add(&self, f: &Params, rhs: &Self) -> Self {
         let mut out = [0u32; N];
-        backend::portable::add_mod_n(&self.v, &rhs.v, f.p, &mut out);
+        backend::add_mod_n(&self.v, &rhs.v, f.p, &mut out);
         Self { v: out }
     }
 
@@ -99,7 +99,7 @@ impl<const N: usize> Fe<N> {
     #[inline]
     pub fn sub(&self, f: &Params, rhs: &Self) -> Self {
         let mut out = [0u32; N];
-        backend::portable::sub_mod_n(&self.v, &rhs.v, f.p, &mut out);
+        backend::sub_mod_n(&self.v, &rhs.v, f.p, &mut out);
         Self { v: out }
     }
 
@@ -215,6 +215,96 @@ impl<const N: usize> Fe<N> {
             }
         }
         acc
+    }
+
+    /// Square root modulo p: returns `Some(y)` if `self` is a quadratic residue,
+    /// where `y^2 == self mod p`, else `None`.
+    ///
+    /// Uses optimal addition chains for `(p + 1) / 4` (both NIST primes have `p ≡ 3 mod 4`).
+    pub fn sqrt(&self, f: &Params) -> Option<Self> {
+        if self.is_zero() {
+            return Some(Self::ZERO);
+        }
+
+        let cand = if N == 8 {
+            // P-256: exp = (p + 1) / 4 = ((2^32 - 1) << 222) + (1 << 190) + (1 << 94)
+            let t1 = *self;
+            let t2 = t1.sqr_n(f, 1).mul(f, &t1);
+            let t3 = t2.sqr_n(f, 1).mul(f, &t1);
+            let t6 = t3.sqr_n(f, 3).mul(f, &t3);
+            let t12 = t6.sqr_n(f, 6).mul(f, &t6);
+            let t15 = t12.sqr_n(f, 3).mul(f, &t3);
+            let t30 = t15.sqr_n(f, 15).mul(f, &t15);
+            let t32 = t30.sqr_n(f, 2).mul(f, &t2);
+
+            let mut acc = t32;
+            acc = acc.sqr_n(f, 32);
+            acc = acc.mul(f, &t1);
+            acc = acc.sqr_n(f, 96);
+            acc = acc.mul(f, &t1);
+            acc = acc.sqr_n(f, 94);
+            acc
+        } else if N == 12 {
+            // P-384: exp = (p + 1) / 4 = (2^255 - 1) << 127 + (2^32 - 1) << 94 + 1 << 30
+            let t1 = *self;
+            let t2 = t1.sqr_n(f, 1).mul(f, &t1);
+            let t3 = t2.sqr_n(f, 1).mul(f, &t1);
+            let t6 = t3.sqr_n(f, 3).mul(f, &t3);
+            let t12 = t6.sqr_n(f, 6).mul(f, &t6);
+            let t15 = t12.sqr_n(f, 3).mul(f, &t3);
+            let t30 = t15.sqr_n(f, 15).mul(f, &t15);
+            let t32 = t30.sqr_n(f, 2).mul(f, &t2);
+            let t60 = t30.sqr_n(f, 30).mul(f, &t30);
+            let t120 = t60.sqr_n(f, 60).mul(f, &t60);
+            let t240 = t120.sqr_n(f, 120).mul(f, &t120);
+            let t255 = t240.sqr_n(f, 15).mul(f, &t15);
+
+            let mut acc = t255;
+            acc = acc.sqr_n(f, 1);
+            acc = acc.sqr_n(f, 32).mul(f, &t32);
+            acc = acc.sqr_n(f, 64);
+            acc = acc.mul(f, &t1);
+            acc = acc.sqr_n(f, 30);
+            acc
+        } else {
+            let mut exp = [0u32; N];
+            let mut carry = 1u32;
+            for i in 0..N {
+                let (v1, c1) = f.p[i].overflowing_add(carry);
+                exp[i] = v1;
+                carry = c1 as u32;
+            }
+            let mut c = 0u32;
+            for i in (0..N).rev() {
+                let next_c = exp[i] << 30;
+                exp[i] = (exp[i] >> 2) | c;
+                c = next_c;
+            }
+            let mut acc = Self::from_mont_limbs({
+                let mut one = [0u32; N];
+                one.copy_from_slice(f.one);
+                one
+            });
+            let mut started = false;
+            for i in (0..N).rev() {
+                for bit in (0..32).rev() {
+                    if started {
+                        acc = acc.sqr(f);
+                    }
+                    if (exp[i] >> bit) & 1 == 1 {
+                        acc = if started { acc.mul(f, self) } else { *self };
+                        started = true;
+                    }
+                }
+            }
+            acc
+        };
+
+        if cand.sqr(f).ct_eq(self) {
+            Some(cand)
+        } else {
+            None
+        }
     }
 
     /// Constant-time equality.

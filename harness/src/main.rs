@@ -166,6 +166,44 @@ fn run_differential_add_sub<const N: usize>(f: &Params, name: &str, rounds: u32)
     fails
 }
 
+fn run_differential_sqr<const N: usize>(f: &Params, name: &str, rounds: u32) -> u32 {
+    let mut rng = Rng(0xCAFEBABE12345678);
+    let mut fails = 0;
+
+    for round in 0..rounds {
+        let mut a = [0u32; N];
+        for i in 0..N {
+            a[i] = rng.next_u32();
+        }
+        let a = Fe::<N>::from_int(f, &a).to_int(f);
+        let am = Fe::<N>::from_int(f, &a);
+
+        let mut want = [0u32; N];
+        backend::portable::mul_mont(
+            am.as_mont_limbs(),
+            am.as_mont_limbs(),
+            f.p,
+            f.n0inv,
+            &mut want,
+        );
+
+        let mut got = [0u32; N];
+        backend::sqr_mont(am.as_mont_limbs(), f.p, f.n0inv, &mut got);
+
+        if got != want {
+            hprintln!("  FAIL {} sqr differential round {}", name, round);
+            fails += 1;
+            if fails > 3 {
+                return fails;
+            }
+        }
+    }
+    if fails == 0 {
+        hprintln!("  ok   {} sqr differential ({} rounds)", name, rounds);
+    }
+    fails
+}
+
 fn asm_mul<const N: usize>(a: &[u32; N], b: &[u32; N], f: &Params, out: &mut [u32; N]) -> bool {
     #[cfg(nistp_asm_cm4)]
     {
@@ -193,12 +231,44 @@ fn main() -> ! {
     hprintln!("P-256:");
     fails += run_kat::<{ p256::N }>(&p256::FIELD, "p256", &kat::P256_MUL);
     fails += run_differential::<{ p256::N }>(&p256::FIELD, "p256", 500);
+    fails += run_differential_sqr::<{ p256::N }>(&p256::FIELD, "p256", 500);
     fails += run_differential_add_sub::<{ p256::N }>(&p256::FIELD, "p256", 500);
+
+    let d = [1u8; 32];
+    let mut pk = [0u8; 65];
+    p256::derive_public_key(&d, &mut pk).unwrap();
+    let msg = [0x42u8; 32];
+    let k = [0x77u8; 32];
+    let mut r = [0u8; 32];
+    let mut s = [0u8; 32];
+    p256::ecdsa::sign(&d, &msg, &k, &mut r, &mut s).unwrap();
+    if p256::ecdsa::verify(&pk, &msg, &r, &s).is_err() {
+        hprintln!("  FAIL p256 ecdsa on-target");
+        fails += 1;
+    } else {
+        hprintln!("  ok   p256 ecdsa sign & verify");
+    }
 
     hprintln!("P-384:");
     fails += run_kat::<{ p384::N }>(&p384::FIELD, "p384", &kat::P384_MUL);
     fails += run_differential::<{ p384::N }>(&p384::FIELD, "p384", 500);
+    fails += run_differential_sqr::<{ p384::N }>(&p384::FIELD, "p384", 500);
     fails += run_differential_add_sub::<{ p384::N }>(&p384::FIELD, "p384", 500);
+
+    let d384 = [1u8; 48];
+    let mut pk384 = [0u8; 97];
+    p384::derive_public_key(&d384, &mut pk384).unwrap();
+    let msg384 = [0x42u8; 48];
+    let k384 = [0x77u8; 48];
+    let mut r384 = [0u8; 48];
+    let mut s384 = [0u8; 48];
+    p384::ecdsa::sign(&d384, &msg384, &k384, &mut r384, &mut s384).unwrap();
+    if p384::ecdsa::verify(&pk384, &msg384, &r384, &s384).is_err() {
+        hprintln!("  FAIL p384 ecdsa on-target");
+        fails += 1;
+    } else {
+        hprintln!("  ok   p384 ecdsa sign & verify");
+    }
 
     if fails == 0 {
         hprintln!("ALL PASS");
