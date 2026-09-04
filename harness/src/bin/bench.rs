@@ -285,14 +285,24 @@ fn main() -> ! {
     let fiat256_sqr = bench!("P-256 sqr (fiat-crypto)", ITERS, {
         fiat_p256_square(black_box(&mut fo), black_box(&fa));
     });
+    let mut ours_add_out256 = [0u32; 8];
     let ours256_add = bench!("P-256 add_mod (asm)", ITERS, {
-        black_box(black_box(&a256).add(&p256::FIELD, black_box(&b256)));
+        p256::add_mod(
+            black_box(&mut ours_add_out256),
+            black_box(a256.as_mont_limbs()),
+            black_box(b256.as_mont_limbs()),
+        );
     });
     let fiat256_add = bench!("P-256 add (fiat-crypto)", ITERS, {
         fiat_p256_add(black_box(&mut fo), black_box(&fa), black_box(&fb));
     });
+    let mut ours_sub_out256 = [0u32; 8];
     let ours256_sub = bench!("P-256 sub_mod (asm)", ITERS, {
-        black_box(black_box(&a256).sub(&p256::FIELD, black_box(&b256)));
+        p256::sub_mod(
+            black_box(&mut ours_sub_out256),
+            black_box(a256.as_mont_limbs()),
+            black_box(b256.as_mont_limbs()),
+        );
     });
     let fiat256_sub = bench!("P-256 sub (fiat-crypto)", ITERS, {
         fiat_p256_sub(black_box(&mut fo), black_box(&fa), black_box(&fb));
@@ -345,14 +355,24 @@ fn main() -> ! {
     let fiat384_sqr = bench!("P-384 sqr (fiat-crypto)", ITERS, {
         fiat_p384_square(black_box(&mut go), black_box(&ga));
     });
+    let mut ours_add_out384 = [0u32; 12];
     let ours384_add = bench!("P-384 add_mod (asm)", ITERS, {
-        black_box(black_box(&a384).add(&p384::FIELD, black_box(&b384)));
+        p384::add_mod(
+            black_box(&mut ours_add_out384),
+            black_box(a384.as_mont_limbs()),
+            black_box(b384.as_mont_limbs()),
+        );
     });
     let fiat384_add = bench!("P-384 add (fiat-crypto)", ITERS, {
         fiat_p384_add(black_box(&mut go), black_box(&ga), black_box(&gb));
     });
+    let mut ours_sub_out384 = [0u32; 12];
     let ours384_sub = bench!("P-384 sub_mod (asm)", ITERS, {
-        black_box(black_box(&a384).sub(&p384::FIELD, black_box(&b384)));
+        p384::sub_mod(
+            black_box(&mut ours_sub_out384),
+            black_box(a384.as_mont_limbs()),
+            black_box(b384.as_mont_limbs()),
+        );
     });
     let fiat384_sub = bench!("P-384 sub (fiat-crypto)", ITERS, {
         fiat_p384_sub(black_box(&mut go), black_box(&ga), black_box(&gb));

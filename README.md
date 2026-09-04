@@ -57,11 +57,15 @@ Head-to-head comparison against `fiat-crypto` (the backend vendored by RustCrypt
 | Operation | fiat-crypto | mcu-crypto-asm | Emill | Speedup vs fiat |
 |---|---|---|---|---|
 | P-256 `mul_mont` | 2 248 | **392** | **392** | **5.73x** |
-| P-256 `sqr_mont` | 2 038 | **350** | — | **5.82x** |
-| P-256 `Point::add` | 36 291 | **9 292** | — | **3.90x** |
+| P-256 `sqr_mont` | 2 038 | **336** | — | **6.06x** |
+| P-256 `add_mod` | 253 | **133** | — | **1.88x** |
+| P-256 `sub_mod` | 152 | **114** | — | **1.31x** |
+| P-256 `Point::add` | 36 291 | **9 031** | — | **4.01x** |
 | P-384 `mul_mont` | 3 842 | **1 352** | — | **2.84x** |
 | P-384 `sqr_mont` | 3 503 | **1 358** | — | **2.57x** |
-| P-384 `Point::add` | 63 844 | **24 869** | — | **2.56x** |
+| P-384 `add_mod` | 392 | **222** | — | **1.76x** |
+| P-384 `sub_mod` | 266 | **180** | — | **1.47x** |
+| P-384 `Point::add` | 63 844 | **24 867** | — | **2.56x** |
 
 **ESP32-S3 (Xtensa LX7 @ 240 MHz)**
 
@@ -74,11 +78,11 @@ Head-to-head comparison against `fiat-crypto` (the backend vendored by RustCrypt
 
 | Operation | P-256 Cycles | P-256 Time | P-384 Cycles | P-384 Time |
 |---|---|---|---|---|
-| Comb Base Mul (`k*G`) | 521 229 | **8 ms** | 3 342 931 | **52 ms** |
-| `derive_public_key` | 522 081 | **8 ms** | 3 901 467 | **60 ms** |
-| `ECDSA sign` | 588 282 | **9 ms** | 5 218 816 | **81 ms** |
-| `ECDSA verify` | 1 433 648 | **22 ms** | 12 819 624 | **200 ms** |
-| ECDH Shared Secret (`k*P`) | 1 521 655 | **23 ms** | 7 568 277 | **118 ms** |
+| Comb Base Mul (`k*G`) | 517 953 | **8 ms** | 3 343 369 | **52 ms** |
+| `derive_public_key` | 518 809 | **8 ms** | 3 902 412 | **60 ms** |
+| `ECDSA sign` | 585 074 | **9 ms** | 5 176 025 | **80 ms** |
+| `ECDSA verify` | 1 413 118 | **22 ms** | 12 775 178 | **199 ms** |
+| ECDH Shared Secret (`k*P`) | 1 393 454 | **21 ms** | 7 567 832 | **118 ms** |
 
 ---
 

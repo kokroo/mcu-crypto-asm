@@ -285,10 +285,7 @@ P256_mulmod:
  p256_mulmod_core 0
  pop {pc}
  .size P256_mulmod, .-P256_mulmod
- .type P256_sqrmod, %function
-	.global P256_sqrmod
-P256_sqrmod:
- push {lr}
+ .macro p256_sqrmod_core is_shim=0
  umull r9,r10,r0,r0
  umull r11,r12,r0,r1
  adds r11,r11,r11
@@ -448,8 +445,17 @@ P256_sqrmod:
  adcs r3,r9,#0
  adcs r4,r6,#0
  adcs r5,r5,#0
+.if \is_shim
+  ldr lr,[sp]
+.endif
  adcs r6,r10,r7, lsr #31
  adcs r7,r8,r7
+ .endm
+ .type P256_sqrmod, %function
+	.global P256_sqrmod
+P256_sqrmod:
+ push {lr}
+ p256_sqrmod_core 0
  pop {pc}
  .size P256_sqrmod, .-P256_sqrmod
  .type P256_submod, %function
@@ -514,14 +520,15 @@ P256_addmod:
  .size P256_addmod, .-P256_addmod
  .type P256_sqrmod_many, %function
 P256_sqrmod_many:
- push {r8,lr}
+ push {lr}
+ vmov s7,r8
 0:
- bl P256_sqrmod
- ldr r8,[sp,#0]
+ p256_sqrmod_core 0
+ vmov r8,s7
  subs r8,r8,#1
- str r8,[sp,#0]
+ vmov s7,r8
  bne 0b
- pop {r8,pc}
+ pop {pc}
  .size P256_sqrmod_many, .-P256_sqrmod_many
  .type P256_sqrmod_many_and_mulmod, %function
 P256_sqrmod_many_and_mulmod:
@@ -1714,8 +1721,7 @@ emill_p256_mul_mont:
 emill_p256_sqr_mont:
 	push	{r0, r4-r11, lr}
 	ldm	r1, {r0-r7}
-	bl	P256_sqrmod
-	ldr	lr, [sp]
+	p256_sqrmod_core 1
 	stm	lr, {r0-r7}
 	pop	{r0, r4-r11, pc}
 	.size	emill_p256_sqr_mont, .-emill_p256_sqr_mont
@@ -1725,11 +1731,40 @@ emill_p256_sqr_mont:
 	.thumb_func
 	.type emill_p256_add_mod, %function
 emill_p256_add_mod:
-	push	{r0, r4-r11, lr}
-	bl	P256_addmod
-	ldr	lr, [sp]
+	push	{r3, r4-r11, lr}
+	mov	lr, r0
+	ldm	r2, {r2-r9}
+	ldm	r1!, {r0, r10, r11, r12}
+	adds	r2, r0
+	adcs	r3, r3, r10
+	adcs	r4, r4, r11
+	adcs	r5, r5, r12
+	ldm	r1, {r0, r1, r11, r12}
+	adcs	r6, r6, r0
+	adcs	r7, r7, r1
+	adcs	r8, r8, r11
+	adcs	r9, r9, r12
+	movs	r10, #0
+	adcs	r10, r10, r10
+	subs	r2, #0xffffffff
+	sbcs	r3, r3, #0xffffffff
+	sbcs	r4, r4, #0xffffffff
+	sbcs	r5, r5, #0
+	sbcs	r6, r6, #0
+	sbcs	r7, r7, #0
+	sbcs	r8, r8, #1
+	sbcs	r9, r9, #0xffffffff
+	sbcs	r10, r10, #0
+	adds	r0, r2, r10
+	adcs	r1, r3, r10
+	adcs	r2, r4, r10
+	adcs	r3, r5, #0
+	adcs	r4, r6, #0
+	adcs	r5, r7, #0
+	adcs	r6, r8, r10, lsr #31
+	adcs	r7, r9, r10
 	stm	lr, {r0-r7}
-	pop	{r0, r4-r11, pc}
+	pop	{r3, r4-r11, pc}
 	.size	emill_p256_add_mod, .-emill_p256_add_mod
 
 	.global emill_p256_sub_mod
@@ -1737,9 +1772,42 @@ emill_p256_add_mod:
 	.thumb_func
 	.type emill_p256_sub_mod, %function
 emill_p256_sub_mod:
+	push	{r3, r4-r11, lr}
+	mov	lr, r0
+	ldm	r1, {r3-r10}
+	ldm	r2!, {r0, r1, r11, r12}
+	subs	r3, r0
+	sbcs	r4, r4, r1
+	sbcs	r5, r5, r11
+	sbcs	r6, r6, r12
+	ldm	r2, {r0, r1, r11, r12}
+	sbcs	r7, r7, r0
+	sbcs	r8, r8, r1
+	sbcs	r9, r9, r11
+	sbcs	r10, r10, r12
+	sbcs	r11, r11, r11
+	adds	r0, r3, r11
+	adcs	r1, r4, r11
+	adcs	r2, r5, r11
+	adcs	r3, r6, #0
+	adcs	r4, r7, #0
+	adcs	r5, r8, #0
+	adcs	r6, r9, r11, lsr #31
+	adcs	r7, r10, r11
+	stm	lr, {r0-r7}
+	pop	{r3, r4-r11, pc}
+	.size	emill_p256_sub_mod, .-emill_p256_sub_mod
+
+	.global emill_p256_modinv_p
+	.p2align 2
+	.thumb_func
+	.type emill_p256_modinv_p, %function
+emill_p256_modinv_p:
 	push	{r0, r4-r11, lr}
-	bl	P256_submod
+	ldm	r1, {r0-r7}
+	mov	r8, #0
+	bl	P256_modinv_sqrt
 	ldr	lr, [sp]
 	stm	lr, {r0-r7}
 	pop	{r0, r4-r11, pc}
-	.size	emill_p256_sub_mod, .-emill_p256_sub_mod
+	.size	emill_p256_modinv_p, .-emill_p256_modinv_p

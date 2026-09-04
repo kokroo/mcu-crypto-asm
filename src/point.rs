@@ -1034,17 +1034,29 @@ impl<const N: usize> PointJacobian<N> {
                 if is_zero == 0 || self.is_identity() {
                     return Self::identity(f);
                 }
-                let (aff_x, aff_y) = self.to_affine(f).unwrap_or(([0; N], [0; N]));
+                let mut aff_x_mont = [0u32; 8];
+                let mut aff_y_mont = [0u32; 8];
+                let z_mont = &self.z.as_mont_limbs()[..8];
+                if z_mont == crate::backend::cortex_m4::p256::ONE_MONTGOMERY {
+                    aff_x_mont.copy_from_slice(&self.x.as_mont_limbs()[..8]);
+                    aff_y_mont.copy_from_slice(&self.y.as_mont_limbs()[..8]);
+                } else {
+                    let mut j = [[0u32; 8]; 3];
+                    j[0].copy_from_slice(&self.x.as_mont_limbs()[..8]);
+                    j[1].copy_from_slice(&self.y.as_mont_limbs()[..8]);
+                    j[2].copy_from_slice(z_mont);
+                    unsafe {
+                        crate::backend::cortex_m4::p256::P256_jacobian_to_affine(
+                            aff_x_mont.as_mut_ptr(),
+                            aff_y_mont.as_mut_ptr(),
+                            j.as_ptr() as *const u32,
+                        );
+                    }
+                }
                 let mut out_x = [0u32; 8];
                 let mut out_y = [0u32; 8];
-                let mut aff_x_8 = [0u32; 8];
-                let mut aff_y_8 = [0u32; 8];
                 let mut k_8 = [0u32; 8];
-                aff_x_8.copy_from_slice(&aff_x[..8]);
-                aff_y_8.copy_from_slice(&aff_y[..8]);
                 k_8.copy_from_slice(&k[..8]);
-                let aff_x_mont = Fe::<8>::from_int(&crate::p256::FIELD, &aff_x_8).v;
-                let aff_y_mont = Fe::<8>::from_int(&crate::p256::FIELD, &aff_y_8).v;
                 crate::backend::cortex_m4::p256::scalarmult_variable_base(
                     &mut out_x,
                     &mut out_y,

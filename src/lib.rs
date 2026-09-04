@@ -122,6 +122,38 @@ pub mod p256 {
         *out = port_out;
     }
 
+    /// Fast modular addition: `out = (a + b) mod p`.
+    #[inline(always)]
+    pub fn add_mod(out: &mut [u32; N], a: &[u32; N], b: &[u32; N]) {
+        #[cfg(nistp_asm_cm4)]
+        {
+            unsafe {
+                crate::backend::cortex_m4::emill_p256_add_mod(out.as_mut_ptr(), a.as_ptr(), b.as_ptr());
+            }
+            return;
+        }
+        #[allow(unreachable_code)]
+        let mut port_out = [0u32; N];
+        crate::backend::add_mod_n(a, b, FIELD.p, &mut port_out);
+        *out = port_out;
+    }
+
+    /// Fast modular subtraction: `out = (a - b) mod p`.
+    #[inline(always)]
+    pub fn sub_mod(out: &mut [u32; N], a: &[u32; N], b: &[u32; N]) {
+        #[cfg(nistp_asm_cm4)]
+        {
+            unsafe {
+                crate::backend::cortex_m4::emill_p256_sub_mod(out.as_mut_ptr(), a.as_ptr(), b.as_ptr());
+            }
+            return;
+        }
+        #[allow(unreachable_code)]
+        let mut port_out = [0u32; N];
+        crate::backend::sub_mod_n(a, b, FIELD.p, &mut port_out);
+        *out = port_out;
+    }
+
     /// `k * G` via the compile-time comb table. Much faster than the general
     /// [`crate::Point::mul_scalar`], but only valid for the base point.
     pub fn mul_base(k: &[u32; N]) -> PointP256 {
@@ -336,6 +368,38 @@ pub mod p384 {
         #[allow(unreachable_code)]
         let mut port_out = [0u32; N];
         crate::backend::sqr_mont(a, FIELD.p, FIELD.n0inv, &mut port_out);
+        *out = port_out;
+    }
+
+    /// Fast modular addition: `out = (a + b) mod p`.
+    #[inline(always)]
+    pub fn add_mod(out: &mut [u32; N], a: &[u32; N], b: &[u32; N]) {
+        #[cfg(nistp_asm_cm4)]
+        {
+            unsafe {
+                crate::backend::cortex_m4::nistp_add_mod_12(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), FIELD.p.as_ptr());
+            }
+            return;
+        }
+        #[allow(unreachable_code)]
+        let mut port_out = [0u32; N];
+        crate::backend::add_mod_n(a, b, FIELD.p, &mut port_out);
+        *out = port_out;
+    }
+
+    /// Fast modular subtraction: `out = (a - b) mod p`.
+    #[inline(always)]
+    pub fn sub_mod(out: &mut [u32; N], a: &[u32; N], b: &[u32; N]) {
+        #[cfg(nistp_asm_cm4)]
+        {
+            unsafe {
+                crate::backend::cortex_m4::nistp_sub_mod_12(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), FIELD.p.as_ptr());
+            }
+            return;
+        }
+        #[allow(unreachable_code)]
+        let mut port_out = [0u32; N];
+        crate::backend::sub_mod_n(a, b, FIELD.p, &mut port_out);
         *out = port_out;
     }
 
