@@ -93,6 +93,18 @@ pub mod p256 {
     /// `k * G` via the compile-time comb table. Much faster than the general
     /// [`crate::Point::mul_scalar`], but only valid for the base point.
     pub fn mul_base(k: &[u32; N]) -> PointP256 {
+        #[cfg(nistp_asm_cm4)]
+        {
+            let mut x_mont = [0u32; N];
+            let mut y_mont = [0u32; N];
+            crate::backend::cortex_m4::p256::scalarmult_fixed_base(&mut x_mont, &mut y_mont, k);
+            return PointP256 {
+                x: FeP256::from_mont_limbs(x_mont),
+                y: FeP256::from_mont_limbs(y_mont),
+                z: FeP256::from_mont_limbs(crate::backend::cortex_m4::p256::ONE_MONTGOMERY),
+            };
+        }
+        #[allow(unreachable_code)]
         crate::Point::mul_base(&CURVE, k, &crate::comb_tables::P256_COMB, COMB_D, COMB_T)
     }
 
@@ -104,6 +116,11 @@ pub mod p256 {
 
     /// SEC1 public key from a private scalar.
     pub fn derive_public_key(secret: &[u8], out: &mut [u8]) -> Result<(), crate::ecdh::Error> {
+        #[cfg(nistp_asm_cm4)]
+        {
+            return crate::backend::cortex_m4::p256::derive_public_key(secret, out);
+        }
+        #[allow(unreachable_code)]
         crate::ecdh::derive_public_key::<N>(
             &CURVE,
             secret,
@@ -122,6 +139,11 @@ pub mod p256 {
         secret: &[u8],
         out: &mut [u8],
     ) -> Result<(), crate::ecdh::Error> {
+        #[cfg(nistp_asm_cm4)]
+        {
+            return crate::backend::cortex_m4::p256::derive_public_key_compressed(secret, out);
+        }
+        #[allow(unreachable_code)]
         crate::ecdh::derive_public_key_compressed::<N>(
             &CURVE,
             secret,
@@ -139,6 +161,19 @@ pub mod p256 {
 
     /// Decompress an affine point from x-coordinate and parity bit of y.
     pub fn decompress_point(x_limbs: &[u32; N], y_is_odd: bool) -> Option<PointP256> {
+        #[cfg(nistp_asm_cm4)]
+        {
+            if let Some(y) = crate::backend::cortex_m4::p256::decompress_point(x_limbs, y_is_odd) {
+                return Some(PointP256 {
+                    x: Fe::from_int(&FIELD, x_limbs),
+                    y: Fe::from_int(&FIELD, &y),
+                    z: Fe::from_mont_limbs(crate::backend::cortex_m4::p256::ONE_MONTGOMERY),
+                });
+            } else {
+                return None;
+            }
+        }
+        #[allow(unreachable_code)]
         PointP256::decompress(&CURVE, x_limbs, y_is_odd)
     }
 
@@ -153,6 +188,11 @@ pub mod p256 {
             r: &[u8],
             s: &[u8],
         ) -> Result<(), crate::ecdsa::Error> {
+            #[cfg(nistp_asm_cm4)]
+            {
+                return crate::backend::cortex_m4::p256::verify(pk, msg_hash, r, s);
+            }
+            #[allow(unreachable_code)]
             crate::ecdsa::verify::<N>(
                 &CURVE,
                 pk,
@@ -173,6 +213,11 @@ pub mod p256 {
             out_r: &mut [u8],
             out_s: &mut [u8],
         ) -> Result<(), crate::ecdsa::Error> {
+            #[cfg(nistp_asm_cm4)]
+            {
+                return crate::backend::cortex_m4::p256::sign(sk, msg_hash, k_nonce, out_r, out_s);
+            }
+            #[allow(unreachable_code)]
             crate::ecdsa::sign::<N>(
                 &CURVE,
                 sk,

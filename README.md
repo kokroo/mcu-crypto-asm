@@ -39,7 +39,7 @@ p256::ecdsa::verify(&pk, &msg_hash, &r, &s)?;
 |---|---|---|
 | **P-384** (all MCUs) | ✅ Done | **mcu-crypto-asm** (2.5x–3x faster than fiat-crypto / portable) |
 | **ESP32-S2 / S3** (P-256 & P-384) | ✅ Done | **mcu-crypto-asm** (no on-chip ECC hardware on LX7) |
-| **P-256** on Cortex-M4/M7/M33 | ✅ Done | **mcu-crypto-asm** (or [Emill](https://github.com/Emill/P256-Cortex-M4) if raw P-256 speed is all you need) |
+| **P-256** on Cortex-M4/M7/M33 | ✅ Done | **mcu-crypto-asm** (hand-optimised assembly, matching Emill speeds) |
 | MCUs with dedicated PKA/ECC | N/A | Dedicated hardware accelerator (e.g. STM32 PKA, ESP32-C6/H2 ECC) |
 
 ---
@@ -56,12 +56,12 @@ Head-to-head comparison against `fiat-crypto` (the backend vendored by RustCrypt
 
 | Operation | fiat-crypto | mcu-crypto-asm | Emill | Speedup vs fiat |
 |---|---|---|---|---|
-| P-256 `mul_mont` | 2 238 | **824** | **392** | **2.71x** |
-| P-256 `sqr_mont` | 2 080 | **793** | — | **2.62x** |
-| P-256 `Point::add` | 36 137 | **17 085** | — | **2.11x** |
-| P-384 `mul_mont` | 3 858 | **1 474** | — | **2.61x** |
-| P-384 `sqr_mont` | 3 507 | **1 426** | — | **2.45x** |
-| P-384 `Point::add` | 64 174 | **30 131** | — | **2.12x** |
+| P-256 `mul_mont` | 2 248 | **415** (394 raw) | **394** | **5.41x** |
+| P-256 `sqr_mont` | 2 040 | **371** | — | **5.49x** |
+| P-256 `Point::add` | 36 303 | **9 269** | — | **3.91x** |
+| P-384 `mul_mont` | 3 842 | **1 386** | — | **2.77x** |
+| P-384 `sqr_mont` | 3 503 | **1 390** | — | **2.52x** |
+| P-384 `Point::add` | 63 871 | **24 862** | — | **2.56x** |
 
 **ESP32-S3 (Xtensa LX7 @ 240 MHz)**
 
@@ -74,12 +74,11 @@ Head-to-head comparison against `fiat-crypto` (the backend vendored by RustCrypt
 
 | Operation | P-256 Cycles | P-256 Time | P-384 Cycles | P-384 Time |
 |---|---|---|---|---|
-| Comb Base Mul (`k*G`) | 1 529 936 | **23 ms** | 3 970 291 | **62 ms** |
-| `derive_public_key` | 1 807 166 | **28 ms** | 4 567 634 | **71 ms** |
-| `decompress_point` | 586 288 | **9 ms** | 1 328 107 | **21 ms** |
-| `ECDSA sign` | 3 003 278 | **46 ms** | 7 621 383 | **119 ms** |
-| `ECDSA verify` | 6 251 727 | **97 ms** | 16 219 375 | **253 ms** |
-| ECDH Shared Secret (`k*P`) | 3 230 184 | **50 ms** | 8 566 872 | **133 ms** |
+| Comb Base Mul (`k*G`) | 521 229 | **8 ms** | 3 342 931 | **52 ms** |
+| `derive_public_key` | 522 081 | **8 ms** | 3 901 467 | **60 ms** |
+| `ECDSA sign` | 588 282 | **9 ms** | 5 218 816 | **81 ms** |
+| `ECDSA verify` | 1 433 648 | **22 ms** | 12 819 624 | **200 ms** |
+| ECDH Shared Secret (`k*P`) | 1 521 655 | **23 ms** | 7 568 277 | **118 ms** |
 
 ---
 

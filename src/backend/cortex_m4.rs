@@ -12,23 +12,26 @@
 //! variable-latency, so this code would not be constant time there. The `cfg`
 //! below deliberately requires the DSP extension (`v7`+`dsp`), which M3 lacks.
 
+pub mod p256;
+
 use core::arch::global_asm;
 
 // `options(raw)`: the template is assembly, not a format string. Without it
 // `push {r4-r11, lr}` is parsed as a format placeholder, and the .S file stops
 // being usable standalone.
 global_asm!(include_str!("../../asm/cortex_m4.S"), options(raw));
+global_asm!(include_str!("../../asm/cortex_m4_p256.S"), options(raw));
 
 extern "C" {
-    fn nistp_mul_mont_8(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
-    fn nistp_mul_mont_12(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
-    fn nistp_sqr_mont_8(out: *mut u32, a: *const u32, p: *const u32);
-    fn nistp_sqr_mont_12(out: *mut u32, a: *const u32, p: *const u32);
-    fn nistp_add_mod_8(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
-    fn nistp_add_mod_12(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
-    fn nistp_sub_mod_8(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
-    fn nistp_sub_mod_12(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
-    fn nistp_div2_12(out: *mut u32, a: *const u32);
+    pub(crate) fn emill_p256_mul_mont(out: *mut u32, a: *const u32, b: *const u32);
+    pub(crate) fn emill_p256_sqr_mont(out: *mut u32, a: *const u32);
+    pub(crate) fn emill_p256_add_mod(out: *mut u32, a: *const u32, b: *const u32);
+    pub(crate) fn emill_p256_sub_mod(out: *mut u32, a: *const u32, b: *const u32);
+    pub(crate) fn nistp_mul_mont_12(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
+    pub(crate) fn nistp_sqr_mont_12(out: *mut u32, a: *const u32, p: *const u32);
+    pub(crate) fn nistp_add_mod_12(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
+    pub(crate) fn nistp_sub_mod_12(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
+    pub(crate) fn nistp_div2_12(out: *mut u32, a: *const u32);
 }
 
 /// Dispatch to assembly if a routine exists for this limb count.
@@ -50,11 +53,11 @@ pub fn try_mul_mont(a: &[u32], b: &[u32], p: &[u32], n0inv: u32, out: &mut [u32]
         // SAFETY: lengths are checked above, so each pointer is valid for
         // exactly the number of limbs the routine reads/writes. The routines
         // touch no other memory and preserve all callee-saved registers.
-        8 if p == crate::params::p256::P => unsafe {
-            nistp_mul_mont_8(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), p.as_ptr());
+        8 if core::ptr::eq(p.as_ptr(), crate::params::p256::P.as_ptr()) || p == crate::params::p256::P => unsafe {
+            emill_p256_mul_mont(out.as_mut_ptr(), a.as_ptr(), b.as_ptr());
             true
         },
-        12 if p == crate::params::p384::P => unsafe {
+        12 if core::ptr::eq(p.as_ptr(), crate::params::p384::P.as_ptr()) || p == crate::params::p384::P => unsafe {
             nistp_mul_mont_12(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), p.as_ptr());
             true
         },
@@ -72,11 +75,11 @@ pub fn try_sqr_mont(a: &[u32], p: &[u32], n0inv: u32, out: &mut [u32]) -> bool {
     debug_assert_eq!(out.len(), a.len());
 
     match a.len() {
-        8 if p == crate::params::p256::P => unsafe {
-            nistp_sqr_mont_8(out.as_mut_ptr(), a.as_ptr(), p.as_ptr());
+        8 if core::ptr::eq(p.as_ptr(), crate::params::p256::P.as_ptr()) || p == crate::params::p256::P => unsafe {
+            emill_p256_sqr_mont(out.as_mut_ptr(), a.as_ptr());
             true
         },
-        12 if p == crate::params::p384::P => unsafe {
+        12 if core::ptr::eq(p.as_ptr(), crate::params::p384::P.as_ptr()) || p == crate::params::p384::P => unsafe {
             nistp_sqr_mont_12(out.as_mut_ptr(), a.as_ptr(), p.as_ptr());
             true
         },
@@ -91,11 +94,11 @@ pub fn try_add_mod(a: &[u32], b: &[u32], p: &[u32], out: &mut [u32]) -> bool {
     debug_assert_eq!(out.len(), a.len());
 
     match a.len() {
-        8 if p == crate::params::p256::P => unsafe {
-            nistp_add_mod_8(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), p.as_ptr());
+        8 if core::ptr::eq(p.as_ptr(), crate::params::p256::P.as_ptr()) || p == crate::params::p256::P => unsafe {
+            emill_p256_add_mod(out.as_mut_ptr(), a.as_ptr(), b.as_ptr());
             true
         },
-        12 if p == crate::params::p384::P => unsafe {
+        12 if core::ptr::eq(p.as_ptr(), crate::params::p384::P.as_ptr()) || p == crate::params::p384::P => unsafe {
             nistp_add_mod_12(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), p.as_ptr());
             true
         },
@@ -110,11 +113,11 @@ pub fn try_sub_mod(a: &[u32], b: &[u32], p: &[u32], out: &mut [u32]) -> bool {
     debug_assert_eq!(out.len(), a.len());
 
     match a.len() {
-        8 if p == crate::params::p256::P => unsafe {
-            nistp_sub_mod_8(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), p.as_ptr());
+        8 if core::ptr::eq(p.as_ptr(), crate::params::p256::P.as_ptr()) || p == crate::params::p256::P => unsafe {
+            emill_p256_sub_mod(out.as_mut_ptr(), a.as_ptr(), b.as_ptr());
             true
         },
-        12 if p == crate::params::p384::P => unsafe {
+        12 if core::ptr::eq(p.as_ptr(), crate::params::p384::P.as_ptr()) || p == crate::params::p384::P => unsafe {
             nistp_sub_mod_12(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), p.as_ptr());
             true
         },

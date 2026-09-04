@@ -14,6 +14,7 @@ use std::process::Command;
 
 fn main() {
     println!("cargo:rerun-if-changed=asm/cortex_m4.S");
+    println!("cargo:rerun-if-changed=asm/cortex_m4_p256.S");
     println!("cargo:rerun-if-changed=asm/xtensa_lx7.S");
     println!("cargo:rustc-check-cfg=cfg(nistp_asm_cm4)");
     println!("cargo:rustc-check-cfg=cfg(nistp_asm_xtensa)");

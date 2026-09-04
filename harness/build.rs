@@ -29,13 +29,8 @@ fn main() {
     }
 
     println!("cargo:rustc-check-cfg=cfg(emill)");
-    println!("cargo:rerun-if-changed=../third_party/emill/shim.S");
-    println!("cargo:rerun-if-changed=../third_party/emill/p256-cortex-m4-asm-gcc.S");
     if target.starts_with("thumbv7em") {
-        match build_emill() {
-            Ok(()) => println!("cargo:rustc-cfg=emill"),
-            Err(e) => println!("cargo:warning=Emill comparison unavailable: {e}"),
-        }
+        println!("cargo:rustc-cfg=emill");
     }
 }
 

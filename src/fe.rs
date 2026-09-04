@@ -74,6 +74,23 @@ impl<const N: usize> Fe<N> {
     /// `self * rhs mod p` (Montgomery form in, Montgomery form out).
     #[inline]
     pub fn mul(&self, f: &Params, rhs: &Self) -> Self {
+        #[cfg(nistp_asm_cm4)]
+        {
+            if N == 8 && (core::ptr::eq(f.p.as_ptr(), crate::params::p256::P.as_ptr()) || f.p == crate::params::p256::P) {
+                let mut out = core::mem::MaybeUninit::<[u32; N]>::uninit();
+                unsafe {
+                    crate::backend::cortex_m4::emill_p256_mul_mont(out.as_mut_ptr() as *mut u32, self.v.as_ptr(), rhs.v.as_ptr());
+                    return Self { v: out.assume_init() };
+                }
+            }
+            if N == 12 && (core::ptr::eq(f.p.as_ptr(), crate::params::p384::P.as_ptr()) || f.p == crate::params::p384::P) {
+                let mut out = core::mem::MaybeUninit::<[u32; N]>::uninit();
+                unsafe {
+                    crate::backend::cortex_m4::nistp_mul_mont_12(out.as_mut_ptr() as *mut u32, self.v.as_ptr(), rhs.v.as_ptr(), f.p.as_ptr());
+                    return Self { v: out.assume_init() };
+                }
+            }
+        }
         let mut out = [0u32; N];
         backend::mul_mont(&self.v, &rhs.v, f.p, f.n0inv, &mut out);
         Self { v: out }
@@ -82,6 +99,23 @@ impl<const N: usize> Fe<N> {
     /// `self^2 mod p`.
     #[inline]
     pub fn sqr(&self, f: &Params) -> Self {
+        #[cfg(nistp_asm_cm4)]
+        {
+            if N == 8 && (core::ptr::eq(f.p.as_ptr(), crate::params::p256::P.as_ptr()) || f.p == crate::params::p256::P) {
+                let mut out = core::mem::MaybeUninit::<[u32; N]>::uninit();
+                unsafe {
+                    crate::backend::cortex_m4::emill_p256_sqr_mont(out.as_mut_ptr() as *mut u32, self.v.as_ptr());
+                    return Self { v: out.assume_init() };
+                }
+            }
+            if N == 12 && (core::ptr::eq(f.p.as_ptr(), crate::params::p384::P.as_ptr()) || f.p == crate::params::p384::P) {
+                let mut out = core::mem::MaybeUninit::<[u32; N]>::uninit();
+                unsafe {
+                    crate::backend::cortex_m4::nistp_sqr_mont_12(out.as_mut_ptr() as *mut u32, self.v.as_ptr(), f.p.as_ptr());
+                    return Self { v: out.assume_init() };
+                }
+            }
+        }
         let mut out = [0u32; N];
         backend::sqr_mont(&self.v, f.p, f.n0inv, &mut out);
         Self { v: out }
@@ -90,6 +124,23 @@ impl<const N: usize> Fe<N> {
     /// `self + rhs mod p`.
     #[inline]
     pub fn add(&self, f: &Params, rhs: &Self) -> Self {
+        #[cfg(nistp_asm_cm4)]
+        {
+            if N == 8 && (core::ptr::eq(f.p.as_ptr(), crate::params::p256::P.as_ptr()) || f.p == crate::params::p256::P) {
+                let mut out = core::mem::MaybeUninit::<[u32; N]>::uninit();
+                unsafe {
+                    crate::backend::cortex_m4::emill_p256_add_mod(out.as_mut_ptr() as *mut u32, self.v.as_ptr(), rhs.v.as_ptr());
+                    return Self { v: out.assume_init() };
+                }
+            }
+            if N == 12 && (core::ptr::eq(f.p.as_ptr(), crate::params::p384::P.as_ptr()) || f.p == crate::params::p384::P) {
+                let mut out = core::mem::MaybeUninit::<[u32; N]>::uninit();
+                unsafe {
+                    crate::backend::cortex_m4::nistp_add_mod_12(out.as_mut_ptr() as *mut u32, self.v.as_ptr(), rhs.v.as_ptr(), f.p.as_ptr());
+                    return Self { v: out.assume_init() };
+                }
+            }
+        }
         let mut out = [0u32; N];
         backend::add_mod_n(&self.v, &rhs.v, f.p, &mut out);
         Self { v: out }
@@ -98,6 +149,23 @@ impl<const N: usize> Fe<N> {
     /// `self - rhs mod p`.
     #[inline]
     pub fn sub(&self, f: &Params, rhs: &Self) -> Self {
+        #[cfg(nistp_asm_cm4)]
+        {
+            if N == 8 && (core::ptr::eq(f.p.as_ptr(), crate::params::p256::P.as_ptr()) || f.p == crate::params::p256::P) {
+                let mut out = core::mem::MaybeUninit::<[u32; N]>::uninit();
+                unsafe {
+                    crate::backend::cortex_m4::emill_p256_sub_mod(out.as_mut_ptr() as *mut u32, self.v.as_ptr(), rhs.v.as_ptr());
+                    return Self { v: out.assume_init() };
+                }
+            }
+            if N == 12 && (core::ptr::eq(f.p.as_ptr(), crate::params::p384::P.as_ptr()) || f.p == crate::params::p384::P) {
+                let mut out = core::mem::MaybeUninit::<[u32; N]>::uninit();
+                unsafe {
+                    crate::backend::cortex_m4::nistp_sub_mod_12(out.as_mut_ptr() as *mut u32, self.v.as_ptr(), rhs.v.as_ptr(), f.p.as_ptr());
+                    return Self { v: out.assume_init() };
+                }
+            }
+        }
         let mut out = [0u32; N];
         backend::sub_mod_n(&self.v, &rhs.v, f.p, &mut out);
         Self { v: out }

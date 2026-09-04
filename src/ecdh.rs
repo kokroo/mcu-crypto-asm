@@ -133,6 +133,12 @@ pub fn shared_secret<const N: usize>(
     peer: &[u8],
     out: &mut [u8],
 ) -> Result<(), Error> {
+    #[cfg(nistp_asm_cm4)]
+    {
+        if N == 8 && core::ptr::eq(c.order.as_ptr(), crate::params::p256::ORDER.as_ptr()) {
+            return crate::backend::cortex_m4::p256::ecdh_shared_secret(secret, peer, out);
+        }
+    }
     if out.len() != 4 * N {
         return Err(Error::BadLength);
     }
