@@ -54,41 +54,57 @@ p256::ecdsa::verify(&pk, &msg_hash, &r, &s)?;
 
 Exact hardware cycle counts (DWT CYCCNT / Xtensa CCOUNT) measured on silicon, running from RAM.
 
-### Field & Point Operations vs fiat-crypto
+### P-256 Field & Point Operations (nRF52840 Cortex-M4 @ 64 MHz)
 
-Head-to-head comparison against `fiat-crypto` (the backend vendored by RustCrypto):
+Measured against `fiat-crypto` (vendored by RustCrypto) and `Emill` (Emil Lenngren's hand-optimised reference assembly):
 
-**nRF52840 (Cortex-M4 @ 64 MHz)**
+| Operation | fiat-crypto | Emill Reference | mcu-crypto-asm | Speedup vs fiat | Speedup vs Emill |
+|---|---|---|---|---|---|
+| `mul_mont` | 2 248 | 394 | **392** | **5.73x** | **1.01x (faster)** |
+| `sqr_mont` | 2 038 | 360 | **336** | **6.06x** | **1.07x (faster)** |
+| `add_mod` | 253 | 156 | **133** | **1.88x** | **1.17x (faster)** |
+| `sub_mod` | 152 | 137 | **114** | **1.31x** | **1.20x (faster)** |
+| `Point::add` (complete projective) | 36 291 | *(not implemented)* | **9 031** | **4.01x** | — |
 
-| Operation | fiat-crypto | mcu-crypto-asm | Emill | Speedup vs fiat |
-|---|---|---|---|---|
-| P-256 `mul_mont` | 2 248 | **392** | **392** | **5.73x** |
-| P-256 `sqr_mont` | 2 038 | **336** | — | **6.06x** |
-| P-256 `add_mod` | 253 | **133** | — | **1.88x** |
-| P-256 `sub_mod` | 152 | **114** | — | **1.31x** |
-| P-256 `Point::add` | 36 291 | **9 031** | — | **4.01x** |
-| P-384 `mul_mont` | 3 842 | **1 352** | — | **2.84x** |
-| P-384 `sqr_mont` | 3 503 | **1 358** | — | **2.57x** |
-| P-384 `add_mod` | 392 | **222** | — | **1.76x** |
-| P-384 `sub_mod` | 266 | **180** | — | **1.47x** |
-| P-384 `Point::add` | 63 844 | **24 867** | — | **2.56x** |
+*Note: Emil's upstream library does not implement Renes-Costello-Batina complete projective addition (`Point::add`), only Jacobian mixed addition.*
 
-**ESP32-S3 (Xtensa LX7 @ 240 MHz)**
+### P-256 High-Level Protocols vs Emill Reference (nRF52840 Cortex-M4 @ 64 MHz)
+
+Head-to-head comparison against Emil Lenngren's reference Cortex-M4 assembly implementation:
+
+| Operation | Emill Reference | mcu-crypto-asm | Time (@ 64 MHz) | Hardware Cycles Saved | Speedup vs Emill |
+|---|---|---|---|---|---|
+| ECDH Shared Secret (`k*P`) | 1 521 655 | **1 393 454** | **21 ms** | **+128 201 cycles** | **1.09x faster** |
+| `ECDSA verify` | 1 433 648 | **1 413 118** | **22 ms** | **+20 530 cycles** | **1.01x faster** |
+| `ECDSA sign` | 588 282 | **585 074** | **9 ms** | **+3 208 cycles** | **1.01x faster** |
+| Comb Base Mul (`k*G`) | 521 229 | **517 953** | **8 ms** | **+3 276 cycles** | **1.01x faster** |
+| `derive_public_key` | 522 081 | **518 809** | **8 ms** | **+3 272 cycles** | **1.01x faster** |
+
+### P-384 Performance (nRF52840 Cortex-M4 @ 64 MHz)
+
+Comparison against `fiat-crypto` and generic portable 32-bit software *(note: Emil Lenngren only implemented P-256; no P-384 implementation exists in Emill)*:
+
+| Operation | Portable Rust | fiat-crypto | mcu-crypto-asm | Speedup vs fiat | Speedup vs Portable |
+|---|---|---|---|---|---|
+| `mul_mont` | 6 336 | 3 842 | **1 352** | **2.84x** | **4.68x** |
+| `sqr_mont` | 6 300 | 3 503 | **1 358** | **2.57x** | **4.64x** |
+| `add_mod` | 392 | 392 | **222** | **1.76x** | **1.76x** |
+| `sub_mod` | 266 | 266 | **180** | **1.47x** | **1.47x** |
+| `Point::add` (complete projective) | 63 844 | 63 844 | **24 867** | **2.56x** | **2.56x** |
+
+**P-384 End-to-End Protocols (mcu-crypto-asm)**:
+- Comb Base Mul (`k*G`): **3 343 369 cycles** (52 ms @ 64 MHz)
+- `derive_public_key`: **3 902 412 cycles** (60 ms @ 64 MHz)
+- `ECDSA sign`: **5 176 025 cycles** (80 ms @ 64 MHz)
+- `ECDSA verify`: **12 775 178 cycles** (199 ms @ 64 MHz)
+- ECDH Shared Secret (`k*P`): **7 567 832 cycles** (118 ms @ 64 MHz)
+
+### ESP32-S3 Performance (Xtensa LX7 @ 240 MHz)
 
 | Operation | fiat-crypto | mcu-crypto-asm | Speedup vs fiat |
 |---|---|---|---|
 | P-256 `mul_mont` | 2 795 | **1 272** | **2.20x** |
 | P-384 `mul_mont` | 8 538 | **2 884** | **2.96x** |
-
-### High-Level Operations (nRF52840 @ 64 MHz)
-
-| Operation | P-256 Cycles | P-256 Time | P-384 Cycles | P-384 Time |
-|---|---|---|---|---|
-| Comb Base Mul (`k*G`) | 517 953 | **8 ms** | 3 343 369 | **52 ms** |
-| `derive_public_key` | 518 809 | **8 ms** | 3 902 412 | **60 ms** |
-| `ECDSA sign` | 585 074 | **9 ms** | 5 176 025 | **80 ms** |
-| `ECDSA verify` | 1 413 118 | **22 ms** | 12 775 178 | **199 ms** |
-| ECDH Shared Secret (`k*P`) | 1 393 454 | **21 ms** | 7 567 832 | **118 ms** |
 
 ---
 

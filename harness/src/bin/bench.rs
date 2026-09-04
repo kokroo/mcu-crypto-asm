@@ -35,6 +35,9 @@ use fiat_crypto::p384_32::{
 #[cfg(emill)]
 extern "C" {
     fn emill_p256_mulmod(out: *mut u32, a: *const u32, b: *const u32);
+    fn emill_p256_sqrmod(out: *mut u32, a: *const u32);
+    fn emill_p256_addmod(out: *mut u32, a: *const u32, b: *const u32);
+    fn emill_p256_submod(out: *mut u32, a: *const u32, b: *const u32);
 }
 
 #[cfg(emill)]
@@ -285,6 +288,18 @@ fn main() -> ! {
     let fiat256_sqr = bench!("P-256 sqr (fiat-crypto)", ITERS, {
         fiat_p256_square(black_box(&mut fo), black_box(&fa));
     });
+    #[cfg(emill)]
+    let mut emill_sqr_out256 = [0u32; 8];
+    #[cfg(emill)]
+    let emill256_sqr = bench!("Emill P256_sqrmod (asm)", ITERS, {
+        unsafe {
+            emill_p256_sqrmod(
+                black_box(emill_sqr_out256.as_mut_ptr()),
+                black_box(a256.as_mont_limbs().as_ptr()),
+            );
+        }
+    });
+
     let mut ours_add_out256 = [0u32; 8];
     let ours256_add = bench!("P-256 add_mod (asm)", ITERS, {
         p256::add_mod(
@@ -296,6 +311,19 @@ fn main() -> ! {
     let fiat256_add = bench!("P-256 add (fiat-crypto)", ITERS, {
         fiat_p256_add(black_box(&mut fo), black_box(&fa), black_box(&fb));
     });
+    #[cfg(emill)]
+    let mut emill_add_out256 = [0u32; 8];
+    #[cfg(emill)]
+    let emill256_add = bench!("Emill P256_addmod (asm)", ITERS, {
+        unsafe {
+            emill_p256_addmod(
+                black_box(emill_add_out256.as_mut_ptr()),
+                black_box(a256.as_mont_limbs().as_ptr()),
+                black_box(b256.as_mont_limbs().as_ptr()),
+            );
+        }
+    });
+
     let mut ours_sub_out256 = [0u32; 8];
     let ours256_sub = bench!("P-256 sub_mod (asm)", ITERS, {
         p256::sub_mod(
@@ -306,6 +334,18 @@ fn main() -> ! {
     });
     let fiat256_sub = bench!("P-256 sub (fiat-crypto)", ITERS, {
         fiat_p256_sub(black_box(&mut fo), black_box(&fa), black_box(&fb));
+    });
+    #[cfg(emill)]
+    let mut emill_sub_out256 = [0u32; 8];
+    #[cfg(emill)]
+    let emill256_sub = bench!("Emill P256_submod (asm)", ITERS, {
+        unsafe {
+            emill_p256_submod(
+                black_box(emill_sub_out256.as_mut_ptr()),
+                black_box(a256.as_mont_limbs().as_ptr()),
+                black_box(b256.as_mont_limbs().as_ptr()),
+            );
+        }
     });
 
     // --- P-384 ---
@@ -561,25 +601,11 @@ fn main() -> ! {
         let emill_ticks = core::ptr::read_volatile(&raw const EMILL_TICKS);
         if emill_ticks != 0 {
             hprintln!("");
-            hprintln!("vs Emill P256-Cortex-M4 (hand-optimised P-256 reference):");
-            if emill_ticks < ours256 {
-                let h = (ours256 as u64 * 100) / emill_ticks as u64;
-                hprintln!(
-                    "  P-256: Emill is {}.{:02}x FASTER than us ({} vs {} ticks)",
-                    h / 100, h % 100, emill_ticks, ours256
-                );
-            } else if ours256 < emill_ticks {
-                let h = (emill_ticks as u64 * 100) / ours256 as u64;
-                hprintln!(
-                    "  P-256: mcu-crypto-asm is {}.{:02}x FASTER than Emill ({} vs {} ticks)",
-                    h / 100, h % 100, ours256, emill_ticks
-                );
-            } else {
-                hprintln!(
-                    "  P-256: 1.00x - exact cycle parity with Emill reference ({} vs {} ticks)",
-                    ours256, emill_ticks
-                );
-            }
+            hprintln!("=== SPEEDUP COMPARISON vs EMILL (P256-Cortex-M4 reference) ===");
+            report("P-256 modular mul vs Emill", emill_ticks, ours256);
+            report("P-256 modular sqr vs Emill", emill256_sqr, ours256_sqr);
+            report("P-256 modular add vs Emill", emill256_add, ours256_add);
+            report("P-256 modular sub vs Emill", emill256_sub, ours256_sub);
             hprintln!("  P-384: no comparison exists - Emill implements P-256 only");
         }
     }

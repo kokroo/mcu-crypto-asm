@@ -19,3 +19,40 @@ emill_p256_mulmod:
 	stm	lr, {r0-r7}
 	pop	{r0, r4-r11, pc}
 	.size	emill_p256_mulmod, .-emill_p256_mulmod
+
+	.global emill_p256_sqrmod
+	.p2align 2
+	.thumb_func
+	.type emill_p256_sqrmod, %function
+emill_p256_sqrmod:
+	push	{r0, r4-r11, lr}
+	ldm	r1, {r0-r7}
+	bl	P256_sqrmod
+	ldr	lr, [sp]
+	stm	lr, {r0-r7}
+	pop	{r0, r4-r11, pc}
+	.size	emill_p256_sqrmod, .-emill_p256_sqrmod
+
+	.global emill_p256_addmod
+	.p2align 2
+	.thumb_func
+	.type emill_p256_addmod, %function
+emill_p256_addmod:
+	push	{r0, r4-r11, lr}
+	bl	P256_addmod
+	ldr	lr, [sp]
+	stm	lr, {r0-r7}
+	pop	{r0, r4-r11, pc}
+	.size	emill_p256_addmod, .-emill_p256_addmod
+
+	.global emill_p256_submod
+	.p2align 2
+	.thumb_func
+	.type emill_p256_submod, %function
+emill_p256_submod:
+	push	{r0, r4-r11, lr}
+	bl	P256_submod
+	ldr	lr, [sp]
+	stm	lr, {r0-r7}
+	pop	{r0, r4-r11, pc}
+	.size	emill_p256_submod, .-emill_p256_submod
