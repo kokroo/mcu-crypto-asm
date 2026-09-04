@@ -31,8 +31,6 @@ p256::ecdsa::sign(&secret, &msg_hash, &nonce, &mut r, &mut s)?;
 p256::ecdsa::verify(&pk, &msg_hash, &r, &s)?;
 ```
 
-For embassy or async executors, non-blocking yielding variants (`derive_public_key_yielding`, `shared_secret_yielding`, `sign_yielding`, `verify_yielding`) cooperatively yield every ~350–640 µs so other tasks never stall.
-
 ---
 
 ## Scope & Adoption
@@ -76,12 +74,12 @@ Head-to-head comparison against `fiat-crypto` (the backend vendored by RustCrypt
 
 | Operation | P-256 Cycles | P-256 Time | P-384 Cycles | P-384 Time |
 |---|---|---|---|---|
-| Comb Base Mul (`k*G`) | 1 530 713 | **23 ms** | 3 970 297 | **62 ms** |
-| `derive_public_key` | 1 807 503 | **28 ms** | 4 570 000 | **71 ms** |
+| Comb Base Mul (`k*G`) | 1 529 936 | **23 ms** | 3 970 291 | **62 ms** |
+| `derive_public_key` | 1 807 166 | **28 ms** | 4 567 634 | **71 ms** |
 | `decompress_point` | 586 288 | **9 ms** | 1 328 107 | **21 ms** |
-| `ECDSA sign` | 3 035 547 | **47 ms** | 7 621 429 | **119 ms** |
-| `ECDSA verify` | 8 961 720 | **140 ms** | 22 977 261 | **359 ms** |
-| ECDH Shared Secret (`k*P`) | 5 909 009 | **92 ms** | 15 354 470 | **239 ms** |
+| `ECDSA sign` | 3 003 278 | **46 ms** | 7 621 383 | **119 ms** |
+| `ECDSA verify` | 6 251 727 | **97 ms** | 16 219 375 | **253 ms** |
+| ECDH Shared Secret (`k*P`) | 3 230 184 | **50 ms** | 8 566 872 | **133 ms** |
 
 ---
 
@@ -90,30 +88,10 @@ Head-to-head comparison against `fiat-crypto` (the backend vendored by RustCrypt
 All operations execute in strictly constant time with zero operand-dependent branches or memory lookup tables. Verification uses three complementary layers:
 
 1. **Static Assembly Audit** (`cargo test --test constant_time`): Verifies generated assembly contains zero branches, all loads use fixed `[reg, #imm]` offsets, and only constant-latency instructions are used.
-2. **Dynamic Hardware Timing** (`harness/src/bin/ct.rs`): Tests diverse operand classes against same-input controls on real silicon using DWT CYCCNT.
+2. **Dynamic Hardware Timing** (`harness/src/bin/ct.rs`): Tests diverse operand classes against same-input controls on real silicon using DWT CYCCNT (zero cycle spread across all operations).
 3. **Instruction Tracing** (`harness/src/bin/scantrace.rs`): QEMU single-step execution tracing diffs PC execution traces to prove identical instruction sequences across inputs.
 
 > **Security Note**: Constant time is guaranteed with respect to secret scalars and field element values. Not hardened against physical side-channels (power/EM) or fault injection. Cortex-M3 is deliberately excluded due to its variable-latency multiplier.
-
----
-
-## Non-Blocking Async Execution
-
-On single-core MCUs, blocking for 20–240 ms stalls the executor and drops radio/BLE deadlines. The yielding APIs cooperatively pause execution with zero async runtime dependencies:
-
-```rust
-// Yielding ECDH: yields every ~640 µs, total overhead < 0.2%
-let shared = shared_secret_yielding(&p384::CURVE, &secret, &peer_pk, 1).await?;
-
-// Or drive via state machine:
-let mut sm = ScalarMul::new(&p384::CURVE, &point, &k);
-while sm.step(&p384::CURVE, 4).is_none() { /* yield / poll hardware */ }
-```
-
-| Operation | Blocking Duration | Longest Uninterrupted Chunk (`budget = 1`) |
-|---|---|---|
-| P-256 `k*P` | 92 ms | **345 µs** |
-| P-384 `k*P` | 239 ms | **640 µs** |
 
 ---
 
@@ -123,7 +101,10 @@ while sm.step(&p384::CURVE, 4).is_none() { /* yield / poll hardware */ }
 - **Target-Specific Assembly**:
   - **Cortex-M4 / M7 / M33**: Uses 1-cycle `UMAAL` instructions (`RdHi:RdLo = Rn*Rm + RdHi + RdLo`).
   - **Xtensa LX7**: Synthesizes branchless carry chains using `SALTU`.
-- **Complete Projective Formulas**: Renes-Costello-Batina complete addition formulas ($a = -3$) eliminate special cases for point doubling vs addition.
+- **Jacobian Coordinates & Algorithm 10 Doubling**: eprint 2014/130 doubling (4 sqr + 4 mul) and mixed addition mimicking Emil Lenngren's P256-Cortex-M4 techniques, cutting variable-base scalar multiplication latency by nearly 50%.
+- **Signed Odd-Scalar Recoding ($w=4$)**: Constant-time odd recoding with an 8-point precomputed table eliminates zero doublings/additions.
+- **Fast Inversionless ECDSA Verification**: Verifies signatures directly in projective/Jacobian coordinates via $r \cdot Z^2 \equiv X \pmod p$, eliminating the expensive modular field inversion.
+- **Complete Projective Formulas**: Renes-Costello-Batina complete addition formulas ($a = -3$) eliminate special cases for general point additions.
 - **Fixed-Base Comb**: Precomputed tables accelerate base point multiplication (`k*G`) down to 23 ms (P-256) / 62 ms (P-384).
 - **Input Validation**: Rejects points off-curve or not in the valid subgroup before computation, preventing invalid-curve attacks.
 
