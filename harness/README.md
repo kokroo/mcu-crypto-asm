@@ -19,3 +19,14 @@ valid *relative* measure. The binary runs a linearity self-check and refuses
 to report numbers if the counter does not scale with work.
 
 On real hardware the same binary uses DWT CYCCNT and reports exact cycles.
+
+## Real Hardware (RAM execution)
+
+### nRF52840 (Cortex-M4)
+    NISTP_MEMORY_X=memory-nrf-ram.x cargo build --release --bin bench
+    probe-rs run --chip nRF52840_xxAA target/thumbv7em-none-eabihf/release/bench
+
+### STM32H563 (Cortex-M33)
+    NISTP_MEMORY_X=memory-stm32h5-ram.x cargo build --release --target thumbv8m.main-none-eabihf --bin bench
+    probe-rs run --chip STM32H563ZI target/thumbv8m.main-none-eabihf/release/bench
+

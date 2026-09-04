@@ -21,6 +21,7 @@ use panic_semihosting as _;
 const DEMCR: *mut u32 = 0xE000_EDFC as *mut u32;
 const DWT_CTRL: *mut u32 = 0xE000_1000 as *mut u32;
 const DWT_CYCCNT: *mut u32 = 0xE000_1004 as *mut u32;
+const DWT_LAR: *mut u32 = 0xE000_1FB0 as *mut u32;
 
 const SYST_CSR: *mut u32 = 0xE000_E010 as *mut u32;
 const SYST_RVR: *mut u32 = 0xE000_E014 as *mut u32;
@@ -30,6 +31,7 @@ static mut USE_DWT: bool = false;
 fn init() {
     unsafe {
         DEMCR.write_volatile(DEMCR.read_volatile() | (1 << 24));
+        DWT_LAR.write_volatile(0xC5AC_CE55);
         DWT_CYCCNT.write_volatile(0);
         DWT_CTRL.write_volatile(DWT_CTRL.read_volatile() | 1);
         let a = DWT_CYCCNT.read_volatile();

@@ -6,3 +6,11 @@ target = "thumbv7em-none-eabihf"
 [target.thumbv7em-none-eabihf]
 runner = "qemu-system-arm -machine mps2-an386 -cpu cortex-m4 -nographic -semihosting-config enable=on,target=native -kernel"
 rustflags = ["-C", "link-arg=-Tlink.x"]
+
+[target.thumbv8m.main-none-eabihf]
+runner = "qemu-system-arm -machine mps2-an505 -cpu cortex-m33 -nographic -semihosting-config enable=on,target=native -kernel"
+rustflags = ["-C", "link-arg=-Tlink.x"]
+
+[target.thumbv8m.main-none-eabi]
+rustflags = ["-C", "link-arg=-Tlink.x"]
+

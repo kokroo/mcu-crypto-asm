@@ -56,8 +56,8 @@ do not stall every other task - see [Not blocking the executor](#not-blocking-th
 
 | primitive | status |
 |---|---|
-| P-256 field arithmetic, point ops, ECDH, ECDSA | ✅ done, hardware-validated |
-| P-384 field arithmetic, point ops, ECDH, ECDSA | ✅ done, hardware-validated |
+| P-256 field arithmetic, point ops, decompression, ECDH, ECDSA | ✅ done, hardware-validated |
+| P-384 field arithmetic, point ops, decompression, ECDH, ECDSA | ✅ done, hardware-validated |
 | further primitives (hashing, symmetric, X25519) | not started |
 
 Each primitive lives in its own module and, once there is more than one, its
@@ -106,7 +106,7 @@ Reproduce with `harness/src/bin/bench.rs`.
 
 | operation | fiat-crypto | mcu-crypto-asm | Emill | verdict |
 |---|---|---|---|---|
-| P-256 | 2250 | **830** | **392** | Emill wins, 2.11x |
+| P-256 | 2238 | **824** | **392** | Emill wins, 2.10x |
 | P-384 | 3858 | **1474** | n/a | **we win, 2.61x** |
 
 **ESP32-S3 (Xtensa LX7)**
@@ -127,20 +127,35 @@ worse - while this crate degrades only 1.35x. Portable code leans on the
 compiler to synthesise carry chains, and Xtensa has **no carry flag**, so that
 code falls apart. Explicit `SALTU` carry handling is what recovers it.
 
+### Field and point operations vs fiat-crypto (nRF52840 @ 64 MHz)
+
+Head-to-head on silicon against the backend used by RustCrypto:
+
+| operation | fiat-crypto | mcu-crypto-asm | speedup |
+|---|---|---|---|
+| P-256 `mul_mont` | 2 238 | **824** | **2.71x** |
+| P-256 `sqr_mont` | 2 080 | **793** | **2.62x** |
+| P-256 `Point::add` | 36 137 | **17 085** | **2.11x** |
+| P-384 `mul_mont` | 3 858 | **1 474** | **2.61x** |
+| P-384 `sqr_mont` | 3 507 | **1 426** | **2.45x** |
+| P-384 `Point::add` | 64 174 | **30 131** | **2.12x** |
+
 ### Higher-level operations (nRF52840 @ 64 MHz)
 
 | operation | cycles | time |
 |---|---|---|
 | `k*G` (fixed-base comb) P-256 | 1 530 713 | **23 ms** |
-| `k*G` (fixed-base comb) P-384 | 3 976 781 | **62 ms** |
+| `k*G` (fixed-base comb) P-384 | 3 970 297 | **62 ms** |
 | `derive_public_key` P-256 | 1 807 503 | **28 ms** |
-| `derive_public_key` P-384 | 4 574 168 | **71 ms** |
+| `derive_public_key` P-384 | 4 570 000 | **71 ms** |
+| `decompress_point` P-256 | 586 288 | **9 ms** |
+| `decompress_point` P-384 | 1 328 107 | **21 ms** |
 | `ECDSA sign` P-256 | 3 035 547 | **47 ms** |
-| `ECDSA sign` P-384 | 7 725 068 | **120 ms** |
+| `ECDSA sign` P-384 | 7 621 429 | **119 ms** |
 | `ECDSA verify` P-256 | 8 961 720 | **140 ms** |
-| `ECDSA verify` P-384 | 23 092 304 | **360 ms** |
-| `k*P` (variable base, ECDH) P-256 | 5 909 009 | 92 ms |
-| `k*P` (variable base, ECDH) P-384 | 15 351 020 | 239 ms |
+| `ECDSA verify` P-384 | 22 977 261 | **359 ms** |
+| `k*P` (variable base, ECDH) P-256 | 5 909 009 | **92 ms** |
+| `k*P` (variable base, ECDH) P-384 | 15 354 470 | **239 ms** |
 
 `k*G` started at 150 ms (P-256) / 433 ms (P-384). What got it here:
 
@@ -342,7 +357,7 @@ Nothing is trusted because it looks right:
 | target | backend | notes |
 |---|---|---|
 | `thumbv7em-none-eabi(hf)` | assembly | Cortex-M4 / M7 |
-| `thumbv8m.main-none-eabi(hf)` | assembly | Cortex-M33 |
+| `thumbv8m.main-none-eabi(hf)` | assembly | Cortex-M33 (STM32H5, nRF5340, LPC55S, etc.) |
 | `xtensa-esp32s3-none-elf` | assembly | needs the esp toolchain |
 | `xtensa-esp32s2-none-elf` | assembly | needs the esp toolchain |
 | everything else | portable Rust | host, RISC-V, Cortex-M0+, ... |
@@ -405,6 +420,34 @@ binary uses DWT CYCCNT and reports exact cycles.
 instruction fetch contends with data on the same bus (~2.6 cycles/instruction
 observed on the M4). Ratios against fiat-crypto hold since both run under
 identical conditions; absolute cycles from flash will differ.
+
+### Running and testing on STM32H563 (Cortex-M33)
+
+The STM32H563 (ARMv8-M Mainline, Cortex-M33 with DSP & FPU) is fully supported out of the box with zero source modifications. The assembly uses Thumb-2 `UMAAL`, and the test harness automatically unlocks the ARMv8-M DWT Lock Access Register (`DWT_LAR`) for exact cycle counting.
+
+```sh
+# Prerequisite: install the target
+rustup target add thumbv8m.main-none-eabihf
+
+# Test suite (KATs + differential testing) running from RAM (leaves flash untouched):
+cd harness
+NISTP_MEMORY_X=memory-stm32h5-ram.x cargo build --release --target thumbv8m.main-none-eabihf --bin nistp-harness
+probe-rs run --chip STM32H563ZI target/thumbv8m.main-none-eabihf/release/nistp-harness
+
+# Cycle benchmarks on hardware (DWT CYCCNT, RAM-only):
+NISTP_MEMORY_X=memory-stm32h5-ram.x cargo build --release --target thumbv8m.main-none-eabihf --bin bench
+probe-rs run --chip STM32H563ZI target/thumbv8m.main-none-eabihf/release/bench
+
+# Constant-time verification on hardware:
+NISTP_MEMORY_X=memory-stm32h5-ram.x cargo build --release --target thumbv8m.main-none-eabihf --bin ct
+probe-rs run --chip STM32H563ZI target/thumbv8m.main-none-eabihf/release/ct
+
+# Flashing to internal Flash (0x08000000):
+NISTP_MEMORY_X=memory-stm32h5.x cargo build --release --target thumbv8m.main-none-eabihf --bin bench
+probe-rs run --chip STM32H563ZI target/thumbv8m.main-none-eabihf/release/bench
+```
+
+> **Tip**: For Cortex-M33 devices without single-precision hardware floating point, use `thumbv8m.main-none-eabi`. For different STM32H5 package variants, adjust `--chip` (e.g. `STM32H563ZITx`, `STM32H563IITx`, or generic `STM32H563xx`).
 
 ---
 
