@@ -249,6 +249,50 @@ fn main() -> ! {
         hprintln!("  ok   p256 ecdsa sign & verify");
     }
 
+    #[cfg(nistp_asm_cm4)]
+    {
+        let a = [0x1234_5678, 0x9abc_def0, 0x0f1e_2d3c, 0x4b5a_6978,
+                 0xdead_beef, 0xcafe_babe, 0x0bad_c0de, 0x1337_4269];
+        let mut a_inv = [0u32; 8];
+        backend::cortex_m4::p256::mod_n_inv(&mut a_inv, &a);
+        let sa = mcu_crypto_asm::Scalar::<{ p256::N }>::from_int(&p256::CURVE, &a);
+        let sa_inv = mcu_crypto_asm::Scalar::<{ p256::N }>::from_int(&p256::CURVE, &a_inv);
+        let prod = sa.mul(&p256::CURVE, &sa_inv);
+        if prod != mcu_crypto_asm::Scalar::<{ p256::N }>::one(&p256::CURVE) {
+            hprintln!("  FAIL p256 mod_n_inv on-target");
+            fails += 1;
+        } else {
+            hprintln!("  ok   p256 mod_n_inv (Bernstein-Yang)");
+        }
+    }
+
+    #[cfg(feature = "embassy-driver")]
+    {
+        use mcu_crypto_asm::embassy::{drv::{P256Ops, P256Scalar}, P256OpsDriver};
+        let g = P256OpsDriver::projective_generator();
+        let k_bytes = [0x42u8; 32];
+        let k = P256OpsDriver::scalar_reduce_bytes(&k_bytes);
+        let k_inv = P256OpsDriver::scalar_inv(&k);
+        let k_prod = P256OpsDriver::scalar_mul(&k, &k_inv);
+        let one = P256OpsDriver::scalar_from_canonical(&{
+            let mut one_b = [0u8; 32];
+            one_b[31] = 1;
+            P256Scalar(one_b)
+        });
+        let g_k = P256OpsDriver::scalar_mul_projective(&k, &g);
+        let aff_k = P256OpsDriver::point_to_canonical(&g_k);
+        let g_2k_lincomb = P256OpsDriver::projective_lincomb(&k, &g, &k, &g);
+        let g_2k_add = P256OpsDriver::projective_add(&g_k, &g_k);
+        let aff_lincomb = P256OpsDriver::point_to_canonical(&g_2k_lincomb);
+        let aff_add = P256OpsDriver::point_to_canonical(&g_2k_add);
+        if k_prod != one || aff_lincomb.x != aff_add.x || aff_lincomb.y != aff_add.y || aff_k.x == [0u8; 32] {
+            hprintln!("  FAIL p256 embassy driver on-target");
+            fails += 1;
+        } else {
+            hprintln!("  ok   p256 embassy driver on-target");
+        }
+    }
+
     hprintln!("P-384:");
     fails += run_kat::<{ p384::N }>(&p384::FIELD, "p384", &kat::P384_MUL);
     fails += run_differential::<{ p384::N }>(&p384::FIELD, "p384", 500);

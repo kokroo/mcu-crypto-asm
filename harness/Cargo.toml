@@ -16,6 +16,10 @@ cortex-m-semihosting = "0.5"
 panic-semihosting = { version = "0.6", features = ["exit"] }
 fiat-crypto = { version = "0.3", default-features = false }
 
+[features]
+default = []
+embassy-driver = ["mcu-crypto-asm/embassy-driver"]
+
 [profile.release]
 opt-level = 3
 lto = true

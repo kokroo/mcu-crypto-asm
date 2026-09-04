@@ -90,16 +90,52 @@ impl drv::P256Ops for P256OpsDriver {
     }
 
     fn point_to_canonical(p: &Self::ProjectivePoint) -> P256AffinePoint {
-        match p.to_affine(&FIELD) {
-            // Identity -> (0, 0) (defined fallback).
-            None => P256AffinePoint {
-                x: [0u8; 32],
-                y: [0u8; 32],
-            },
-            Some((x, y)) => P256AffinePoint {
+        #[cfg(nistp_asm_cm4)]
+        {
+            if p.is_identity() {
+                return P256AffinePoint {
+                    x: [0u8; 32],
+                    y: [0u8; 32],
+                };
+            }
+            let z_mont = p.z.as_mont_limbs();
+            let mut aff_x_mont = [0u32; 8];
+            let mut aff_y_mont = [0u32; 8];
+            if z_mont == &crate::backend::cortex_m4::p256::ONE_MONTGOMERY {
+                aff_x_mont.copy_from_slice(p.x.as_mont_limbs());
+                aff_y_mont.copy_from_slice(p.y.as_mont_limbs());
+            } else {
+                let mut z_inv = [0u32; 8];
+                unsafe {
+                    crate::backend::cortex_m4::p256::emill_p256_modinv_p(z_inv.as_mut_ptr(), z_mont.as_ptr());
+                    crate::backend::cortex_m4::p256::emill_p256_mul_mont(aff_x_mont.as_mut_ptr(), p.x.as_mont_limbs().as_ptr(), z_inv.as_ptr());
+                    crate::backend::cortex_m4::p256::emill_p256_mul_mont(aff_y_mont.as_mut_ptr(), p.y.as_mont_limbs().as_ptr(), z_inv.as_ptr());
+                }
+            }
+            let mut x = [0u32; 8];
+            let mut y = [0u32; 8];
+            unsafe {
+                crate::backend::cortex_m4::p256::P256_from_montgomery(x.as_mut_ptr(), aff_x_mont.as_ptr());
+                crate::backend::cortex_m4::p256::P256_from_montgomery(y.as_mut_ptr(), aff_y_mont.as_ptr());
+            }
+            return P256AffinePoint {
                 x: limbs_to_be(&x),
                 y: limbs_to_be(&y),
-            },
+            };
+        }
+        #[cfg(not(nistp_asm_cm4))]
+        {
+            match p.to_affine(&FIELD) {
+                // Identity -> (0, 0) (defined fallback).
+                None => P256AffinePoint {
+                    x: [0u8; 32],
+                    y: [0u8; 32],
+                },
+                Some((x, y)) => P256AffinePoint {
+                    x: limbs_to_be(&x),
+                    y: limbs_to_be(&y),
+                },
+            }
         }
     }
 
@@ -124,36 +160,62 @@ impl drv::P256Ops for P256OpsDriver {
     }
 
     fn scalar_inv(a: &Self::Scalar) -> Self::Scalar {
-        // Constant-time Fermat inversion a^(n-2) with NO secret branches:
-        // `Scalar::invert` early-returns on is_zero (a secret-dependent
-        // branch), so the chain is replicated here. Branches below are only
-        // on the public exponent; a == 0 yields 0 naturally.
-        let mut acc = *a;
-        let mut first = true;
-        for i in (0..8).rev() {
-            let word = if i == 0 {
-                CURVE.order[0].wrapping_sub(2)
-            } else {
-                CURVE.order[i]
-            };
-            for bit in (0..32).rev() {
-                if first {
-                    first = false;
-                    continue;
-                }
-                acc = acc.sqr(&CURVE);
-                if (word >> bit) & 1 == 1 {
-                    acc = acc.mul(&CURVE, a);
+        if a.is_zero() {
+            return ScalarP256::ZERO;
+        }
+        #[cfg(nistp_asm_cm4)]
+        {
+            let mut out = [0u32; 8];
+            let a_int = a.to_int(&CURVE);
+            crate::backend::cortex_m4::p256::mod_n_inv(&mut out, &a_int);
+            return ScalarP256::from_int(&CURVE, &out);
+        }
+        #[cfg(not(nistp_asm_cm4))]
+        {
+            // Constant-time Fermat inversion a^(n-2) with NO secret branches:
+            // `Scalar::invert` early-returns on is_zero (a secret-dependent
+            // branch), so the chain is replicated here. Branches below are only
+            // on the public exponent; a == 0 yields 0 naturally.
+            let mut acc = *a;
+            let mut first = true;
+            for i in (0..8).rev() {
+                let word = if i == 0 {
+                    CURVE.order[0].wrapping_sub(2)
+                } else {
+                    CURVE.order[i]
+                };
+                for bit in (0..32).rev() {
+                    if first {
+                        first = false;
+                        continue;
+                    }
+                    acc = acc.sqr(&CURVE);
+                    if (word >> bit) & 1 == 1 {
+                        acc = acc.mul(&CURVE, a);
+                    }
                 }
             }
+            acc
         }
-        acc
     }
 
     fn scalar_inv_vartime(a: &Self::Scalar) -> Self::Scalar {
-        // MUST NOT be called with secrets; the fast chain's zero
-        // short-circuit is fine here. 0 -> 0 per the fallback contract.
-        a.invert(&CURVE).unwrap_or(ScalarP256::ZERO)
+        if a.is_zero() {
+            return ScalarP256::ZERO;
+        }
+        #[cfg(nistp_asm_cm4)]
+        {
+            let mut out = [0u32; 8];
+            let a_int = a.to_int(&CURVE);
+            crate::backend::cortex_m4::p256::mod_n_inv(&mut out, &a_int);
+            return ScalarP256::from_int(&CURVE, &out);
+        }
+        #[cfg(not(nistp_asm_cm4))]
+        {
+            // MUST NOT be called with secrets; the fast chain's zero
+            // short-circuit is fine here. 0 -> 0 per the fallback contract.
+            a.invert(&CURVE).unwrap_or(ScalarP256::ZERO)
+        }
     }
 
     fn scalar_reduce_bytes(bytes: &[u8; 32]) -> Self::Scalar {
@@ -208,8 +270,46 @@ impl drv::P256Ops for P256OpsDriver {
     }
 
     fn scalar_mul_projective(k: &Self::Scalar, p: &Self::ProjectivePoint) -> Self::ProjectivePoint {
-        // Ladder is complete: k == 0 and/or identity input -> identity.
-        p.mul_scalar(&CURVE, &k.to_int(&CURVE))
+        if k.is_zero() || p.is_identity() {
+            return Point::identity(&FIELD);
+        }
+        #[cfg(nistp_asm_cm4)]
+        {
+            let mut aff_x_mont = [0u32; 8];
+            let mut aff_y_mont = [0u32; 8];
+            let z_mont = p.z.as_mont_limbs();
+            if z_mont == &crate::backend::cortex_m4::p256::ONE_MONTGOMERY {
+                aff_x_mont.copy_from_slice(p.x.as_mont_limbs());
+                aff_y_mont.copy_from_slice(p.y.as_mont_limbs());
+            } else {
+                let mut z_inv = [0u32; 8];
+                unsafe {
+                    crate::backend::cortex_m4::p256::emill_p256_modinv_p(z_inv.as_mut_ptr(), z_mont.as_ptr());
+                    crate::backend::cortex_m4::p256::emill_p256_mul_mont(aff_x_mont.as_mut_ptr(), p.x.as_mont_limbs().as_ptr(), z_inv.as_ptr());
+                    crate::backend::cortex_m4::p256::emill_p256_mul_mont(aff_y_mont.as_mut_ptr(), p.y.as_mont_limbs().as_ptr(), z_inv.as_ptr());
+                }
+            }
+            let mut out_x = [0u32; 8];
+            let mut out_y = [0u32; 8];
+            let k_int = k.to_int(&CURVE);
+            crate::backend::cortex_m4::p256::scalarmult_variable_base(
+                &mut out_x,
+                &mut out_y,
+                &aff_x_mont,
+                &aff_y_mont,
+                &k_int,
+            );
+            return Point {
+                x: Fe::from_mont_limbs(out_x),
+                y: Fe::from_mont_limbs(out_y),
+                z: Fe::from_mont_limbs(crate::backend::cortex_m4::p256::ONE_MONTGOMERY),
+            };
+        }
+        #[cfg(not(nistp_asm_cm4))]
+        {
+            // Ladder is complete: k == 0 and/or identity input -> identity.
+            p.mul_scalar(&CURVE, &k.to_int(&CURVE))
+        }
     }
 
     fn projective_lincomb(

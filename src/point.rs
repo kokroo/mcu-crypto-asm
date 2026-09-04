@@ -537,16 +537,17 @@ impl<const N: usize> Point<N> {
             if N == 8 && core::ptr::eq(f.p.as_ptr(), crate::params::p256::P.as_ptr()) {
                 let mut aff_mont_x = [0u32; 8];
                 let mut aff_mont_y = [0u32; 8];
-                let mut j = [[0u32; 8]; 3];
-                j[0].copy_from_slice(&self.x.as_mont_limbs()[..8]);
-                j[1].copy_from_slice(&self.y.as_mont_limbs()[..8]);
-                j[2].copy_from_slice(&self.z.as_mont_limbs()[..8]);
-                unsafe {
-                    crate::backend::cortex_m4::p256::P256_jacobian_to_affine(
-                        aff_mont_x.as_mut_ptr(),
-                        aff_mont_y.as_mut_ptr(),
-                        j.as_ptr() as *const u32,
-                    );
+                let z_mont = &self.z.as_mont_limbs()[..8];
+                if z_mont == crate::backend::cortex_m4::p256::ONE_MONTGOMERY {
+                    aff_mont_x.copy_from_slice(&self.x.as_mont_limbs()[..8]);
+                    aff_mont_y.copy_from_slice(&self.y.as_mont_limbs()[..8]);
+                } else {
+                    let mut z_inv = [0u32; 8];
+                    unsafe {
+                        crate::backend::cortex_m4::p256::emill_p256_modinv_p(z_inv.as_mut_ptr(), z_mont.as_ptr());
+                        crate::backend::cortex_m4::p256::emill_p256_mul_mont(aff_mont_x.as_mut_ptr(), self.x.as_mont_limbs().as_ptr(), z_inv.as_ptr());
+                        crate::backend::cortex_m4::p256::emill_p256_mul_mont(aff_mont_y.as_mut_ptr(), self.y.as_mont_limbs().as_ptr(), z_inv.as_ptr());
+                    }
                 }
                 let mut x = [0u32; 8];
                 let mut y = [0u32; 8];

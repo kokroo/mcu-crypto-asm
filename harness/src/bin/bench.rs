@@ -501,6 +501,16 @@ fn main() -> ! {
 
         hprintln!("  P-256 sign    {:>10} cycles  ({} ms @ 64 MHz)", c_sign, c_sign / 64_000);
         hprintln!("  P-256 verify  {:>10} cycles  ({} ms @ 64 MHz)", c_ver, c_ver / 64_000);
+        #[cfg(nistp_asm_cm4)]
+        {
+            let a = [0x1234_5678, 0x9abc_def0, 0x0f1e_2d3c, 0x4b5a_6978,
+                     0xdead_beef, 0xcafe_babe, 0x0bad_c0de, 0x1337_4269];
+            let mut a_inv = [0u32; 8];
+            let s0 = cyccnt();
+            backend::cortex_m4::p256::mod_n_inv(&mut a_inv, &a);
+            let c_inv = cyccnt().wrapping_sub(s0);
+            hprintln!("  P-256 mod_n_inv {:>8} cycles  ({} us @ 64 MHz)", c_inv, c_inv * 1000 / 64_000);
+        }
 
         let d384 = [0x11u8; 48];
         let mut pk384 = [0u8; 97];
