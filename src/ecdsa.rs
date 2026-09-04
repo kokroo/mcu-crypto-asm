@@ -162,8 +162,6 @@ pub fn sign<const N: usize>(
     Ok(())
 }
 
-
-
 fn less_than<const N: usize>(a: &[u32; N], b: &[u32]) -> bool {
     let mut borrow = 0u32;
     for i in 0..N {

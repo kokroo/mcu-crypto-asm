@@ -136,4 +136,3 @@ pub fn try_div2(a: &[u32], p: &[u32], out: &mut [u32]) -> bool {
         false
     }
 }
-

@@ -95,8 +95,6 @@ fn p384_ecdsa_known_answer() {
     assert!(p384::ecdsa::verify(&pk, &e, &r, &bad_s).is_err());
 }
 
-
-
 #[test]
 fn rejects_invalid_signatures() {
     let d = [1u8; 32];

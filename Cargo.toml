@@ -10,6 +10,7 @@ categories = ["cryptography", "no-std", "embedded"]
 keywords = ["crypto", "embedded", "no-std", "cortex-m", "assembly"]
 
 [dependencies]
+embassy-crypto-driver = { git = "https://github.com/xoviat/embassy", branch = "crypto", optional = true }
 
 [dev-dependencies]
 num-bigint = "0.4"
@@ -22,6 +23,8 @@ default = []
 # Force the portable backend even on an arch that has assembly. Used by the
 # differential tests: they need BOTH backends live in one binary to compare.
 force-portable = []
+# Implement embassy-crypto-driver's P256Ops for this crate.
+embassy-driver = ["dep:embassy-crypto-driver"]
 
 [profile.release]
 opt-level = 3

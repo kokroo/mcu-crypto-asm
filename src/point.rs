@@ -319,7 +319,6 @@ impl<const N: usize> Point<N> {
         acc
     }
 
-
     /// One comb iteration: double, then add the table entry selected by bit
     /// `i` of each block. Shared by the blocking and resumable paths so they
     /// cannot drift apart.
@@ -552,8 +551,14 @@ impl<const N: usize> Point<N> {
                 let mut x = [0u32; 8];
                 let mut y = [0u32; 8];
                 unsafe {
-                    crate::backend::cortex_m4::p256::P256_from_montgomery(x.as_mut_ptr(), aff_mont_x.as_ptr());
-                    crate::backend::cortex_m4::p256::P256_from_montgomery(y.as_mut_ptr(), aff_mont_y.as_ptr());
+                    crate::backend::cortex_m4::p256::P256_from_montgomery(
+                        x.as_mut_ptr(),
+                        aff_mont_x.as_ptr(),
+                    );
+                    crate::backend::cortex_m4::p256::P256_from_montgomery(
+                        y.as_mut_ptr(),
+                        aff_mont_y.as_ptr(),
+                    );
                 }
                 let mut x_res = [0u32; N];
                 let mut y_res = [0u32; N];
@@ -819,8 +824,14 @@ impl<const N: usize> PointJacobian<N> {
                 let mut x = [0u32; 8];
                 let mut y = [0u32; 8];
                 unsafe {
-                    crate::backend::cortex_m4::p256::P256_from_montgomery(x.as_mut_ptr(), aff_mont_x.as_ptr());
-                    crate::backend::cortex_m4::p256::P256_from_montgomery(y.as_mut_ptr(), aff_mont_y.as_ptr());
+                    crate::backend::cortex_m4::p256::P256_from_montgomery(
+                        x.as_mut_ptr(),
+                        aff_mont_x.as_ptr(),
+                    );
+                    crate::backend::cortex_m4::p256::P256_from_montgomery(
+                        y.as_mut_ptr(),
+                        aff_mont_y.as_ptr(),
+                    );
                 }
                 let mut x_res = [0u32; N];
                 let mut y_res = [0u32; N];
@@ -861,7 +872,11 @@ impl<const N: usize> PointJacobian<N> {
         let t2 = y2.sub(f, &x3);
         let t1 = t1.mul(f, &t2);
         let y3 = t1.sub(f, &t3);
-        Self { x: x3, y: y3, z: z3 }
+        Self {
+            x: x3,
+            y: y3,
+            z: z3,
+        }
     }
 
     /// Mixed addition: `self + (x2, y2, 1)` where the second point is affine.
@@ -899,7 +914,11 @@ impl<const N: usize> PointJacobian<N> {
         let t2 = self.y.mul(f, &hhh);
         let x3 = t3.sub(f, &hhh).sub(f, &v.add(f, &v));
         let y3 = r.mul(f, &v.sub(f, &x3)).sub(f, &t2);
-        Self { x: x3, y: y3, z: z3 }
+        Self {
+            x: x3,
+            y: y3,
+            z: z3,
+        }
     }
 
     /// General Jacobian addition.
@@ -935,7 +954,11 @@ impl<const N: usize> PointJacobian<N> {
         let x3 = t3.sub(f, &hhh).sub(f, &v.add(f, &v));
         let y3 = r.mul(f, &v.sub(f, &x3)).sub(f, &s1.mul(f, &hhh));
         let z3 = self.z.mul(f, &rhs.z).mul(f, &h);
-        Self { x: x3, y: y3, z: z3 }
+        Self {
+            x: x3,
+            y: y3,
+            z: z3,
+        }
     }
 
     /// Branchless select: returns `b` when `mask` is all-ones, `a` when zero.
@@ -1142,4 +1165,3 @@ impl<const N: usize> PointJacobian<N> {
         acc
     }
 }
-

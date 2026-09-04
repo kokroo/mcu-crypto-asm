@@ -79,15 +79,28 @@ impl<const N: usize> Fe<N> {
             if N == 8 {
                 let mut out = core::mem::MaybeUninit::<[u32; N]>::uninit();
                 unsafe {
-                    crate::backend::cortex_m4::emill_p256_mul_mont(out.as_mut_ptr() as *mut u32, self.v.as_ptr(), rhs.v.as_ptr());
-                    return Self { v: out.assume_init() };
+                    crate::backend::cortex_m4::emill_p256_mul_mont(
+                        out.as_mut_ptr() as *mut u32,
+                        self.v.as_ptr(),
+                        rhs.v.as_ptr(),
+                    );
+                    return Self {
+                        v: out.assume_init(),
+                    };
                 }
             }
             if N == 12 {
                 let mut out = core::mem::MaybeUninit::<[u32; N]>::uninit();
                 unsafe {
-                    crate::backend::cortex_m4::nistp_mul_mont_12(out.as_mut_ptr() as *mut u32, self.v.as_ptr(), rhs.v.as_ptr(), f.p.as_ptr());
-                    return Self { v: out.assume_init() };
+                    crate::backend::cortex_m4::nistp_mul_mont_12(
+                        out.as_mut_ptr() as *mut u32,
+                        self.v.as_ptr(),
+                        rhs.v.as_ptr(),
+                        f.p.as_ptr(),
+                    );
+                    return Self {
+                        v: out.assume_init(),
+                    };
                 }
             }
         }
@@ -104,15 +117,26 @@ impl<const N: usize> Fe<N> {
             if N == 8 {
                 let mut out = core::mem::MaybeUninit::<[u32; N]>::uninit();
                 unsafe {
-                    crate::backend::cortex_m4::emill_p256_sqr_mont(out.as_mut_ptr() as *mut u32, self.v.as_ptr());
-                    return Self { v: out.assume_init() };
+                    crate::backend::cortex_m4::emill_p256_sqr_mont(
+                        out.as_mut_ptr() as *mut u32,
+                        self.v.as_ptr(),
+                    );
+                    return Self {
+                        v: out.assume_init(),
+                    };
                 }
             }
             if N == 12 {
                 let mut out = core::mem::MaybeUninit::<[u32; N]>::uninit();
                 unsafe {
-                    crate::backend::cortex_m4::nistp_sqr_mont_12(out.as_mut_ptr() as *mut u32, self.v.as_ptr(), f.p.as_ptr());
-                    return Self { v: out.assume_init() };
+                    crate::backend::cortex_m4::nistp_sqr_mont_12(
+                        out.as_mut_ptr() as *mut u32,
+                        self.v.as_ptr(),
+                        f.p.as_ptr(),
+                    );
+                    return Self {
+                        v: out.assume_init(),
+                    };
                 }
             }
         }
@@ -129,15 +153,28 @@ impl<const N: usize> Fe<N> {
             if N == 8 {
                 let mut out = core::mem::MaybeUninit::<[u32; N]>::uninit();
                 unsafe {
-                    crate::backend::cortex_m4::emill_p256_add_mod(out.as_mut_ptr() as *mut u32, self.v.as_ptr(), rhs.v.as_ptr());
-                    return Self { v: out.assume_init() };
+                    crate::backend::cortex_m4::emill_p256_add_mod(
+                        out.as_mut_ptr() as *mut u32,
+                        self.v.as_ptr(),
+                        rhs.v.as_ptr(),
+                    );
+                    return Self {
+                        v: out.assume_init(),
+                    };
                 }
             }
             if N == 12 {
                 let mut out = core::mem::MaybeUninit::<[u32; N]>::uninit();
                 unsafe {
-                    crate::backend::cortex_m4::nistp_add_mod_12(out.as_mut_ptr() as *mut u32, self.v.as_ptr(), rhs.v.as_ptr(), f.p.as_ptr());
-                    return Self { v: out.assume_init() };
+                    crate::backend::cortex_m4::nistp_add_mod_12(
+                        out.as_mut_ptr() as *mut u32,
+                        self.v.as_ptr(),
+                        rhs.v.as_ptr(),
+                        f.p.as_ptr(),
+                    );
+                    return Self {
+                        v: out.assume_init(),
+                    };
                 }
             }
         }
@@ -154,15 +191,28 @@ impl<const N: usize> Fe<N> {
             if N == 8 {
                 let mut out = core::mem::MaybeUninit::<[u32; N]>::uninit();
                 unsafe {
-                    crate::backend::cortex_m4::emill_p256_sub_mod(out.as_mut_ptr() as *mut u32, self.v.as_ptr(), rhs.v.as_ptr());
-                    return Self { v: out.assume_init() };
+                    crate::backend::cortex_m4::emill_p256_sub_mod(
+                        out.as_mut_ptr() as *mut u32,
+                        self.v.as_ptr(),
+                        rhs.v.as_ptr(),
+                    );
+                    return Self {
+                        v: out.assume_init(),
+                    };
                 }
             }
             if N == 12 {
                 let mut out = core::mem::MaybeUninit::<[u32; N]>::uninit();
                 unsafe {
-                    crate::backend::cortex_m4::nistp_sub_mod_12(out.as_mut_ptr() as *mut u32, self.v.as_ptr(), rhs.v.as_ptr(), f.p.as_ptr());
-                    return Self { v: out.assume_init() };
+                    crate::backend::cortex_m4::nistp_sub_mod_12(
+                        out.as_mut_ptr() as *mut u32,
+                        self.v.as_ptr(),
+                        rhs.v.as_ptr(),
+                        f.p.as_ptr(),
+                    );
+                    return Self {
+                        v: out.assume_init(),
+                    };
                 }
             }
         }

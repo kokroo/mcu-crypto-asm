@@ -154,4 +154,3 @@ pub fn shared_secret<const N: usize>(
     limbs_to_be(&sx, out);
     Ok(())
 }
-

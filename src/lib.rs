@@ -35,6 +35,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 #![allow(clippy::needless_range_loop)]
 
+#[cfg(feature = "embassy-driver")]
+pub mod embassy;
+
 pub mod backend;
 pub mod comb_tables;
 pub mod params;
@@ -96,7 +99,11 @@ pub mod p256 {
         #[cfg(nistp_asm_cm4)]
         {
             unsafe {
-                crate::backend::cortex_m4::emill_p256_mul_mont(out.as_mut_ptr(), a.as_ptr(), b.as_ptr());
+                crate::backend::cortex_m4::emill_p256_mul_mont(
+                    out.as_mut_ptr(),
+                    a.as_ptr(),
+                    b.as_ptr(),
+                );
             }
             return;
         }
@@ -128,7 +135,11 @@ pub mod p256 {
         #[cfg(nistp_asm_cm4)]
         {
             unsafe {
-                crate::backend::cortex_m4::emill_p256_add_mod(out.as_mut_ptr(), a.as_ptr(), b.as_ptr());
+                crate::backend::cortex_m4::emill_p256_add_mod(
+                    out.as_mut_ptr(),
+                    a.as_ptr(),
+                    b.as_ptr(),
+                );
             }
             return;
         }
@@ -144,7 +155,11 @@ pub mod p256 {
         #[cfg(nistp_asm_cm4)]
         {
             unsafe {
-                crate::backend::cortex_m4::emill_p256_sub_mod(out.as_mut_ptr(), a.as_ptr(), b.as_ptr());
+                crate::backend::cortex_m4::emill_p256_sub_mod(
+                    out.as_mut_ptr(),
+                    a.as_ptr(),
+                    b.as_ptr(),
+                );
             }
             return;
         }
@@ -246,7 +261,11 @@ pub mod p256 {
         use super::*;
 
         /// Compute ECDH shared secret: computes the x-coordinate of `secret * peer_pk`.
-        pub fn shared_secret(secret: &[u8], peer_pk: &[u8], out: &mut [u8]) -> Result<(), crate::ecdh::Error> {
+        pub fn shared_secret(
+            secret: &[u8],
+            peer_pk: &[u8],
+            out: &mut [u8],
+        ) -> Result<(), crate::ecdh::Error> {
             #[cfg(nistp_asm_cm4)]
             {
                 return crate::backend::cortex_m4::p256::ecdh_shared_secret(secret, peer_pk, out);
@@ -360,7 +379,12 @@ pub mod p384 {
         #[cfg(nistp_asm_cm4)]
         {
             unsafe {
-                crate::backend::cortex_m4::nistp_mul_mont_12(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), FIELD.p.as_ptr());
+                crate::backend::cortex_m4::nistp_mul_mont_12(
+                    out.as_mut_ptr(),
+                    a.as_ptr(),
+                    b.as_ptr(),
+                    FIELD.p.as_ptr(),
+                );
             }
             return;
         }
@@ -376,7 +400,11 @@ pub mod p384 {
         #[cfg(nistp_asm_cm4)]
         {
             unsafe {
-                crate::backend::cortex_m4::nistp_sqr_mont_12(out.as_mut_ptr(), a.as_ptr(), FIELD.p.as_ptr());
+                crate::backend::cortex_m4::nistp_sqr_mont_12(
+                    out.as_mut_ptr(),
+                    a.as_ptr(),
+                    FIELD.p.as_ptr(),
+                );
             }
             return;
         }
@@ -392,7 +420,12 @@ pub mod p384 {
         #[cfg(nistp_asm_cm4)]
         {
             unsafe {
-                crate::backend::cortex_m4::nistp_add_mod_12(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), FIELD.p.as_ptr());
+                crate::backend::cortex_m4::nistp_add_mod_12(
+                    out.as_mut_ptr(),
+                    a.as_ptr(),
+                    b.as_ptr(),
+                    FIELD.p.as_ptr(),
+                );
             }
             return;
         }
@@ -408,7 +441,12 @@ pub mod p384 {
         #[cfg(nistp_asm_cm4)]
         {
             unsafe {
-                crate::backend::cortex_m4::nistp_sub_mod_12(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), FIELD.p.as_ptr());
+                crate::backend::cortex_m4::nistp_sub_mod_12(
+                    out.as_mut_ptr(),
+                    a.as_ptr(),
+                    b.as_ptr(),
+                    FIELD.p.as_ptr(),
+                );
             }
             return;
         }
@@ -475,7 +513,11 @@ pub mod p384 {
         use super::*;
 
         /// Compute ECDH shared secret: computes the x-coordinate of `secret * peer_pk`.
-        pub fn shared_secret(secret: &[u8], peer_pk: &[u8], out: &mut [u8]) -> Result<(), crate::ecdh::Error> {
+        pub fn shared_secret(
+            secret: &[u8],
+            peer_pk: &[u8],
+            out: &mut [u8],
+        ) -> Result<(), crate::ecdh::Error> {
             crate::ecdh::shared_secret::<N>(&CURVE, secret, peer_pk, out)
         }
     }
@@ -525,5 +567,3 @@ pub mod p384 {
         }
     }
 }
-
-
