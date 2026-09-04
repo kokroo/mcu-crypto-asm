@@ -20,6 +20,15 @@ use mcu_crypto_asm::{backend, p256, p384, Point, ScalarMul};
 
 use panic_semihosting as _;
 
+use fiat_crypto::p256_32::{
+    fiat_p256_add, fiat_p256_montgomery_domain_field_element as Fp256, fiat_p256_mul,
+    fiat_p256_square, fiat_p256_sub,
+};
+use fiat_crypto::p384_32::{
+    fiat_p384_add, fiat_p384_montgomery_domain_field_element as Fp384, fiat_p384_mul,
+    fiat_p384_square, fiat_p384_sub,
+};
+
 // Emill's hand-optimised P-256 Montgomery multiply, wrapped in AAPCS by
 // `third_party/emill/shim.S`. This is the reference implementation for P-256
 // on Cortex-M4 — the thing to actually beat.
@@ -205,12 +214,22 @@ fn main() -> ! {
         black_box(black_box(&a256).mul(&p256::FIELD, black_box(&b256)));
     });
 
-    use fiat_crypto::p256_32::{fiat_p256_montgomery_domain_field_element as Fp256, fiat_p256_mul};
     let fa = Fp256(*a256.as_mont_limbs());
     let fb = Fp256(*b256.as_mont_limbs());
     let mut fo = Fp256([0; 8]);
-    let fiat256 = bench!("fiat-crypto p256_32", ITERS, {
+    let fiat256 = bench!("fiat-crypto p256_32 mul", ITERS, {
         fiat_p256_mul(black_box(&mut fo), black_box(&fa), black_box(&fb));
+    });
+
+    let mut port_out256 = [0u32; 8];
+    let port256 = bench!("portable p256 mul", ITERS, {
+        mcu_crypto_asm::backend::portable::mul_mont(
+            black_box(a256.as_mont_limbs()),
+            black_box(b256.as_mont_limbs()),
+            black_box(p256::FIELD.p),
+            p256::FIELD.n0inv,
+            black_box(&mut port_out256),
+        );
     });
 
     // Emill: the hand-optimised P-256 reference.
@@ -247,14 +266,23 @@ fn main() -> ! {
     }
 
     hprintln!("field add/sub/sqr:");
-    let _ = bench!("P-256 sqr_mont", ITERS, {
+    let ours256_sqr = bench!("P-256 sqr_mont (asm)", ITERS, {
         black_box(black_box(&a256).sqr(&p256::FIELD));
     });
-    let _ = bench!("P-256 add_mod", ITERS, {
+    let fiat256_sqr = bench!("P-256 sqr (fiat-crypto)", ITERS, {
+        fiat_p256_square(black_box(&mut fo), black_box(&fa));
+    });
+    let ours256_add = bench!("P-256 add_mod (asm)", ITERS, {
         black_box(black_box(&a256).add(&p256::FIELD, black_box(&b256)));
     });
-    let _ = bench!("P-256 sub_mod", ITERS, {
+    let fiat256_add = bench!("P-256 add (fiat-crypto)", ITERS, {
+        fiat_p256_add(black_box(&mut fo), black_box(&fa), black_box(&fb));
+    });
+    let ours256_sub = bench!("P-256 sub_mod (asm)", ITERS, {
         black_box(black_box(&a256).sub(&p256::FIELD, black_box(&b256)));
+    });
+    let fiat256_sub = bench!("P-256 sub (fiat-crypto)", ITERS, {
+        fiat_p256_sub(black_box(&mut fo), black_box(&fa), black_box(&fb));
     });
 
     // --- P-384 ---
@@ -271,21 +299,41 @@ fn main() -> ! {
         black_box(black_box(&a384).mul(&p384::FIELD, black_box(&b384)));
     });
 
-    use fiat_crypto::p384_32::{fiat_p384_montgomery_domain_field_element as Fp384, fiat_p384_mul};
     let ga = Fp384(*a384.as_mont_limbs());
     let gb = Fp384(*b384.as_mont_limbs());
     let mut go = Fp384([0; 12]);
-    let fiat384 = bench!("fiat-crypto p384_32", ITERS, {
+    let fiat384 = bench!("fiat-crypto p384_32 mul", ITERS, {
         fiat_p384_mul(black_box(&mut go), black_box(&ga), black_box(&gb));
     });
-    let _ = bench!("P-384 sqr_mont", ITERS, {
+
+    let mut port_out384 = [0u32; 12];
+    let port384 = bench!("portable p384 mul", ITERS, {
+        mcu_crypto_asm::backend::portable::mul_mont(
+            black_box(a384.as_mont_limbs()),
+            black_box(b384.as_mont_limbs()),
+            black_box(p384::FIELD.p),
+            p384::FIELD.n0inv,
+            black_box(&mut port_out384),
+        );
+    });
+
+    let ours384_sqr = bench!("P-384 sqr_mont (asm)", ITERS, {
         black_box(black_box(&a384).sqr(&p384::FIELD));
     });
-    let _ = bench!("P-384 add_mod", ITERS, {
+    let fiat384_sqr = bench!("P-384 sqr (fiat-crypto)", ITERS, {
+        fiat_p384_square(black_box(&mut go), black_box(&ga));
+    });
+    let ours384_add = bench!("P-384 add_mod (asm)", ITERS, {
         black_box(black_box(&a384).add(&p384::FIELD, black_box(&b384)));
     });
-    let _ = bench!("P-384 sub_mod", ITERS, {
+    let fiat384_add = bench!("P-384 add (fiat-crypto)", ITERS, {
+        fiat_p384_add(black_box(&mut go), black_box(&ga), black_box(&gb));
+    });
+    let ours384_sub = bench!("P-384 sub_mod (asm)", ITERS, {
         black_box(black_box(&a384).sub(&p384::FIELD, black_box(&b384)));
+    });
+    let fiat384_sub = bench!("P-384 sub (fiat-crypto)", ITERS, {
+        fiat_p384_sub(black_box(&mut go), black_box(&ga), black_box(&gb));
     });
 
     // --- scalar multiplication: what actually blocks an executor ---
@@ -432,9 +480,77 @@ fn main() -> ! {
     }
 
     hprintln!("");
-    hprintln!("vs fiat-crypto (what RustCrypto p256/p384 ship):");
-    report("P-256", fiat256, ours256);
-    report("P-384", fiat384, ours384);
+    hprintln!("Point::add (complete projective addition):");
+    let pt_ours256 = {
+        let g256 = Point::<{ p256::N }>::generator(&p256::CURVE);
+        let g256_2 = g256.add(&p256::CURVE, &g256);
+        bench!("P-256 Point::add (asm)", 100, {
+            black_box(black_box(&g256).add(&p256::CURVE, black_box(&g256_2)));
+        })
+    };
+    let pt_fiat256 = {
+        let g256 = Point::<{ p256::N }>::generator(&p256::CURVE);
+        let g256_2 = g256.add(&p256::CURVE, &g256);
+        let fa_x = Fp256(*g256.x.as_mont_limbs());
+        let fa_y = Fp256(*g256.y.as_mont_limbs());
+        let fa_z = Fp256(*g256.z.as_mont_limbs());
+        let fb_x = Fp256(*g256_2.x.as_mont_limbs());
+        let fb_y = Fp256(*g256_2.y.as_mont_limbs());
+        let fb_z = Fp256(*g256_2.z.as_mont_limbs());
+        let b256_mont = Fp256(p256::CURVE.b_mont.try_into().unwrap());
+        bench!("P-256 Point::add (fiat-crypto)", 100, {
+            black_box(point_add_fiat256(
+                black_box(&fa_x), black_box(&fa_y), black_box(&fa_z),
+                black_box(&fb_x), black_box(&fb_y), black_box(&fb_z),
+                black_box(&b256_mont),
+            ));
+        })
+    };
+
+    let pt_ours384 = {
+        let g384 = Point::<{ p384::N }>::generator(&p384::CURVE);
+        let g384_2 = g384.add(&p384::CURVE, &g384);
+        bench!("P-384 Point::add (asm)", 100, {
+            black_box(black_box(&g384).add(&p384::CURVE, black_box(&g384_2)));
+        })
+    };
+    let pt_fiat384 = {
+        let g384 = Point::<{ p384::N }>::generator(&p384::CURVE);
+        let g384_2 = g384.add(&p384::CURVE, &g384);
+        let ga_x = Fp384(*g384.x.as_mont_limbs());
+        let ga_y = Fp384(*g384.y.as_mont_limbs());
+        let ga_z = Fp384(*g384.z.as_mont_limbs());
+        let gb_x = Fp384(*g384_2.x.as_mont_limbs());
+        let gb_y = Fp384(*g384_2.y.as_mont_limbs());
+        let gb_z = Fp384(*g384_2.z.as_mont_limbs());
+        let b384_mont = Fp384(p384::CURVE.b_mont.try_into().unwrap());
+        bench!("P-384 Point::add (fiat-crypto)", 100, {
+            black_box(point_add_fiat384(
+                black_box(&ga_x), black_box(&ga_y), black_box(&ga_z),
+                black_box(&gb_x), black_box(&gb_y), black_box(&gb_z),
+                black_box(&b384_mont),
+            ));
+        })
+    };
+
+    hprintln!("");
+    hprintln!("=== SPEEDUP COMPARISON vs FIAT-CRYPTO (RustCrypto backend) ===");
+    report("P-256 modular mul", fiat256, ours256);
+    report("P-256 modular sqr", fiat256_sqr, ours256_sqr);
+    report("P-256 modular add", fiat256_add, ours256_add);
+    report("P-256 modular sub", fiat256_sub, ours256_sub);
+    report("P-256 Point::add", pt_fiat256, pt_ours256);
+    hprintln!("");
+    report("P-384 modular mul", fiat384, ours384);
+    report("P-384 modular sqr", fiat384_sqr, ours384_sqr);
+    report("P-384 modular add", fiat384_add, ours384_add);
+    report("P-384 modular sub", fiat384_sub, ours384_sub);
+    report("P-384 Point::add", pt_fiat384, pt_ours384);
+
+    hprintln!("");
+    hprintln!("=== SPEEDUP COMPARISON vs PORTABLE SOFTWARE (Generic CIOS) ===");
+    report("P-256 modular mul vs portable", port256, ours256);
+    report("P-384 modular mul vs portable", port384, ours384);
 
     #[cfg(emill)]
     unsafe {
@@ -475,3 +591,168 @@ fn report(name: &str, baseline: u32, ours: u32) {
         ours
     );
 }
+
+fn point_add_fiat256(
+    x1: &Fp256, y1: &Fp256, z1: &Fp256,
+    x2: &Fp256, y2: &Fp256, z2: &Fp256,
+    b_mont: &Fp256,
+) -> (Fp256, Fp256, Fp256) {
+    let fmul = |a: &Fp256, b: &Fp256| -> Fp256 {
+        let mut out = Fp256([0; 8]);
+        fiat_crypto::p256_32::fiat_p256_mul(&mut out, a, b);
+        out
+    };
+    let fadd = |a: &Fp256, b: &Fp256| -> Fp256 {
+        let mut out = Fp256([0; 8]);
+        fiat_crypto::p256_32::fiat_p256_add(&mut out, a, b);
+        out
+    };
+    let fsub = |a: &Fp256, b: &Fp256| -> Fp256 {
+        let mut out = Fp256([0; 8]);
+        fiat_crypto::p256_32::fiat_p256_sub(&mut out, a, b);
+        out
+    };
+
+    let t0 = fmul(x1, x2);
+    let t1 = fmul(y1, y2);
+    let t2 = fmul(z1, z2);
+
+    let t3 = fadd(x1, y1);
+    let t4 = fadd(x2, y2);
+    let t3 = fmul(&t3, &t4);
+
+    let t4 = fadd(&t0, &t1);
+    let t3 = fsub(&t3, &t4);
+    let t4 = fadd(y1, z1);
+
+    let x3 = fadd(y2, z2);
+    let t4 = fmul(&t4, &x3);
+    let x3 = fadd(&t1, &t2);
+
+    let t4 = fsub(&t4, &x3);
+    let x3 = fadd(x1, z1);
+    let y3 = fadd(x2, z2);
+
+    let x3 = fmul(&x3, &y3);
+    let y3 = fadd(&t0, &t2);
+    let y3 = fsub(&x3, &y3);
+
+    let z3 = fmul(b_mont, &t2);
+    let x3 = fsub(&y3, &z3);
+    let z3 = fadd(&x3, &x3);
+
+    let x3 = fadd(&x3, &z3);
+    let z3 = fsub(&t1, &x3);
+    let x3 = fadd(&t1, &x3);
+
+    let y3 = fmul(b_mont, &y3);
+    let t1 = fadd(&t2, &t2);
+    let t2 = fadd(&t1, &t2);
+
+    let y3 = fsub(&y3, &t2);
+    let y3 = fsub(&y3, &t0);
+    let t1 = fadd(&y3, &y3);
+
+    let y3 = fadd(&t1, &y3);
+    let t1 = fadd(&t0, &t0);
+    let t0 = fadd(&t1, &t0);
+
+    let t0 = fsub(&t0, &t2);
+    let t1 = fmul(&t4, &y3);
+    let t2 = fmul(&t0, &y3);
+
+    let y3 = fmul(&x3, &z3);
+    let y3 = fadd(&y3, &t2);
+    let x3 = fmul(&t3, &x3);
+
+    let x3 = fsub(&x3, &t1);
+    let z3 = fmul(&t4, &z3);
+    let t1 = fmul(&t3, &t0);
+
+    let z3 = fadd(&z3, &t1);
+
+    (x3, y3, z3)
+}
+
+fn point_add_fiat384(
+    x1: &Fp384, y1: &Fp384, z1: &Fp384,
+    x2: &Fp384, y2: &Fp384, z2: &Fp384,
+    b_mont: &Fp384,
+) -> (Fp384, Fp384, Fp384) {
+    let fmul = |a: &Fp384, b: &Fp384| -> Fp384 {
+        let mut out = Fp384([0; 12]);
+        fiat_crypto::p384_32::fiat_p384_mul(&mut out, a, b);
+        out
+    };
+    let fadd = |a: &Fp384, b: &Fp384| -> Fp384 {
+        let mut out = Fp384([0; 12]);
+        fiat_crypto::p384_32::fiat_p384_add(&mut out, a, b);
+        out
+    };
+    let fsub = |a: &Fp384, b: &Fp384| -> Fp384 {
+        let mut out = Fp384([0; 12]);
+        fiat_crypto::p384_32::fiat_p384_sub(&mut out, a, b);
+        out
+    };
+
+    let t0 = fmul(x1, x2);
+    let t1 = fmul(y1, y2);
+    let t2 = fmul(z1, z2);
+
+    let t3 = fadd(x1, y1);
+    let t4 = fadd(x2, y2);
+    let t3 = fmul(&t3, &t4);
+
+    let t4 = fadd(&t0, &t1);
+    let t3 = fsub(&t3, &t4);
+    let t4 = fadd(y1, z1);
+
+    let x3 = fadd(y2, z2);
+    let t4 = fmul(&t4, &x3);
+    let x3 = fadd(&t1, &t2);
+
+    let t4 = fsub(&t4, &x3);
+    let x3 = fadd(x1, z1);
+    let y3 = fadd(x2, z2);
+
+    let x3 = fmul(&x3, &y3);
+    let y3 = fadd(&t0, &t2);
+    let y3 = fsub(&x3, &y3);
+
+    let z3 = fmul(b_mont, &t2);
+    let x3 = fsub(&y3, &z3);
+    let z3 = fadd(&x3, &x3);
+
+    let x3 = fadd(&x3, &z3);
+    let z3 = fsub(&t1, &x3);
+    let x3 = fadd(&t1, &x3);
+
+    let y3 = fmul(b_mont, &y3);
+    let t1 = fadd(&t2, &t2);
+    let t2 = fadd(&t1, &t2);
+
+    let y3 = fsub(&y3, &t2);
+    let y3 = fsub(&y3, &t0);
+    let t1 = fadd(&y3, &y3);
+
+    let y3 = fadd(&t1, &y3);
+    let t1 = fadd(&t0, &t0);
+    let t0 = fadd(&t1, &t0);
+
+    let t0 = fsub(&t0, &t2);
+    let t1 = fmul(&t4, &y3);
+    let t2 = fmul(&t0, &y3);
+
+    let y3 = fmul(&x3, &z3);
+    let y3 = fadd(&y3, &t2);
+    let x3 = fmul(&t3, &x3);
+
+    let x3 = fsub(&x3, &t1);
+    let z3 = fmul(&t4, &z3);
+    let t1 = fmul(&t3, &t0);
+
+    let z3 = fadd(&z3, &t1);
+
+    (x3, y3, z3)
+}
+
