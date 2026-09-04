@@ -12,17 +12,23 @@ mcu-crypto-asm = "0.1"
 ```rust
 use mcu_crypto_asm::{p256, p384};
 
+// Fast in-place Montgomery field operations:
+let mut out = [0u32; 8];
+p256::mul_mont(&mut out, &a, &b);
+p256::sqr_mont(&mut out, &a);
+p256::add_mod(&mut out, &a, &b);
+p256::sub_mod(&mut out, &a, &b);
+
 // Public key derivation (SEC1 uncompressed: 0x04 || x || y)
 let mut pk = [0u8; 65];
 p256::derive_public_key(&secret, &mut pk)?;
 
-// Point decompression (SEC1 compressed: 0x02/0x03 || x)
-let mut decompressed_pk = [0u8; 65];
-p256::decompress_point(&compressed_pk, &mut decompressed_pk)?;
+// Point decoding (supports compressed 0x02/0x03 and uncompressed 0x04)
+let point = p256::decode_point(&compressed_pk)?;
 
-// ECDH shared secret (validates peer points on-curve)
+// ECDH shared secret (validates peer point on-curve)
 let mut shared = [0u8; 32];
-mcu_crypto_asm::ecdh::shared_secret::<{ p256::N }>(&p256::CURVE, &secret, &peer_pk, &mut shared)?;
+p256::ecdh::shared_secret(&secret, &peer_pk, &mut shared)?;
 
 // ECDSA sign & verify
 let mut r = [0u8; 32];
@@ -39,7 +45,7 @@ p256::ecdsa::verify(&pk, &msg_hash, &r, &s)?;
 |---|---|---|
 | **P-384** (all MCUs) | ✅ Done | **mcu-crypto-asm** (2.5x–3x faster than fiat-crypto / portable) |
 | **ESP32-S2 / S3** (P-256 & P-384) | ✅ Done | **mcu-crypto-asm** (no on-chip ECC hardware on LX7) |
-| **P-256** on Cortex-M4/M7/M33 | ✅ Done | **mcu-crypto-asm** (hand-optimised assembly, matching Emill speeds) |
+| **P-256** on Cortex-M4/M7/M33 | ✅ Done | **mcu-crypto-asm** (hand-optimised assembly, outperforming Emill reference) |
 | MCUs with dedicated PKA/ECC | N/A | Dedicated hardware accelerator (e.g. STM32 PKA, ESP32-C6/H2 ECC) |
 
 ---
@@ -104,11 +110,13 @@ All operations execute in strictly constant time with zero operand-dependent bra
 - **Target-Specific Assembly**:
   - **Cortex-M4 / M7 / M33**: Uses 1-cycle `UMAAL` instructions (`RdHi:RdLo = Rn*Rm + RdHi + RdLo`).
   - **Xtensa LX7**: Synthesizes branchless carry chains using `SALTU`.
-- **Jacobian Coordinates & Algorithm 10 Doubling**: eprint 2014/130 doubling (4 sqr + 4 mul) and mixed addition mimicking Emil Lenngren's P256-Cortex-M4 techniques, cutting variable-base scalar multiplication latency by nearly 50%.
+- **Jacobian Coordinates & Algorithm 10 Doubling**: eprint 2014/130 doubling (4 sqr + 4 mul) and mixed addition mimicking Emil Lenngren's P256-Cortex-M4 techniques, cutting variable-base scalar multiplication latency.
+- **Affine Table Batch Inversion**: Converts precomputed odd multiplier tables to affine coordinates ($Z=1$) using Montgomery batch inversion. Loop additions switch from full Jacobian ($11M + 5S$) to mixed affine ($7M + 4S$), cutting variable-base scalar multiplication by >128k cycles.
 - **Signed Odd-Scalar Recoding ($w=4$)**: Constant-time odd recoding with an 8-point precomputed table eliminates zero doublings/additions.
 - **Fast Inversionless ECDSA Verification**: Verifies signatures directly in projective/Jacobian coordinates via $r \cdot Z^2 \equiv X \pmod p$, eliminating the expensive modular field inversion.
 - **Complete Projective Formulas**: Renes-Costello-Batina complete addition formulas ($a = -3$) eliminate special cases for general point additions.
-- **Fixed-Base Comb**: Precomputed tables accelerate base point multiplication (`k*G`) down to 23 ms (P-256) / 62 ms (P-384).
+- **Fixed-Base Comb**: Precomputed tables accelerate base point multiplication (`k*G`) down to 8 ms (P-256) / 52 ms (P-384).
+- **Direct In-Place Field APIs**: Zero-overhead Montgomery multiplication, squaring, modular addition, and subtraction directly callable as leaf functions avoiding struct-by-value return copies.
 - **Input Validation**: Rejects points off-curve or not in the valid subgroup before computation, preventing invalid-curve attacks.
 
 ---
@@ -142,12 +150,22 @@ Binaries execute directly from RAM to avoid Flash wear.
 **nRF52840 (Cortex-M4):**
 ```sh
 cd harness
+# Correctness harness (KATs + differential testing):
+NISTP_MEMORY_X=memory-nrf-ram.x cargo build --release --bin nistp-harness
+probe-rs run --chip nRF52840_xxAA target/thumbv7em-none-eabihf/release/nistp-harness
+
+# Cycle benchmarks:
 NISTP_MEMORY_X=memory-nrf-ram.x cargo build --release --bin bench
 probe-rs run --chip nRF52840_xxAA target/thumbv7em-none-eabihf/release/bench
+
+# Constant-time verification:
+NISTP_MEMORY_X=memory-nrf-ram.x cargo build --release --bin ct
+probe-rs run --chip nRF52840_xxAA target/thumbv7em-none-eabihf/release/ct
 ```
 
 **STM32H563 (Cortex-M33):**
 ```sh
+cd harness
 # Correctness harness (KATs + differential testing):
 NISTP_MEMORY_X=memory-stm32h5-ram.x cargo build --release --target thumbv8m.main-none-eabihf --bin nistp-harness
 probe-rs run --chip STM32H563ZI target/thumbv8m.main-none-eabihf/release/nistp-harness
@@ -155,6 +173,10 @@ probe-rs run --chip STM32H563ZI target/thumbv8m.main-none-eabihf/release/nistp-h
 # Cycle benchmarks:
 NISTP_MEMORY_X=memory-stm32h5-ram.x cargo build --release --target thumbv8m.main-none-eabihf --bin bench
 probe-rs run --chip STM32H563ZI target/thumbv8m.main-none-eabihf/release/bench
+
+# Constant-time verification:
+NISTP_MEMORY_X=memory-stm32h5-ram.x cargo build --release --target thumbv8m.main-none-eabihf --bin ct
+probe-rs run --chip STM32H563ZI target/thumbv8m.main-none-eabihf/release/ct
 ```
 
 *(To flash to internal Flash at `0x08000000`, build with `NISTP_MEMORY_X=memory-stm32h5.x`.)*

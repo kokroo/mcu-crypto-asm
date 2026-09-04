@@ -241,6 +241,21 @@ pub mod p256 {
         PointP256::decompress(&CURVE, x_limbs, y_is_odd)
     }
 
+    /// ECDH for P-256.
+    pub mod ecdh {
+        use super::*;
+
+        /// Compute ECDH shared secret: computes the x-coordinate of `secret * peer_pk`.
+        pub fn shared_secret(secret: &[u8], peer_pk: &[u8], out: &mut [u8]) -> Result<(), crate::ecdh::Error> {
+            #[cfg(nistp_asm_cm4)]
+            {
+                return crate::backend::cortex_m4::p256::ecdh_shared_secret(secret, peer_pk, out);
+            }
+            #[allow(unreachable_code)]
+            crate::ecdh::shared_secret::<N>(&CURVE, secret, peer_pk, out)
+        }
+    }
+
     /// ECDSA for P-256.
     pub mod ecdsa {
         use super::*;
@@ -453,6 +468,16 @@ pub mod p384 {
     /// Decompress an affine point from x-coordinate and parity bit of y.
     pub fn decompress_point(x_limbs: &[u32; N], y_is_odd: bool) -> Option<PointP384> {
         PointP384::decompress(&CURVE, x_limbs, y_is_odd)
+    }
+
+    /// ECDH for P-384.
+    pub mod ecdh {
+        use super::*;
+
+        /// Compute ECDH shared secret: computes the x-coordinate of `secret * peer_pk`.
+        pub fn shared_secret(secret: &[u8], peer_pk: &[u8], out: &mut [u8]) -> Result<(), crate::ecdh::Error> {
+            crate::ecdh::shared_secret::<N>(&CURVE, secret, peer_pk, out)
+        }
     }
 
     /// ECDSA for P-384.
