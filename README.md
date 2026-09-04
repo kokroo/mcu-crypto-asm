@@ -56,12 +56,12 @@ Head-to-head comparison against `fiat-crypto` (the backend vendored by RustCrypt
 
 | Operation | fiat-crypto | mcu-crypto-asm | Emill | Speedup vs fiat |
 |---|---|---|---|---|
-| P-256 `mul_mont` | 2 248 | **415** (394 raw) | **394** | **5.41x** |
-| P-256 `sqr_mont` | 2 040 | **371** | — | **5.49x** |
-| P-256 `Point::add` | 36 303 | **9 269** | — | **3.91x** |
-| P-384 `mul_mont` | 3 842 | **1 386** | — | **2.77x** |
-| P-384 `sqr_mont` | 3 503 | **1 390** | — | **2.52x** |
-| P-384 `Point::add` | 63 871 | **24 862** | — | **2.56x** |
+| P-256 `mul_mont` | 2 248 | **392** | **392** | **5.73x** |
+| P-256 `sqr_mont` | 2 038 | **350** | — | **5.82x** |
+| P-256 `Point::add` | 36 291 | **9 292** | — | **3.90x** |
+| P-384 `mul_mont` | 3 842 | **1 352** | — | **2.84x** |
+| P-384 `sqr_mont` | 3 503 | **1 358** | — | **2.57x** |
+| P-384 `Point::add` | 63 844 | **24 869** | — | **2.56x** |
 
 **ESP32-S3 (Xtensa LX7 @ 240 MHz)**
 

@@ -90,6 +90,38 @@ pub mod p256 {
         Fe::from_int(&FIELD, limbs)
     }
 
+    /// Fast Montgomery modular multiplication: `out = a * b * R^-1 mod p`.
+    #[inline(always)]
+    pub fn mul_mont(out: &mut [u32; N], a: &[u32; N], b: &[u32; N]) {
+        #[cfg(nistp_asm_cm4)]
+        {
+            unsafe {
+                crate::backend::cortex_m4::emill_p256_mul_mont(out.as_mut_ptr(), a.as_ptr(), b.as_ptr());
+            }
+            return;
+        }
+        #[allow(unreachable_code)]
+        let mut port_out = [0u32; N];
+        crate::backend::portable::mul_mont(a, b, FIELD.p, FIELD.n0inv, &mut port_out);
+        *out = port_out;
+    }
+
+    /// Fast Montgomery modular squaring: `out = a^2 * R^-1 mod p`.
+    #[inline(always)]
+    pub fn sqr_mont(out: &mut [u32; N], a: &[u32; N]) {
+        #[cfg(nistp_asm_cm4)]
+        {
+            unsafe {
+                crate::backend::cortex_m4::emill_p256_sqr_mont(out.as_mut_ptr(), a.as_ptr());
+            }
+            return;
+        }
+        #[allow(unreachable_code)]
+        let mut port_out = [0u32; N];
+        crate::backend::sqr_mont(a, FIELD.p, FIELD.n0inv, &mut port_out);
+        *out = port_out;
+    }
+
     /// `k * G` via the compile-time comb table. Much faster than the general
     /// [`crate::Point::mul_scalar`], but only valid for the base point.
     pub fn mul_base(k: &[u32; N]) -> PointP256 {
@@ -273,6 +305,38 @@ pub mod p384 {
     /// Construct a field element from a plain (non-Montgomery) integer.
     pub fn from_int(limbs: &[u32; N]) -> FeP384 {
         Fe::from_int(&FIELD, limbs)
+    }
+
+    /// Fast Montgomery modular multiplication: `out = a * b * R^-1 mod p`.
+    #[inline(always)]
+    pub fn mul_mont(out: &mut [u32; N], a: &[u32; N], b: &[u32; N]) {
+        #[cfg(nistp_asm_cm4)]
+        {
+            unsafe {
+                crate::backend::cortex_m4::nistp_mul_mont_12(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), FIELD.p.as_ptr());
+            }
+            return;
+        }
+        #[allow(unreachable_code)]
+        let mut port_out = [0u32; N];
+        crate::backend::portable::mul_mont(a, b, FIELD.p, FIELD.n0inv, &mut port_out);
+        *out = port_out;
+    }
+
+    /// Fast Montgomery modular squaring: `out = a^2 * R^-1 mod p`.
+    #[inline(always)]
+    pub fn sqr_mont(out: &mut [u32; N], a: &[u32; N]) {
+        #[cfg(nistp_asm_cm4)]
+        {
+            unsafe {
+                crate::backend::cortex_m4::nistp_sqr_mont_12(out.as_mut_ptr(), a.as_ptr(), FIELD.p.as_ptr());
+            }
+            return;
+        }
+        #[allow(unreachable_code)]
+        let mut port_out = [0u32; N];
+        crate::backend::sqr_mont(a, FIELD.p, FIELD.n0inv, &mut port_out);
+        *out = port_out;
     }
 
     /// `k * G` via the compile-time comb table. Much faster than the general

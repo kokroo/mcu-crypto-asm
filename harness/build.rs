@@ -38,6 +38,7 @@ fn main() {
 ///
 /// The shim must live in the SAME assembly unit as `P256_mulmod` (an internal,
 /// non-global symbol), so we concatenate rather than edit the vendored file.
+#[allow(dead_code)]
 fn build_emill() -> Result<(), String> {
     use std::path::PathBuf;
     use std::process::Command;

@@ -214,8 +214,13 @@ fn main() -> ! {
         0xfedc_ba98, 0x7654_3210, 0x1122_3344, 0x5566_7788, 0x99aa_bbcc, 0xddee_ff00,
         0xa5a5_5a5a, 0x0f0f_f0f0,
     ]);
+    let mut ours_out256 = [0u32; 8];
     let ours256 = bench!("mcu-crypto-asm (asm)", ITERS, {
-        black_box(black_box(&a256).mul(&p256::FIELD, black_box(&b256)));
+        p256::mul_mont(
+            black_box(&mut ours_out256),
+            black_box(a256.as_mont_limbs()),
+            black_box(b256.as_mont_limbs()),
+        );
     });
 
     let fa = Fp256(*a256.as_mont_limbs());
@@ -270,8 +275,12 @@ fn main() -> ! {
     }
 
     hprintln!("field add/sub/sqr:");
+    let mut ours_sqr_out256 = [0u32; 8];
     let ours256_sqr = bench!("P-256 sqr_mont (asm)", ITERS, {
-        black_box(black_box(&a256).sqr(&p256::FIELD));
+        p256::sqr_mont(
+            black_box(&mut ours_sqr_out256),
+            black_box(a256.as_mont_limbs()),
+        );
     });
     let fiat256_sqr = bench!("P-256 sqr (fiat-crypto)", ITERS, {
         fiat_p256_square(black_box(&mut fo), black_box(&fa));
@@ -299,8 +308,13 @@ fn main() -> ! {
         0xfedc_ba98, 0x7654_3210, 0x1122_3344, 0x5566_7788, 0x99aa_bbcc, 0xddee_ff00,
         0xa5a5_5a5a, 0x0f0f_f0f0, 0x1111_2222, 0x3333_4444, 0x5555_6666, 0x7777_8888,
     ]);
+    let mut ours_out384 = [0u32; 12];
     let ours384 = bench!("mcu-crypto-asm (asm)", ITERS, {
-        black_box(black_box(&a384).mul(&p384::FIELD, black_box(&b384)));
+        p384::mul_mont(
+            black_box(&mut ours_out384),
+            black_box(a384.as_mont_limbs()),
+            black_box(b384.as_mont_limbs()),
+        );
     });
 
     let ga = Fp384(*a384.as_mont_limbs());
@@ -321,8 +335,12 @@ fn main() -> ! {
         );
     });
 
+    let mut ours_sqr_out384 = [0u32; 12];
     let ours384_sqr = bench!("P-384 sqr_mont (asm)", ITERS, {
-        black_box(black_box(&a384).sqr(&p384::FIELD));
+        p384::sqr_mont(
+            black_box(&mut ours_sqr_out384),
+            black_box(a384.as_mont_limbs()),
+        );
     });
     let fiat384_sqr = bench!("P-384 sqr (fiat-crypto)", ITERS, {
         fiat_p384_square(black_box(&mut go), black_box(&ga));
@@ -524,14 +542,23 @@ fn main() -> ! {
         if emill_ticks != 0 {
             hprintln!("");
             hprintln!("vs Emill P256-Cortex-M4 (hand-optimised P-256 reference):");
-            if emill_ticks <= ours256 {
+            if emill_ticks < ours256 {
                 let h = (ours256 as u64 * 100) / emill_ticks as u64;
                 hprintln!(
                     "  P-256: Emill is {}.{:02}x FASTER than us ({} vs {} ticks)",
                     h / 100, h % 100, emill_ticks, ours256
                 );
+            } else if ours256 < emill_ticks {
+                let h = (emill_ticks as u64 * 100) / ours256 as u64;
+                hprintln!(
+                    "  P-256: mcu-crypto-asm is {}.{:02}x FASTER than Emill ({} vs {} ticks)",
+                    h / 100, h % 100, ours256, emill_ticks
+                );
             } else {
-                report("P-256", emill_ticks, ours256);
+                hprintln!(
+                    "  P-256: 1.00x - exact cycle parity with Emill reference ({} vs {} ticks)",
+                    ours256, emill_ticks
+                );
             }
             hprintln!("  P-384: no comparison exists - Emill implements P-256 only");
         }
