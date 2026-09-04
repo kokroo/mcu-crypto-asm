@@ -5,6 +5,7 @@
 
 	.syntax unified
 	.thumb
+	.arch armv7e-m
 	.text
 
 
