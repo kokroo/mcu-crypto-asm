@@ -1,18 +1,4 @@
 use mcu_crypto_asm::{p256, p384};
-use std::future::Future;
-use std::pin::pin;
-use std::task::{Context, Poll, Waker};
-
-fn block_on<F: Future>(f: F) -> F::Output {
-    let mut f = pin!(f);
-    let mut cx = Context::from_waker(Waker::noop());
-    loop {
-        match f.as_mut().poll(&mut cx) {
-            Poll::Ready(v) => return v,
-            Poll::Pending => {}
-        }
-    }
-}
 
 #[test]
 fn p256_ecdsa_known_answer() {
@@ -109,75 +95,7 @@ fn p384_ecdsa_known_answer() {
     assert!(p384::ecdsa::verify(&pk, &e, &r, &bad_s).is_err());
 }
 
-#[test]
-fn async_ecdsa_matches_blocking() {
-    let d =
-        hex::decode("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef").unwrap();
-    let k =
-        hex::decode("a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90").unwrap();
-    let e =
-        hex::decode("deadbeefcafebabe0123456789abcdefdeadbeefcafebabe0123456789abcdef").unwrap();
 
-    let mut pk = [0u8; 65];
-    p256::derive_public_key(&d, &mut pk).unwrap();
-
-    let mut r_sync = [0u8; 32];
-    let mut s_sync = [0u8; 32];
-    p256::ecdsa::sign(&d, &e, &k, &mut r_sync, &mut s_sync).unwrap();
-
-    let mut r_async = [0u8; 32];
-    let mut s_async = [0u8; 32];
-    block_on(p256::ecdsa::sign_yielding(
-        &d,
-        &e,
-        &k,
-        &mut r_async,
-        &mut s_async,
-        1,
-    ))
-    .unwrap();
-
-    assert_eq!(r_sync, r_async);
-    assert_eq!(s_sync, s_async);
-
-    // Yielding verification
-    assert!(block_on(p256::ecdsa::verify_yielding(&pk, &e, &r_async, &s_async, 1)).is_ok());
-
-    // P-384 async
-    let d384 = hex::decode("000000000000000000000000000000001234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef").unwrap();
-    let k384 = hex::decode("00000000000000000000000000000000a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90").unwrap();
-    let e384 = hex::decode("00000000000000000000000000000000deadbeefcafebabe0123456789abcdefdeadbeefcafebabe0123456789abcdef").unwrap();
-
-    let mut pk384 = [0u8; 97];
-    p384::derive_public_key(&d384, &mut pk384).unwrap();
-
-    let mut r384_sync = [0u8; 48];
-    let mut s384_sync = [0u8; 48];
-    p384::ecdsa::sign(&d384, &e384, &k384, &mut r384_sync, &mut s384_sync).unwrap();
-
-    let mut r384_async = [0u8; 48];
-    let mut s384_async = [0u8; 48];
-    block_on(p384::ecdsa::sign_yielding(
-        &d384,
-        &e384,
-        &k384,
-        &mut r384_async,
-        &mut s384_async,
-        1,
-    ))
-    .unwrap();
-
-    assert_eq!(r384_sync, r384_async);
-    assert_eq!(s384_sync, s384_async);
-    assert!(block_on(p384::ecdsa::verify_yielding(
-        &pk384,
-        &e384,
-        &r384_async,
-        &s384_async,
-        1
-    ))
-    .is_ok());
-}
 
 #[test]
 fn rejects_invalid_signatures() {

@@ -16,7 +16,7 @@
 use core::hint::black_box;
 use cortex_m_rt::entry;
 use cortex_m_semihosting::{debug, hprintln};
-use mcu_crypto_asm::{backend, p256, p384, Point, ScalarMul};
+use mcu_crypto_asm::{backend, p256, p384, Point};
 
 use panic_semihosting as _;
 
@@ -444,44 +444,6 @@ fn main() -> ! {
         hprintln!("  P-384 verify  {:>10} cycles  ({} ms @ 64 MHz)", c_ver384, c_ver384 / 64_000);
     }
 
-    hprintln!("");
-    hprintln!("resumable: longest single step (budget = 1 point op):");
-    {
-        let k256 = [0x9e37_79b9u32, 0x7f4a_7c15, 0x1234_5678, 0x9abc_def0,
-                    0x0f1e_2d3c, 0x4b5a_6978, 0xdead_beef, 0x0badc0de];
-        let g = Point::<{ p256::N }>::generator(&p256::CURVE);
-        let mut st = ScalarMul::<{ p256::N }>::new(&p256::CURVE, &g, &k256);
-        let (mut worst, mut steps, mut total) = (0u32, 0u32, 0u32);
-        loop {
-            let s0 = cyccnt();
-            let done = st.step(&p256::CURVE, 1).is_some();
-            let d = cyccnt().wrapping_sub(s0);
-            total = total.wrapping_add(d);
-            if d > worst { worst = d; }
-            steps += 1;
-            if done { break; }
-        }
-        hprintln!("  P-256  {} steps, worst {} cycles ({} us @64MHz), total {}",
-                  steps, worst, worst / 64, total);
-
-        let k384 = [0x9e37_79b9u32, 0x7f4a_7c15, 0x1234_5678, 0x9abc_def0,
-                    0x0f1e_2d3c, 0x4b5a_6978, 0xdead_beef, 0x0badc0de,
-                    0x2468_ace0, 0x1357_bdf9, 0xfeed_face, 0x0123_4567];
-        let g4 = Point::<{ p384::N }>::generator(&p384::CURVE);
-        let mut st4 = ScalarMul::<{ p384::N }>::new(&p384::CURVE, &g4, &k384);
-        let (mut worst, mut steps, mut total) = (0u32, 0u32, 0u32);
-        loop {
-            let s0 = cyccnt();
-            let done = st4.step(&p384::CURVE, 1).is_some();
-            let d = cyccnt().wrapping_sub(s0);
-            total = total.wrapping_add(d);
-            if d > worst { worst = d; }
-            steps += 1;
-            if done { break; }
-        }
-        hprintln!("  P-384  {} steps, worst {} cycles ({} us @64MHz), total {}",
-                  steps, worst, worst / 64, total);
-    }
 
     hprintln!("");
     hprintln!("Point::add (complete projective addition):");

@@ -44,11 +44,9 @@ pub mod ecdsa;
 mod fe;
 mod point;
 pub mod scalar;
-pub mod scalar_mul;
 pub use fe::{Fe, Params};
 pub use point::{CurveParams, Point};
 pub use scalar::Scalar;
-pub use scalar_mul::{mul_base_yielding, mul_scalar_yielding, CombMul, ScalarMul};
 
 /// P-256 (secp256r1) field arithmetic.
 pub mod p256 {
@@ -111,24 +109,6 @@ pub mod p256 {
             COMB_D,
             COMB_T,
         )
-    }
-
-    /// SEC1 public key, yielding every `budget` point operations.
-    pub async fn derive_public_key_yielding(
-        secret: &[u8],
-        out: &mut [u8],
-        budget: u32,
-    ) -> Result<(), crate::ecdh::Error> {
-        crate::ecdh::derive_public_key_yielding::<N>(
-            &CURVE,
-            secret,
-            out,
-            &crate::comb_tables::P256_COMB,
-            COMB_D,
-            COMB_T,
-            budget,
-        )
-        .await
     }
 
     /// A P-256 scalar element in Montgomery form.
@@ -202,52 +182,6 @@ pub mod p256 {
                 out_s,
             )
         }
-
-        /// Yielding variant of [`verify`].
-        pub async fn verify_yielding(
-            pk: &[u8],
-            msg_hash: &[u8],
-            r: &[u8],
-            s: &[u8],
-            budget: u32,
-        ) -> Result<(), crate::ecdsa::Error> {
-            crate::ecdsa::verify_yielding::<N>(
-                &CURVE,
-                pk,
-                msg_hash,
-                r,
-                s,
-                &crate::comb_tables::P256_COMB,
-                COMB_D,
-                COMB_T,
-                budget,
-            )
-            .await
-        }
-
-        /// Yielding variant of [`sign`].
-        pub async fn sign_yielding(
-            sk: &[u8],
-            msg_hash: &[u8],
-            k_nonce: &[u8],
-            out_r: &mut [u8],
-            out_s: &mut [u8],
-            budget: u32,
-        ) -> Result<(), crate::ecdsa::Error> {
-            crate::ecdsa::sign_yielding::<N>(
-                &CURVE,
-                sk,
-                msg_hash,
-                k_nonce,
-                &crate::comb_tables::P256_COMB,
-                COMB_D,
-                COMB_T,
-                out_r,
-                out_s,
-                budget,
-            )
-            .await
-        }
     }
 }
 
@@ -312,24 +246,6 @@ pub mod p384 {
             COMB_D,
             COMB_T,
         )
-    }
-
-    /// SEC1 public key, yielding every `budget` point operations.
-    pub async fn derive_public_key_yielding(
-        secret: &[u8],
-        out: &mut [u8],
-        budget: u32,
-    ) -> Result<(), crate::ecdh::Error> {
-        crate::ecdh::derive_public_key_yielding::<N>(
-            &CURVE,
-            secret,
-            out,
-            &crate::comb_tables::P384_COMB,
-            COMB_D,
-            COMB_T,
-            budget,
-        )
-        .await
     }
 
     /// A P-384 scalar element in Montgomery form.
@@ -403,51 +319,7 @@ pub mod p384 {
                 out_s,
             )
         }
-
-        /// Yielding variant of [`verify`].
-        pub async fn verify_yielding(
-            pk: &[u8],
-            msg_hash: &[u8],
-            r: &[u8],
-            s: &[u8],
-            budget: u32,
-        ) -> Result<(), crate::ecdsa::Error> {
-            crate::ecdsa::verify_yielding::<N>(
-                &CURVE,
-                pk,
-                msg_hash,
-                r,
-                s,
-                &crate::comb_tables::P384_COMB,
-                COMB_D,
-                COMB_T,
-                budget,
-            )
-            .await
-        }
-
-        /// Yielding variant of [`sign`].
-        pub async fn sign_yielding(
-            sk: &[u8],
-            msg_hash: &[u8],
-            k_nonce: &[u8],
-            out_r: &mut [u8],
-            out_s: &mut [u8],
-            budget: u32,
-        ) -> Result<(), crate::ecdsa::Error> {
-            crate::ecdsa::sign_yielding::<N>(
-                &CURVE,
-                sk,
-                msg_hash,
-                k_nonce,
-                &crate::comb_tables::P384_COMB,
-                COMB_D,
-                COMB_T,
-                out_r,
-                out_s,
-                budget,
-            )
-            .await
-        }
     }
 }
+
+
