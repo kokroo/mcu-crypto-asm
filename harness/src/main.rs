@@ -125,6 +125,47 @@ fn run_differential<const N: usize>(f: &Params, name: &str, rounds: u32) -> u32 
 
 /// Call the assembly backend directly. Returns false if none is compiled in.
 #[allow(unused_variables)]
+
+fn run_differential_add_sub<const N: usize>(f: &Params, name: &str, rounds: u32) -> u32 {
+    let mut rng = Rng(0x123456789ABCDEF0);
+    let mut fails = 0;
+
+    for round in 0..rounds {
+        let mut a = [0u32; N];
+        let mut b = [0u32; N];
+        for i in 0..N {
+            a[i] = rng.next_u32();
+            b[i] = rng.next_u32();
+        }
+        let a = Fe::<N>::from_int(f, &a).to_int(f);
+        let b = Fe::<N>::from_int(f, &b).to_int(f);
+
+        let mut want_add = [0u32; N];
+        backend::portable::add_mod(&a, &b, f.p, &mut want_add);
+        let mut got_add = [0u32; N];
+        backend::add_mod(&a, &b, f.p, &mut got_add);
+        if got_add != want_add {
+            hprintln!("  FAIL {} add_mod differential round {}", name, round);
+            fails += 1;
+            if fails > 3 { return fails; }
+        }
+
+        let mut want_sub = [0u32; N];
+        backend::portable::sub_mod(&a, &b, f.p, &mut want_sub);
+        let mut got_sub = [0u32; N];
+        backend::sub_mod(&a, &b, f.p, &mut got_sub);
+        if got_sub != want_sub {
+            hprintln!("  FAIL {} sub_mod differential round {}", name, round);
+            fails += 1;
+            if fails > 3 { return fails; }
+        }
+    }
+    if fails == 0 {
+        hprintln!("  ok   {} add/sub differential ({} rounds)", name, rounds);
+    }
+    fails
+}
+
 fn asm_mul<const N: usize>(a: &[u32; N], b: &[u32; N], f: &Params, out: &mut [u32; N]) -> bool {
     #[cfg(nistp_asm_cm4)]
     {
@@ -152,10 +193,12 @@ fn main() -> ! {
     hprintln!("P-256:");
     fails += run_kat::<{ p256::N }>(&p256::FIELD, "p256", &kat::P256_MUL);
     fails += run_differential::<{ p256::N }>(&p256::FIELD, "p256", 500);
+    fails += run_differential_add_sub::<{ p256::N }>(&p256::FIELD, "p256", 500);
 
     hprintln!("P-384:");
     fails += run_kat::<{ p384::N }>(&p384::FIELD, "p384", &kat::P384_MUL);
     fails += run_differential::<{ p384::N }>(&p384::FIELD, "p384", 500);
+    fails += run_differential_add_sub::<{ p384::N }>(&p384::FIELD, "p384", 500);
 
     if fails == 0 {
         hprintln!("ALL PASS");

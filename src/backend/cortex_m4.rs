@@ -22,6 +22,10 @@ global_asm!(include_str!("../../asm/cortex_m4.S"), options(raw));
 extern "C" {
     fn nistp_mul_mont_8(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
     fn nistp_mul_mont_12(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
+    fn nistp_add_mod_8(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
+    fn nistp_add_mod_12(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
+    fn nistp_sub_mod_8(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
+    fn nistp_sub_mod_12(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
 }
 
 /// Dispatch to assembly if a routine exists for this limb count.
@@ -49,6 +53,44 @@ pub fn try_mul_mont(a: &[u32], b: &[u32], p: &[u32], n0inv: u32, out: &mut [u32]
         },
         12 => unsafe {
             nistp_mul_mont_12(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), p.as_ptr());
+            true
+        },
+        _ => false,
+    }
+}
+
+#[inline]
+pub fn try_add_mod(a: &[u32], b: &[u32], p: &[u32], out: &mut [u32]) -> bool {
+    debug_assert_eq!(b.len(), a.len());
+    debug_assert_eq!(p.len(), a.len());
+    debug_assert_eq!(out.len(), a.len());
+
+    match a.len() {
+        8 => unsafe {
+            nistp_add_mod_8(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), p.as_ptr());
+            true
+        },
+        12 => unsafe {
+            nistp_add_mod_12(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), p.as_ptr());
+            true
+        },
+        _ => false,
+    }
+}
+
+#[inline]
+pub fn try_sub_mod(a: &[u32], b: &[u32], p: &[u32], out: &mut [u32]) -> bool {
+    debug_assert_eq!(b.len(), a.len());
+    debug_assert_eq!(p.len(), a.len());
+    debug_assert_eq!(out.len(), a.len());
+
+    match a.len() {
+        8 => unsafe {
+            nistp_sub_mod_8(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), p.as_ptr());
+            true
+        },
+        12 => unsafe {
+            nistp_sub_mod_12(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), p.as_ptr());
             true
         },
         _ => false,

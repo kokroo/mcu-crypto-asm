@@ -63,11 +63,23 @@ pub fn sqr_mont(a: &[u32], p: &[u32], n0inv: u32, out: &mut [u32]) {
 /// `out = a + b mod p`
 #[inline]
 pub fn add_mod(a: &[u32], b: &[u32], p: &[u32], out: &mut [u32]) {
+    #[cfg(nistp_asm_cm4)]
+    {
+        if cortex_m4::try_add_mod(a, b, p, out) {
+            return;
+        }
+    }
     portable::add_mod(a, b, p, out)
 }
 
 /// `out = a - b mod p`
 #[inline]
 pub fn sub_mod(a: &[u32], b: &[u32], p: &[u32], out: &mut [u32]) {
+    #[cfg(nistp_asm_cm4)]
+    {
+        if cortex_m4::try_sub_mod(a, b, p, out) {
+            return;
+        }
+    }
     portable::sub_mod(a, b, p, out)
 }

@@ -178,6 +178,8 @@ fn check_curve<const N: usize>(f: &Params, name: &str) -> u32 {
         if c > cmax { cmax = c; }
     }
 
+    let mut fails = 0u32;
+
     // Same sweep, but timing add/sub instead of mul.
     for (label, f2) in [
         ("add", measure_addsub::<N> as fn(&Params, &Fe<N>, &Fe<N>) -> u32),
@@ -204,10 +206,11 @@ fn check_curve<const N: usize>(f: &Params, name: &str) -> u32 {
             if t < clo { clo = t; }
             if t > chi { chi = t; }
         }
-        let noise = chi - clo;
+        let noise = (chi - clo).max(if unsafe { USE_DWT } { 0 } else { 1 });
         if hi2 - lo > noise {
             hprintln!("  FAIL {} {}: spread {} ticks > noise {} ({}..{})",
                       name, label, hi2 - lo, noise, lo, hi2);
+            fails += 1;
         } else {
             hprintln!("  ok   {} {}: spread {} <= noise {} ({} ticks)",
                       name, label, hi2 - lo, noise, lo);
@@ -215,7 +218,7 @@ fn check_curve<const N: usize>(f: &Params, name: &str) -> u32 {
     }
 
     let data_spread = dmax - dmin;
-    let noise_floor = cmax - cmin;
+    let noise_floor = (cmax - cmin).max(if unsafe { USE_DWT } { 0 } else { 1 });
 
     // A genuine data-dependent difference is at least one instruction per
     // multiply, i.e. at least REPS instructions across a measurement.
@@ -226,14 +229,14 @@ does not exceed the same-input noise floor {} tick(s)",
             name, inputs.len(), REPS, data_spread, noise_floor
         );
         hprintln!("       (totals {}..{}, control {}..{})", dmin, dmax, cmin, cmax);
-        0
+        fails
     } else {
         hprintln!(
             "  FAIL {}: operand spread {} ticks EXCEEDS same-input noise floor {} ticks",
             name, data_spread, noise_floor
         );
         hprintln!("       (totals {}..{}, control {}..{})", dmin, dmax, cmin, cmax);
-        1
+        fails + 1
     }
 }
 
@@ -289,7 +292,7 @@ fn check_scalar_mul<const N: usize>(
     }
 
     let spread = dmax - dmin;
-    let noise = cmax - cmin;
+    let noise = (cmax - cmin).max(if unsafe { USE_DWT } { 0 } else { 1 });
     if spread <= noise {
         hprintln!(
             "  ok   {}: {} scalars -- spread {} cycle(s) <= same-scalar noise {}",

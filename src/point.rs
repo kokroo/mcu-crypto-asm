@@ -13,7 +13,7 @@
 //!
 //! The identity is `(0 : 1 : 0)`.
 
-use crate::{comb_tables, Fe, Params};
+use crate::{Fe, Params};
 
 /// A point in homogeneous projective coordinates.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -158,6 +158,7 @@ impl<const N: usize> Point<N> {
     ///
     /// `y2 + Z2` and `x2 + Z2` become adds with Montgomery one, supplied by
     /// the caller so it is not recomputed per call.
+    #[allow(dead_code)]
     pub(crate) fn add_affine(&self, c: &CurveParams, x2: &Fe<N>, y2: &Fe<N>, one: &Fe<N>) -> Self {
         let f = &c.field;
         let mut b = [0u32; N];
@@ -232,6 +233,7 @@ impl<const N: usize> Point<N> {
     }
 
     /// Branchless select: returns `b` when `choice` is all-ones, `a` when zero.
+    #[allow(dead_code)]
     #[inline]
     fn select_mask(mask: u32, a: &Self, b: &Self) -> Self {
         // XOR form, not or-of-ands: LLVM turns the latter into a select, and a
@@ -397,9 +399,6 @@ impl<const N: usize> Point<N> {
                 z[t] &= !is_zero;
             }
 
-            let mut one_l = [0u32; N];
-            one_l.copy_from_slice(c.field.one);
-            let one = Fe::from_mont_limbs(one_l);
             let sel = Self {
                 x: Fe::from_mont_limbs(px),
                 y: Fe::from_mont_limbs(py),

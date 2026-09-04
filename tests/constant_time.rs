@@ -50,8 +50,9 @@ const CM4_SRC: &str = include_str!("../asm/cortex_m4.S");
 /// Notably absent: `udiv`/`sdiv` (variable latency), and any of the
 /// `it`-block conditional forms.
 const CM4_ALLOWED: &[&str] = &[
-    "ldr", "str", "umaal", "eor", "and", "orr", "mov", "mov.w", "add", "adds", "adc.w", "sub",
-    "subs", "sbc", "sbcs", "push", "pop", "bne", "mvn", "movw", "movt", "ldrd", "strd",
+    "ldr", "str", "umaal", "eor", "and", "orr", "mov", "mov.w", "add", "adds", "adc", "adcs",
+    "adc.w", "sub", "subs", "sbc", "sbcs", "push", "pop", "bne", "mvn", "movw", "movt", "ldrd",
+    "strd", "vpush", "vpop", "vldm", "vmov",
 ];
 
 #[test]
@@ -107,7 +108,7 @@ fn cortex_m4_has_no_data_dependent_memory_addressing() {
         let inner = operand.trim_start_matches('[').trim_end_matches(']').trim();
         let mut parts = inner.split(',').map(str::trim);
         let base = parts.next().unwrap_or("");
-        if !(base.starts_with('r') && base[1..].chars().all(|c| c.is_ascii_digit())) {
+        if !(base == "sp" || (base.starts_with('r') && base[1..].chars().all(|c| c.is_ascii_digit()))) {
             return false;
         }
         match parts.next() {
