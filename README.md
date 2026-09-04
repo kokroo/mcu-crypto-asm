@@ -164,22 +164,29 @@ probe-rs run --chip nRF52840_xxAA target/thumbv7em-none-eabihf/release/ct
 ```
 
 **STM32H563 (Cortex-M33):**
+
+Runs both P-256 and P-384 with hardware `UMAAL` on ARMv8-M Mainline (e.g. NUCLEO-H563ZI). The benchmark harness unlocks `DWT_LAR` automatically to enable DWT cycle counting.
+
 ```sh
+# 1. Install toolchain target (once):
+rustup target add thumbv8m.main-none-eabihf
+
 cd harness
-# Correctness harness (KATs + differential testing):
+
+# 2. Correctness harness (P-256 & P-384 KATs, 500 rounds differential testing, sign/verify):
 NISTP_MEMORY_X=memory-stm32h5-ram.x cargo build --release --target thumbv8m.main-none-eabihf --bin nistp-harness
 probe-rs run --chip STM32H563ZI target/thumbv8m.main-none-eabihf/release/nistp-harness
 
-# Cycle benchmarks:
+# 3. Exact cycle benchmarks (DWT CYCCNT on silicon):
 NISTP_MEMORY_X=memory-stm32h5-ram.x cargo build --release --target thumbv8m.main-none-eabihf --bin bench
 probe-rs run --chip STM32H563ZI target/thumbv8m.main-none-eabihf/release/bench
 
-# Constant-time verification:
+# 4. Constant-time verification (dynamic timing audit):
 NISTP_MEMORY_X=memory-stm32h5-ram.x cargo build --release --target thumbv8m.main-none-eabihf --bin ct
 probe-rs run --chip STM32H563ZI target/thumbv8m.main-none-eabihf/release/ct
 ```
 
-*(To flash to internal Flash at `0x08000000`, build with `NISTP_MEMORY_X=memory-stm32h5.x`.)*
+*(To flash to internal Flash at `0x08000000` instead of RAM, build with `NISTP_MEMORY_X=memory-stm32h5.x`.)*
 
 ---
 

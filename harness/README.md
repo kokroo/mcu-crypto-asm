@@ -27,6 +27,15 @@ On real hardware the same binary uses DWT CYCCNT and reports exact cycles.
     probe-rs run --chip nRF52840_xxAA target/thumbv7em-none-eabihf/release/bench
 
 ### STM32H563 (Cortex-M33)
+    # Correctness (P-256 & P-384 KATs, differential fuzzing, sign/verify):
+    NISTP_MEMORY_X=memory-stm32h5-ram.x cargo build --release --target thumbv8m.main-none-eabihf --bin nistp-harness
+    probe-rs run --chip STM32H563ZI target/thumbv8m.main-none-eabihf/release/nistp-harness
+
+    # Cycle benchmark:
     NISTP_MEMORY_X=memory-stm32h5-ram.x cargo build --release --target thumbv8m.main-none-eabihf --bin bench
     probe-rs run --chip STM32H563ZI target/thumbv8m.main-none-eabihf/release/bench
+
+    # Constant-time verification:
+    NISTP_MEMORY_X=memory-stm32h5-ram.x cargo build --release --target thumbv8m.main-none-eabihf --bin ct
+    probe-rs run --chip STM32H563ZI target/thumbv8m.main-none-eabihf/release/ct
 
