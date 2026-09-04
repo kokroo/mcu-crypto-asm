@@ -45,7 +45,7 @@ mod fe;
 mod point;
 pub mod scalar;
 pub use fe::{Fe, Params};
-pub use point::{CurveParams, Point};
+pub use point::{CurveParams, Point, PointJacobian};
 pub use scalar::Scalar;
 
 /// P-256 (secp256r1) field arithmetic.
@@ -66,6 +66,9 @@ pub mod p256 {
 
     /// A P-256 field element in Montgomery form.
     pub type FeP256 = Fe<{ c::N }>;
+
+    /// A point on P-256 in Jacobian coordinates.
+    pub type PointJacobianP256 = crate::PointJacobian<{ c::N }>;
 
     /// A point on P-256.
     pub type PointP256 = crate::Point<{ c::N }>;
@@ -203,6 +206,9 @@ pub mod p384 {
 
     /// A P-384 field element in Montgomery form.
     pub type FeP384 = Fe<{ c::N }>;
+
+    /// A point on P-384 in Jacobian coordinates.
+    pub type PointJacobianP384 = crate::PointJacobian<{ c::N }>;
 
     /// A point on P-384.
     pub type PointP384 = crate::Point<{ c::N }>;

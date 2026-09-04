@@ -2471,3 +2471,83 @@ nistp_sub_mod_12:
 	strd	r4, r5, [r0, #40]
 	pop	{r4-r11, pc}
 	.size	nistp_sub_mod_12, .-nistp_sub_mod_12
+
+@ void nistp_div2_12(uint32_t out[12], const uint32_t a[12]);
+@ out = a / 2 mod p_384. Constant time. In-place safe (out == a is allowed).
+	.globl	nistp_div2_12
+	.p2align 2
+	.thumb_func
+	.type	nistp_div2_12, %function
+nistp_div2_12:
+	push	{r4, r5, lr}
+	vldm	r1, {d0-d5}		@ load all 12 words of `a` into s0..s11
+	vmov	r3, s0			@ r3 = a[0]
+	lsls	r12, r3, #31
+	asrs	r12, r12, #31		@ mask: 0 or 0xffffffff
+	sub	lr, r12, r12, lsr #31	@ lr = mask & 0xfffffffe
+	mov	r2, #0			@ zero for limbs 1 and 2
+
+	@ Add a + (p & mask)
+	vmov	r4, r5, s0, s1
+	adds	r4, r4, r12
+	adcs	r5, r5, r2
+	vmov	s0, s1, r4, r5
+
+	vmov	r4, r5, s2, s3
+	adcs	r4, r4, r2
+	adcs	r5, r5, r12
+	vmov	s2, s3, r4, r5
+
+	vmov	r4, r5, s4, s5
+	adcs	r4, r4, lr
+	adcs	r5, r5, r12
+	vmov	s4, s5, r4, r5
+
+	vmov	r4, r5, s6, s7
+	adcs	r4, r4, r12
+	adcs	r5, r5, r12
+	vmov	s6, s7, r4, r5
+
+	vmov	r4, r5, s8, s9
+	adcs	r4, r4, r12
+	adcs	r5, r5, r12
+	vmov	s8, s9, r4, r5
+
+	vmov	r4, r5, s10, s11
+	adcs	r4, r4, r12
+	adcs	r5, r5, r12
+	@ Carry flag now has carry-out from bit 383!
+
+	@ Shift right by 1 using rrxs from limb 11 down to 0
+	rrxs	r5, r5
+	rrxs	r4, r4
+	strd	r4, r5, [r0, #40]
+
+	vmov	r4, r5, s8, s9
+	rrxs	r5, r5
+	rrxs	r4, r4
+	strd	r4, r5, [r0, #32]
+
+	vmov	r4, r5, s6, s7
+	rrxs	r5, r5
+	rrxs	r4, r4
+	strd	r4, r5, [r0, #24]
+
+	vmov	r4, r5, s4, s5
+	rrxs	r5, r5
+	rrxs	r4, r4
+	strd	r4, r5, [r0, #16]
+
+	vmov	r4, r5, s2, s3
+	rrxs	r5, r5
+	rrxs	r4, r4
+	strd	r4, r5, [r0, #8]
+
+	vmov	r4, r5, s0, s1
+	rrxs	r5, r5
+	rrx	r4, r4
+	strd	r4, r5, [r0, #0]
+
+	pop	{r4, r5, pc}
+	.size	nistp_div2_12, .-nistp_div2_12
+

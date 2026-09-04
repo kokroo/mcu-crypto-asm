@@ -138,3 +138,78 @@ fn comb_agrees_with_general_scalar_mul() {
         "p384 comb vs general disagreed on a sparse scalar"
     );
 }
+
+#[test]
+fn jacobian_matches_projective() {
+    use mcu_crypto_asm::{p256, p384, Point, PointJacobian};
+
+    // Test P-256
+    let g256 = Point::<{ p256::N }>::generator(&p256::CURVE);
+    let gj256 = PointJacobian::<{ p256::N }>::generator(&p256::CURVE);
+    let d256_proj = g256.add(&p256::CURVE, &g256);
+    let d256_jac = gj256.double(&p256::CURVE);
+    assert_eq!(
+        d256_proj.to_affine(&p256::FIELD),
+        d256_jac.to_affine(&p256::FIELD),
+        "P-256 doubling mismatch"
+    );
+
+    let add256_proj = d256_proj.add(&p256::CURVE, &g256);
+    let add256_jac = d256_jac.add(&p256::CURVE, &gj256);
+    assert_eq!(
+        add256_proj.to_affine(&p256::FIELD),
+        add256_jac.to_affine(&p256::FIELD),
+        "P-256 Jacobian add mismatch"
+    );
+
+    let (gx256, gy256) = g256.to_affine(&p256::FIELD).unwrap();
+    let gx256_fe = mcu_crypto_asm::Fe::from_int(&p256::FIELD, &gx256);
+    let gy256_fe = mcu_crypto_asm::Fe::from_int(&p256::FIELD, &gy256);
+    let mixed256_jac = d256_jac.add_mixed(&p256::CURVE, &gx256_fe, &gy256_fe);
+    assert_eq!(
+        add256_proj.to_affine(&p256::FIELD),
+        mixed256_jac.to_affine(&p256::FIELD),
+        "P-256 Jacobian add_mixed mismatch"
+    );
+
+    // Test P-384
+    let g384 = Point::<{ p384::N }>::generator(&p384::CURVE);
+    let gj384 = PointJacobian::<{ p384::N }>::generator(&p384::CURVE);
+    let d384_proj = g384.add(&p384::CURVE, &g384);
+    let d384_jac = gj384.double(&p384::CURVE);
+    assert_eq!(
+        d384_proj.to_affine(&p384::FIELD),
+        d384_jac.to_affine(&p384::FIELD),
+        "P-384 doubling mismatch"
+    );
+
+    let add384_proj = d384_proj.add(&p384::CURVE, &g384);
+    let add384_jac = d384_jac.add(&p384::CURVE, &gj384);
+    assert_eq!(
+        add384_proj.to_affine(&p384::FIELD),
+        add384_jac.to_affine(&p384::FIELD),
+        "P-384 Jacobian add mismatch"
+    );
+
+    let (gx384, gy384) = g384.to_affine(&p384::FIELD).unwrap();
+    let gx384_fe = mcu_crypto_asm::Fe::from_int(&p384::FIELD, &gx384);
+    let gy384_fe = mcu_crypto_asm::Fe::from_int(&p384::FIELD, &gy384);
+    let mixed384_jac = d384_jac.add_mixed(&p384::CURVE, &gx384_fe, &gy384_fe);
+    assert_eq!(
+        add384_proj.to_affine(&p384::FIELD),
+        mixed384_jac.to_affine(&p384::FIELD),
+        "P-384 Jacobian add_mixed mismatch"
+    );
+
+    // Coordinate conversions roundtrip
+    let proj_roundtrip = gj384.to_projective(&p384::FIELD);
+    assert_eq!(
+        proj_roundtrip.to_affine(&p384::FIELD),
+        gj384.to_affine(&p384::FIELD)
+    );
+    let jac_roundtrip = PointJacobian::from_projective(&g384, &p384::FIELD);
+    assert_eq!(
+        jac_roundtrip.to_affine(&p384::FIELD),
+        g384.to_affine(&p384::FIELD)
+    );
+}

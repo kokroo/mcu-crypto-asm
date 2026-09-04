@@ -109,3 +109,15 @@ pub fn sub_mod_n<const N: usize>(a: &[u32; N], b: &[u32; N], p: &[u32], out: &mu
     }
     portable::sub_mod_n(a, b, p, out);
 }
+
+/// `out = a / 2 mod p` with fixed compile-time limb count `N`.
+#[inline]
+pub fn div2_mod_n<const N: usize>(a: &[u32; N], p: &[u32], out: &mut [u32; N]) {
+    #[cfg(nistp_asm_cm4)]
+    {
+        if cortex_m4::try_div2(a, p, out) {
+            return;
+        }
+    }
+    portable::div2_n(a, p, out);
+}

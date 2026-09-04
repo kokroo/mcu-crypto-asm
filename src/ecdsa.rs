@@ -8,7 +8,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use crate::scalar::Scalar;
-use crate::{CurveParams, Fe, Point};
+use crate::{CurveParams, Fe, Point, PointJacobian};
 
 /// An error from an ECDSA operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,23 +56,26 @@ pub fn verify<const N: usize>(
     let u1_limbs = u1.to_int(c);
     let u2_limbs = u2.to_int(c);
 
-    let u1_g = Point::<N>::mul_base(c, &u1_limbs, comb, comb_d, comb_t);
-    let u2_q = q.mul_scalar(c, &u2_limbs);
+    let q_j = PointJacobian::<N>::from_affine(&q.x, &q.y, &c.field);
+    let u1_g_proj = Point::<N>::mul_base(c, &u1_limbs, comb, comb_d, comb_t);
+    let u1_g = PointJacobian::<N>::from_projective(&u1_g_proj, &c.field);
+    let u2_q = q_j.mul_scalar(c, &u2_limbs);
     let r_pt = u1_g.add(c, &u2_q);
 
     if r_pt.is_identity() {
         return Err(Error::BadSignature);
     }
 
-    // Fast projective verification: check r * Z == X mod p
+    // Fast Jacobian verification: check r * Z^2 == X mod p
+    let z2 = r_pt.z.sqr(&c.field);
     let r_limbs = r_scalar.to_int(c);
     let r_fe = Fe::<N>::from_int(&c.field, &r_limbs);
-    let lhs1 = r_fe.mul(&c.field, &r_pt.z);
+    let lhs1 = r_fe.mul(&c.field, &z2);
     if lhs1.ct_eq(&r_pt.x) {
         return Ok(());
     }
 
-    // In the rare case that r + n < p, check (r + n) * Z == X mod p
+    // In the rare case that r + n < p, check (r + n) * Z^2 == X mod p
     let mut r_plus_n = [0u32; N];
     let mut carry = 0u32;
     for i in 0..N {
@@ -84,7 +87,7 @@ pub fn verify<const N: usize>(
 
     if carry == 0 && less_than(&r_plus_n, c.field.p) {
         let r2_fe = Fe::<N>::from_int(&c.field, &r_plus_n);
-        let lhs2 = r2_fe.mul(&c.field, &r_pt.z);
+        let lhs2 = r2_fe.mul(&c.field, &z2);
         if lhs2.ct_eq(&r_pt.x) {
             return Ok(());
         }

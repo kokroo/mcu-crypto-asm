@@ -28,6 +28,7 @@ extern "C" {
     fn nistp_add_mod_12(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
     fn nistp_sub_mod_8(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
     fn nistp_sub_mod_12(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
+    fn nistp_div2_12(out: *mut u32, a: *const u32);
 }
 
 /// Dispatch to assembly if a routine exists for this limb count.
@@ -120,3 +121,16 @@ pub fn try_sub_mod(a: &[u32], b: &[u32], p: &[u32], out: &mut [u32]) -> bool {
         _ => false,
     }
 }
+
+#[inline]
+pub fn try_div2(a: &[u32], p: &[u32], out: &mut [u32]) -> bool {
+    if a.len() == 12 && p == crate::params::p384::P {
+        unsafe {
+            nistp_div2_12(out.as_mut_ptr(), a.as_ptr());
+        }
+        true
+    } else {
+        false
+    }
+}
+

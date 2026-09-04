@@ -97,6 +97,18 @@ fn check_curve<const N: usize>(f: &Params, name: &str) {
         );
     }
 
+    // --- div2 ---
+    let inv2 = (&p + 1u32) / 2u32;
+    for _ in 0..500 {
+        let a = rng.field_elem::<N>(&p);
+        let fa = Fe::<N>::from_int(f, &from_big::<N>(&a));
+        assert_eq!(
+            to_big(&fa.div2(f).to_int(f)),
+            (&a * &inv2) % &p,
+            "{name}: div2"
+        );
+    }
+
     // --- edge cases: these are where carry handling breaks ---
     let edges = vec![
         BigUint::zero(),

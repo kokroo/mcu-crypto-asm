@@ -103,6 +103,14 @@ impl<const N: usize> Fe<N> {
         Self { v: out }
     }
 
+    /// `self / 2 mod p`.
+    #[inline]
+    pub fn div2(&self, f: &Params) -> Self {
+        let mut out = [0u32; N];
+        backend::div2_mod_n(&self.v, f.p, &mut out);
+        Self { v: out }
+    }
+
     /// Modular inverse, `self^(p-2) mod p` (Fermat's little theorem).
     ///
     /// Returns zero for a zero input, which has no inverse — callers that care

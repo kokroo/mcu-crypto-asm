@@ -52,7 +52,7 @@ const CM4_SRC: &str = include_str!("../asm/cortex_m4.S");
 const CM4_ALLOWED: &[&str] = &[
     "ldr", "str", "umaal", "eor", "and", "orr", "mov", "mov.w", "add", "adds", "adc", "adcs",
     "adc.w", "sub", "subs", "sbc", "sbcs", "push", "pop", "bne", "mvn", "movw", "movt", "ldrd",
-    "strd", "vpush", "vpop", "vldm", "vmov",
+    "strd", "vpush", "vpop", "vldm", "vmov", "lsls", "asrs", "lsr", "rrx", "rrxs",
 ];
 
 #[test]
