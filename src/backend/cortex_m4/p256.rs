@@ -323,6 +323,7 @@ fn get_bit(arr: &[u32; 8], i: usize) -> u32 {
     (arr[i / 32] >> (i % 32)) & 1
 }
 
+#[allow(dead_code)]
 #[inline(always)]
 fn abs_int(a: i8) -> u32 {
     let a_u = a as i32 as u32;
@@ -699,20 +700,24 @@ pub fn scalarmult_variable_base_jacobian(
     in_j: &[[u32; 8]; 3],
     scalar: &[u32; 8],
 ) {
-    let mut scalar2 = [0u32; 8];
-    let mut e = [0i8; 64];
-
-    let even = (scalar[0] & 1) ^ 1;
-    unsafe {
-        P256_negate_mod_n_if(scalar2.as_mut_ptr(), scalar.as_ptr(), even);
+    let mut is_zero = true;
+    for &w in scalar {
+        if w != 0 {
+            is_zero = false;
+            break;
+        }
+    }
+    if is_zero {
+        *out_j = [[0; 8]; 3];
+        return;
     }
 
-    e[0] = (scalar2[0] & 0xf) as i8;
-    for i in 1..64 {
-        e[i] = ((scalar2[i / 8] >> ((i % 8) * 4)) & 0xf) as i8;
-        e[i - 1] = e[i - 1].wrapping_sub((((e[i] as u8 & 1) ^ 1) << 4) as i8);
-        e[i] |= 1;
+    let mut scalar_bytes = [0u8; 32];
+    for (i, c) in scalar_bytes.rchunks_exact_mut(4).enumerate() {
+        c.copy_from_slice(&scalar[i].to_be_bytes());
     }
+    let mut s = [0i8; 257];
+    slide_257(&mut s, &scalar_bytes);
 
     let in_is_affine = in_j[2] == ONE_MONTGOMERY;
     let mut table_j = [[[0u32; 8]; 3]; 8];
@@ -741,40 +746,54 @@ pub fn scalarmult_variable_base_jacobian(
                 table_j[i].as_mut_ptr() as *mut u32,
                 table_j[i - 1].as_ptr() as *const u32,
                 0,
-                0,
+                if i == 1 { 1 } else { 0 },
             );
         }
     }
 
-    let init_idx = ((e[63] as u32) >> 1) as usize;
-    let mut current_point = table_j[init_idx];
+    let mut max_i = 256;
+    while max_i > 0 && s[max_i] == 0 {
+        max_i -= 1;
+    }
 
-    for i in (0..63).rev() {
+    let init_idx = (s[max_i].abs() >> 1) as usize;
+    let mut current_point = table_j[init_idx];
+    if s[max_i] < 0 {
         unsafe {
-            for _ in 0..4 {
-                P256_double_j(
+            P256_negate_mod_p_if(
+                current_point[1].as_mut_ptr(),
+                current_point[1].as_ptr(),
+                1,
+            );
+        }
+    }
+
+    for i in (0..max_i).rev() {
+        unsafe {
+            P256_double_j(
+                current_point.as_mut_ptr() as *mut u32,
+                current_point.as_ptr() as *const u32,
+            );
+            if s[i] > 0 {
+                let idx = (s[i] >> 1) as usize;
+                P256_add_sub_j(
                     current_point.as_mut_ptr() as *mut u32,
-                    current_point.as_ptr() as *const u32,
+                    table_j[idx].as_ptr() as *const u32,
+                    0,
+                    0,
+                );
+            } else if s[i] < 0 {
+                let idx = ((-s[i]) >> 1) as usize;
+                P256_add_sub_j(
+                    current_point.as_mut_ptr() as *mut u32,
+                    table_j[idx].as_ptr() as *const u32,
+                    1,
+                    0,
                 );
             }
-            let is_sub = ((e[i] as u8) >> 7) as u32;
-            let abs_val = (abs_int(e[i]) >> 1) as usize;
-            P256_add_sub_j(
-                current_point.as_mut_ptr() as *mut u32,
-                table_j[abs_val].as_ptr() as *const u32,
-                is_sub,
-                0,
-            );
         }
     }
 
-    unsafe {
-        P256_negate_mod_p_if(
-            current_point[1].as_mut_ptr(),
-            current_point[1].as_ptr(),
-            even,
-        );
-    }
     *out_j = current_point;
 }
 
