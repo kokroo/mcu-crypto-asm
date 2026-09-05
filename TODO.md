@@ -71,6 +71,13 @@ All 42 microcontroller boards in the Teleprobe test farm plus modern IoT chips (
   - *Highlights*: Highly optimized ARMv7E-M / Cortex-M33 bignum engine (`bignum_asm.S`). Implements RSAES-PKCS1-v1_5, RSASSA-PKCS1-v1_5, and RSASSA-PSS (TLS 1.3 compatible) with CRT optimization. RSA-2048 public verify takes ~1.03M cycles; private sign is ~46M cycles with constant memory access patterns.
 
 ### 3.2. Curve25519 & Ed25519
+- **[`embassy-rs/cortex25519`](https://github.com/embassy-rs/cortex25519)** (Dario Nieuwenhuis / Dirbaio & Emil Lenngren) (BSD-2-Clause):
+  - *Architectures*: Cortex-M4 / Cortex-M33 (ARMv7E-M / ARMv8-M).
+  - *Upstream Origin*: Emil Lenngren's [`Emill/X25519-Cortex-M4`](https://github.com/Emill/X25519-Cortex-M4), extended by Embassy to support Ed25519 signature verification.
+  - *Highlights*: Contains pure assembly kernels `cortex_m_fe25519.s`, `cortex_m_curve25519.s`, and `cortex_m_ed25519.s`. Tested with Wycheproof vectors in QEMU. Direct drop-in candidate for `mcu-crypto-asm`'s Cortex-M4/M33 backend.
+- **[`aCinal/esp-x25519`](https://github.com/aCinal/esp-x25519)** (Alper Cinal) (MIT):
+  - *Architectures*: Xtensa LX6 and LX7 (ESP32, ESP32-S2, ESP32-S3).
+  - *Technique*: Constant-time X25519 optimized for the **Xtensa MAC16** execution unit. Uses 17 15-bit limbs ($17 \times 15 = 255$) to fit into the 40-bit accumulator (`xsr.acclo`, `xsr.acchi`) without intermediate overflows, combined with zero-overhead hardware `loop` instructions. Solves the Xtensa backend for Curve25519.
 - **`fe25519` by Dideriksen et al. / Schwabe** (Public Domain / CC0):
   - *Architectures*: Cortex-M4 / Cortex-M33.
   - *Technique*: 10 unsaturated 25.5-bit limbs with `UMAAL`. Computes X25519 in **~620,000–650,000 cycles** (~10 ms @ 64 MHz on nRF52840).
@@ -156,18 +163,16 @@ All 42 microcontroller boards in the Teleprobe test farm plus modern IoT chips (
 ---
 
 ### Phase 2: Modern Elliptic Curves (Curve25519 / X25519 & Ed25519)
-- [ ] **Curve25519 Field $\mathbb{F}_{2^{255}-19}$ Arithmetic (Cortex-M4 / M33)**:
-  - [ ] Implement 10-limb radix-$2^{25.5}$ multiplication and squaring with `UMAAL`.
-  - [ ] Implement fast reduction modulo $2^{255}-19$ ($19 \times \text{carry}$).
-  - [ ] Constant-time conditional swap (`CSWAP`) using bitwise multiplexing.
-- [ ] **X25519 ECDH Protocol (RFC 7748)**:
-  - [ ] Constant-time Montgomery ladder (255 steps).
-  - [ ] Inversion modulo $2^{255}-19$ via addition chain ($2^{255}-21$).
+- [ ] **Cortex-M4 / Cortex-M33 X25519 & Ed25519 Backend**:
+  - [ ] Integrate `cortex_m_fe25519.s`, `cortex_m_curve25519.s`, and `cortex_m_ed25519.s` from [`embassy-rs/cortex25519`](https://github.com/embassy-rs/cortex25519) (built on Emil Lenngren's [`Emill/X25519-Cortex-M4`](https://github.com/Emill/X25519-Cortex-M4)).
   - [ ] Target cycle goal: **< 650,000 cycles on Cortex-M4** (< 10.2 ms @ 64 MHz).
-- [ ] **Ed25519 Signature Verification & Signing (RFC 8032)**:
-  - [ ] Twisted Edwards point addition and doubling in extended projective coordinates $(X:Y:Z:T)$.
-  - [ ] Fixed-base comb multiplication for base point $B$.
-  - [ ] Scalar reduction modulo $\ell = 2^{252} + 27742317777372353535851937790883648493$.
+  - [ ] Support both X25519 ECDH key agreement (RFC 7748) and Ed25519 signature verification (RFC 8032).
+  - [ ] Run differential and KAT verification against Wycheproof test vectors.
+- [ ] **Xtensa LX6 / LX7 (ESP32 / ESP32-S3) X25519 Backend**:
+  - [ ] Integrate MAC16-optimized assembly from [`aCinal/esp-x25519`](https://github.com/aCinal/esp-x25519) (17 15-bit limbs, 40-bit accumulator registers `acclo`/`acchi`, hardware `loop`).
+  - [ ] Provide constant-time, zero-table X25519 for ESP32 and ESP32-S3 in bare-metal Rust without external C dependencies.
+- [ ] **Cortex-M0 / Cortex-M0+ (RP2040) X25519**:
+  - [ ] Implement Haase-Labrique multi-precision Karatsuba algorithm adapted for Thumb-1.
 
 ---
 
