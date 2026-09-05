@@ -19,7 +19,7 @@ hex = "0.4"
 proptest = "1"
 
 [features]
-default = ["embassy-driver"]
+default = []
 # Force the portable backend even on an arch that has assembly. Used by the
 # differential tests: they need BOTH backends live in one binary to compare.
 force-portable = []
