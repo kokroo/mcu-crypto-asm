@@ -110,6 +110,29 @@ All 42 microcontroller boards in the Teleprobe test farm plus modern IoT chips (
 - **OpenSSL `sha512-armv4.S`**:
   - *Technique*: Uses `LDRD`/`STRD` paired register loads and combined rotations to solve 64-bit register pressure on 32-bit ARM cores.
 
+### 3.7. AES (128, 192, 256) & Wide-Key/Wide-Block Ciphers
+- **Standard AES (FIPS 197)**: Defines AES-128 (10 rounds), AES-192 (12 rounds), and AES-256 (14 rounds) on a 128-bit block.
+- **"AES-512" and Wide Constructs**: FIPS 197 specifies a maximum 256-bit key. In practice, "AES-512" refers to:
+  - **AES-XTS-512** (IEEE 1619 / FIPS): Standard for disk/flash encryption, using two 256-bit keys (512-bit total key material: $K_1$ for AES-256 block cipher, $K_2$ for tweak encryption).
+  - **Rijndael-256 / Rijndael-512**: The original Rijndael submission supported 256-bit block and key sizes (used in wide-block hashing and MACs).
+  - **Kalyna-512 / Threefish-512**: National standard / Skein 512-bit wide block ciphers.
+- **Reference Implementations & Prior Art**:
+  - **[`Rvch7/Fixslicing-AES`](https://github.com/Rvch7/Fixslicing-AES)** (Alexandre Adomnicăi & Thomas Peyrin, TCHES 2021) (MIT / Public Domain):
+    - *Architectures*: ARM Cortex-M (Thumb-2) and RISC-V.
+    - *Technique*: Fixslicing eliminates the ShiftRows overhead in classical bitslicing by adjusting the representation each round. Achieves speed records on Cortex-M4: **~63 cycles/byte for AES-128-CTR** in 2-block parallel constant-time assembly.
+  - **[`Ko-/aes-armcortexm`](https://github.com/Ko-/aes-armcortexm)** ("All the AES You Need on Cortex-M3 and M4", Peter Schwabe & Ko Stoffelen, SAC 2016) (Public Domain):
+    - *Architectures*: Cortex-M3, Cortex-M4.
+    - *Technique*: Fast T-table, constant-time bitsliced (2, 4, and 8-block), and **first-order masked bitsliced AES** (provides provable side-channel resistance against DPA/CPA power analysis attacks on microcontrollers!).
+  - **[`BearSSL aes_ct.c`](https://bearssl.org/)** (Thomas Pornin) (MIT):
+    - *Technique*: 32-bit constant-time bitsliced S-box using Boyar-Peralta logic minimization (only 113–115 boolean gates per S-box). Compact, zero RAM tables, immune to cache attacks.
+  - **RISC-V Scalar Cryptography (`Zkne`, `Zknd`)**:
+    - *Architectures*: ESP32-C6, ESP32-P4, modern RV32 cores.
+    - *Technique*: Hardware round instructions (`aes32esi`, `aes32esmi`, `aes32dsi`, `aes32dsmi`) reduce each AES round to just **4 instructions** (~10–15 cycles/block).
+  - **Why Software ASM Matters Even with Hardware Crypto Accelerators**:
+    1. *Cache Timing Immunity*: Hardware engines or T-table software leak cache lines on MCUs with data caches (Cortex-M7, ESP32). Bitslicing has zero data-dependent memory lookups.
+    2. *Hardware Limitations*: Nordic nRF52/nRF53 hardware ECB only supports AES-128 (no AES-192 or AES-256).
+    3. *Zero Peripheral Contention / Re-entrancy*: Hardware engines require RTOS mutexes, peripheral power clocks, and DMA setup; software assembly is purely re-entrant and faster for payloads under 64–128 bytes.
+
 ---
 
 ## 4. Actionable TODO Tracker
@@ -188,5 +211,9 @@ All 42 microcontroller boards in the Teleprobe test farm plus modern IoT chips (
 - [ ] **Keccak-f[1600] / SHAKE-128 / SHAKE-256**:
   - [ ] Integrate 32-bit interleaved bit-sliced ARM assembly (from XKCP).
   - [ ] Critical performance driver for ML-KEM and ML-DSA hash operations.
-- [ ] **Constant-Time Bitsliced AES-128 / AES-256**:
-  - [ ] Pure Boolean instruction bit-sliced AES S-Box calculation for Cortex-M7 and ESP32 without data cache timing side-channels.
+- [ ] **Constant-Time Bitsliced & Fixsliced AES-128, AES-192, AES-256**:
+  - [ ] Implement Adomnicăi-Peyrin 2-block parallel **Fixsliced AES** on ARM Cortex-M4/M33 (target **~63 cycles/byte** in CTR mode).
+  - [ ] Implement constant-time Boyar-Peralta S-box (113–115 gates) for memory-constrained MCUs (RP2040 Cortex-M0+).
+  - [ ] Implement **first-order masked bitsliced AES** (Schwabe-Stoffelen) for power-analysis / DPA resistance on secure embedded tokens.
+  - [ ] Support AES-XTS (256-bit and 512-bit key material) for encrypted firmware partitions and external flash.
+  - [ ] Add RISC-V `Zkne`/`Zknd` scalar crypto instructions backend for ESP32-C6 / ESP32-P4.
