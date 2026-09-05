@@ -10,7 +10,7 @@ categories = ["cryptography", "no-std", "embedded"]
 keywords = ["crypto", "embedded", "no-std", "cortex-m", "assembly"]
 
 [dependencies]
-embassy-crypto-driver = { git = "https://github.com/xoviat/embassy", branch = "crypto", optional = true }
+embassy-crypto-driver = { git = "https://github.com/embassy-rs/embassy", rev = "c0fdd08", optional = true }
 
 [dev-dependencies]
 num-bigint = "0.4"
@@ -19,7 +19,7 @@ hex = "0.4"
 proptest = "1"
 
 [features]
-default = []
+default = ["embassy-driver"]
 # Force the portable backend even on an arch that has assembly. Used by the
 # differential tests: they need BOTH backends live in one binary to compare.
 force-portable = []
