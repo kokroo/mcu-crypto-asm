@@ -40,6 +40,7 @@ extern "C" {
     pub fn P256_reduce_mod_n_32bytes(res: *mut u32, a: *const u32);
     pub fn P256_add_mod_n(res: *mut u32, a: *const u32, b: *const u32);
     pub fn P256_mul_mod_n(res: *mut u32, a: *const u32, b: *const u32);
+    pub fn P256_mod_n_inv_vartime(res: *mut u32, a: *const u32);
 
     pub fn P256_divsteps2_31(delta: i32, f: u32, g: u32, matrix: *mut u32) -> i32;
     pub fn P256_matrix_mul_fg_9(a: u32, b: u32, fg: *const FGInteger, res: *mut FGInteger);
@@ -536,54 +537,166 @@ pub fn scalarmult_fixed_base(
     }
 }
 
-/// Batch invert Z coordinates and convert 7 Jacobian points (indices 1..8) to affine coordinates in Montgomery form.
-pub fn batch_jacobian_to_affine_7(out_affine: &mut [[[u32; 8]; 2]], in_j: &[[[u32; 8]; 3]]) {
-    debug_assert_eq!(out_affine.len(), 7);
-    debug_assert_eq!(in_j.len(), 7);
+/// Convert homogeneous projective point `(X_H : Y_H : Z_H)` to Jacobian `[X_J, Y_J, Z_J]` in Montgomery form.
+///
+/// In homogeneous coordinates, affine `(x, y) = (X_H / Z_H, Y_H / Z_H)`.
+/// In Jacobian coordinates, affine `(x, y) = (X_J / Z_J^2, Y_J / Z_J^3)`.
+///
+/// Setting:
+///   X_J = X_H * Z_H mod p
+///   Y_J = Y_H * Z_H^2 mod p
+///   Z_J = Z_H
+///
+/// Gives:
+///   X_J / Z_J^2 = (X_H * Z_H) / Z_H^2 = X_H / Z_H = x
+///   Y_J / Z_J^3 = (Y_H * Z_H^2) / Z_H^3 = Y_H / Z_H = y
+///
+/// Requires ZERO field inversions (only 1 squaring + 2 multiplications).
+#[inline]
+pub fn homogeneous_to_jacobian(
+    out_j: &mut [[u32; 8]; 3],
+    x_h: &[u32; 8],
+    y_h: &[u32; 8],
+    z_h: &[u32; 8],
+) {
+    if z_h == &ONE_MONTGOMERY {
+        out_j[0] = *x_h;
+        out_j[1] = *y_h;
+        out_j[2] = ONE_MONTGOMERY;
+    } else {
+        let mut z2 = [0u32; 8];
+        unsafe {
+            emill_p256_sqr_mont(z2.as_mut_ptr(), z_h.as_ptr());
+            emill_p256_mul_mont(out_j[0].as_mut_ptr(), x_h.as_ptr(), z_h.as_ptr());
+            emill_p256_mul_mont(out_j[1].as_mut_ptr(), y_h.as_ptr(), z2.as_ptr());
+        }
+        out_j[2] = *z_h;
+    }
+}
+
+/// Convert Jacobian point `[X_J, Y_J, Z_J]` to homogeneous projective `(X_H : Y_H : Z_H)` in Montgomery form.
+///
+/// In Jacobian coordinates, affine `(x, y) = (X_J / Z_J^2, Y_J / Z_J^3)`.
+/// In homogeneous coordinates, affine `(x, y) = (X_H / Z_H, Y_H / Z_H)`.
+///
+/// Setting:
+///   X_H = X_J * Z_J mod p
+///   Y_H = Y_J
+///   Z_H = Z_J^3 = Z_J^2 * Z_J mod p
+///
+/// Gives:
+///   X_H / Z_H = (X_J * Z_J) / Z_J^3 = X_J / Z_J^2 = x
+///   Y_H / Z_H = Y_J / Z_J^3 = y
+///
+/// Requires ZERO field inversions (only 1 squaring + 2 multiplications).
+#[inline]
+pub fn jacobian_to_homogeneous(
+    out_x_h: &mut [u32; 8],
+    out_y_h: &mut [u32; 8],
+    out_z_h: &mut [u32; 8],
+    in_j: &[[u32; 8]; 3],
+) {
+    let mut z_acc = 0u32;
+    for &w in in_j[2].iter() {
+        z_acc |= w;
+    }
+    if z_acc == 0 {
+        *out_x_h = [0; 8];
+        *out_y_h = ONE_MONTGOMERY;
+        *out_z_h = [0; 8];
+    } else if in_j[2] == ONE_MONTGOMERY {
+        *out_x_h = in_j[0];
+        *out_y_h = in_j[1];
+        *out_z_h = ONE_MONTGOMERY;
+    } else {
+        let mut z2 = [0u32; 8];
+        unsafe {
+            emill_p256_sqr_mont(z2.as_mut_ptr(), in_j[2].as_ptr());
+            emill_p256_mul_mont(out_z_h.as_mut_ptr(), z2.as_ptr(), in_j[2].as_ptr());
+            emill_p256_mul_mont(out_x_h.as_mut_ptr(), in_j[0].as_ptr(), in_j[2].as_ptr());
+        }
+        *out_y_h = in_j[1];
+    }
+}
+
+/// Batch convert 7 Jacobian points to affine coordinates in Montgomery form.
+/// `points_j` has 7 Jacobian points [3P, 5P, 7P, 9P, 11P, 13P, 15P].
+/// `out_aff` has 7 affine points [[x, y]; 7].
+pub fn batch_jacobian_to_affine_7(
+    out_aff: &mut [[[u32; 8]; 2]; 7],
+    points_j: &[[[u32; 8]; 3]; 7],
+) {
     let mut c = [[0u32; 8]; 7];
-    c[0] = in_j[0][2];
+    c[0] = points_j[0][2];
+    for i in 1..7 {
+        unsafe {
+            emill_p256_mul_mont(
+                c[i].as_mut_ptr(),
+                c[i - 1].as_ptr(),
+                points_j[i][2].as_ptr(),
+            );
+        }
+    }
+
+    let mut inv = [0u32; 8];
     unsafe {
-        for i in 1..7 {
-            emill_p256_mul_mont(c[i].as_mut_ptr(), c[i - 1].as_ptr(), in_j[i][2].as_ptr());
-        }
-        let mut inv = [0u32; 8];
         emill_p256_modinv_p(inv.as_mut_ptr(), c[6].as_ptr());
+    }
 
-        let mut z_inv = [[0u32; 8]; 7];
-        for i in (1..7).rev() {
-            emill_p256_mul_mont(z_inv[i].as_mut_ptr(), inv.as_ptr(), c[i - 1].as_ptr());
-            let mut next_inv = [0u32; 8];
-            emill_p256_mul_mont(next_inv.as_mut_ptr(), inv.as_ptr(), in_j[i][2].as_ptr());
-            inv = next_inv;
-        }
-        z_inv[0] = inv;
+    for i in (1..7).rev() {
+        let mut z_inv = [0u32; 8];
+        unsafe {
+            emill_p256_mul_mont(
+                z_inv.as_mut_ptr(),
+                inv.as_ptr(),
+                c[i - 1].as_ptr(),
+            );
+            emill_p256_mul_mont(
+                inv.as_mut_ptr(),
+                inv.as_ptr(),
+                points_j[i][2].as_ptr(),
+            );
 
-        for i in 0..7 {
             let mut z_inv2 = [0u32; 8];
             let mut z_inv3 = [0u32; 8];
-            emill_p256_sqr_mont(z_inv2.as_mut_ptr(), z_inv[i].as_ptr());
-            emill_p256_mul_mont(z_inv3.as_mut_ptr(), z_inv2.as_ptr(), z_inv[i].as_ptr());
+            emill_p256_sqr_mont(z_inv2.as_mut_ptr(), z_inv.as_ptr());
+            emill_p256_mul_mont(z_inv3.as_mut_ptr(), z_inv2.as_ptr(), z_inv.as_ptr());
             emill_p256_mul_mont(
-                out_affine[i][0].as_mut_ptr(),
-                in_j[i][0].as_ptr(),
+                out_aff[i][0].as_mut_ptr(),
+                points_j[i][0].as_ptr(),
                 z_inv2.as_ptr(),
             );
             emill_p256_mul_mont(
-                out_affine[i][1].as_mut_ptr(),
-                in_j[i][1].as_ptr(),
+                out_aff[i][1].as_mut_ptr(),
+                points_j[i][1].as_ptr(),
                 z_inv3.as_ptr(),
             );
         }
     }
+
+    unsafe {
+        let mut z_inv2 = [0u32; 8];
+        let mut z_inv3 = [0u32; 8];
+        emill_p256_sqr_mont(z_inv2.as_mut_ptr(), inv.as_ptr());
+        emill_p256_mul_mont(z_inv3.as_mut_ptr(), z_inv2.as_ptr(), inv.as_ptr());
+        emill_p256_mul_mont(
+            out_aff[0][0].as_mut_ptr(),
+            points_j[0][0].as_ptr(),
+            z_inv2.as_ptr(),
+        );
+        emill_p256_mul_mont(
+            out_aff[0][1].as_mut_ptr(),
+            points_j[0][1].as_ptr(),
+            z_inv3.as_ptr(),
+        );
+    }
 }
 
-/// Constant-time variable-base scalar multiplication: `scalar * P`.
+/// Constant-time variable-base scalar multiplication returning Jacobian coordinates: `scalar * P`.
 /// Inputs and outputs are in Montgomery form.
-pub fn scalarmult_variable_base(
-    out_mont_x: &mut [u32; 8],
-    out_mont_y: &mut [u32; 8],
-    in_mont_x: &[u32; 8],
-    in_mont_y: &[u32; 8],
+pub fn scalarmult_variable_base_jacobian(
+    out_j: &mut [[u32; 8]; 3],
+    in_j: &[[u32; 8]; 3],
     scalar: &[u32; 8],
 ) {
     let mut scalar2 = [0u32; 8];
@@ -601,42 +714,40 @@ pub fn scalarmult_variable_base(
         e[i] |= 1;
     }
 
-    let mut table = [[[0u32; 8]; 3]; 8];
-    table[0][0] = *in_mont_x;
-    table[0][1] = *in_mont_y;
-    table[0][2] = ONE_MONTGOMERY;
+    let in_is_affine = in_j[2] == ONE_MONTGOMERY;
+    let mut table_j = [[[0u32; 8]; 3]; 8];
+    if in_is_affine {
+        table_j[0] = *in_j;
+    } else {
+        unsafe {
+            P256_jacobian_to_affine(
+                table_j[0][0].as_mut_ptr(),
+                table_j[0][1].as_mut_ptr(),
+                in_j.as_ptr() as *const u32,
+            );
+        }
+        table_j[0][2] = ONE_MONTGOMERY;
+    }
 
     unsafe {
         P256_double_j(
-            table[7].as_mut_ptr() as *mut u32,
-            table[0].as_ptr() as *const u32,
+            table_j[7].as_mut_ptr() as *mut u32,
+            table_j[0].as_ptr() as *const u32,
         );
         for i in 1..8 {
-            table[i] = table[7];
+            let two_p = table_j[7];
+            table_j[i] = two_p;
             P256_add_sub_j(
-                table[i].as_mut_ptr() as *mut u32,
-                table[i - 1].as_ptr() as *const u32,
+                table_j[i].as_mut_ptr() as *mut u32,
+                table_j[i - 1].as_ptr() as *const u32,
                 0,
-                if i == 1 { 1 } else { 0 },
+                0,
             );
         }
     }
 
-    let mut affine_table = [[[0u32; 8]; 2]; 8];
-    affine_table[0][0] = *in_mont_x;
-    affine_table[0][1] = *in_mont_y;
-    batch_jacobian_to_affine_7(&mut affine_table[1..8], &table[1..8]);
-
-    let mut current_point = [[0u32; 8]; 3];
-    unsafe {
-        P256_select_point(
-            current_point.as_mut_ptr() as *mut u32,
-            affine_table.as_ptr() as *const u32,
-            2,
-            (e[63] as u32) >> 1,
-        );
-    }
-    current_point[2] = ONE_MONTGOMERY;
+    let init_idx = ((e[63] as u32) >> 1) as usize;
+    let mut current_point = table_j[init_idx];
 
     for i in (0..63).rev() {
         unsafe {
@@ -646,36 +757,191 @@ pub fn scalarmult_variable_base(
                     current_point.as_ptr() as *const u32,
                 );
             }
-            let mut selected_point = [[0u32; 8]; 2];
-            let abs_val = abs_int(e[i]);
-            P256_select_point(
-                selected_point.as_mut_ptr() as *mut u32,
-                affine_table.as_ptr() as *const u32,
-                2,
-                abs_val >> 1,
-            );
-            P256_negate_mod_p_if(
-                selected_point[1].as_mut_ptr(),
-                selected_point[1].as_ptr(),
-                ((e[i] as u8) >> 7) as u32,
-            );
+            let is_sub = ((e[i] as u8) >> 7) as u32;
+            let abs_val = (abs_int(e[i]) >> 1) as usize;
             P256_add_sub_j(
                 current_point.as_mut_ptr() as *mut u32,
-                selected_point.as_ptr() as *const u32,
+                table_j[abs_val].as_ptr() as *const u32,
+                is_sub,
                 0,
-                1,
             );
         }
     }
 
     unsafe {
+        P256_negate_mod_p_if(
+            current_point[1].as_mut_ptr(),
+            current_point[1].as_ptr(),
+            even,
+        );
+    }
+    *out_j = current_point;
+}
+
+/// Constant-time variable-base scalar multiplication: `scalar * P`.
+/// Inputs and outputs are in affine coordinates in Montgomery form.
+pub fn scalarmult_variable_base(
+    out_mont_x: &mut [u32; 8],
+    out_mont_y: &mut [u32; 8],
+    in_mont_x: &[u32; 8],
+    in_mont_y: &[u32; 8],
+    scalar: &[u32; 8],
+) {
+    let in_j = [*in_mont_x, *in_mont_y, ONE_MONTGOMERY];
+    let mut out_j = [[0u32; 8]; 3];
+    scalarmult_variable_base_jacobian(&mut out_j, &in_j, scalar);
+    unsafe {
         P256_jacobian_to_affine(
             out_mont_x.as_mut_ptr(),
             out_mont_y.as_mut_ptr(),
-            current_point.as_ptr() as *const u32,
+            out_j.as_ptr() as *const u32,
         );
-        P256_negate_mod_p_if(out_mont_y.as_mut_ptr(), out_mont_y.as_ptr(), even);
     }
+}
+
+/// Double-scalar multiplication: `k1 * p1 + k2 * p2` via joint sliding window recoding.
+/// Inputs and output are Jacobian points in Montgomery form.
+pub fn lincomb_jacobian(
+    out_j: &mut [[u32; 8]; 3],
+    k1: &[u32; 8],
+    p1: &[[u32; 8]; 3],
+    p1_is_generator: bool,
+    k2: &[u32; 8],
+    p2: &[[u32; 8]; 3],
+    p2_is_generator: bool,
+) {
+    let mut k1_bytes = [0u8; 32];
+    let mut k2_bytes = [0u8; 32];
+    for (i, c) in k1_bytes.rchunks_exact_mut(4).enumerate() {
+        c.copy_from_slice(&k1[i].to_be_bytes());
+    }
+    for (i, c) in k2_bytes.rchunks_exact_mut(4).enumerate() {
+        c.copy_from_slice(&k2[i].to_be_bytes());
+    }
+
+    let mut s1 = [0i8; 257];
+    let mut s2 = [0i8; 257];
+    slide_257(&mut s1, &k1_bytes);
+    slide_257(&mut s2, &k2_bytes);
+
+    let mut t1 = [[[0u32; 8]; 3]; 8];
+    if !p1_is_generator {
+        t1[0] = *p1;
+        unsafe {
+            P256_double_j(t1[7].as_mut_ptr() as *mut u32, t1[0].as_ptr() as *const u32);
+            for i in 1..8 {
+                t1[i] = t1[7];
+                P256_add_sub_j(
+                    t1[i].as_mut_ptr() as *mut u32,
+                    t1[i - 1].as_ptr() as *const u32,
+                    0,
+                    0,
+                );
+            }
+        }
+    }
+
+    let mut t2 = [[[0u32; 8]; 3]; 8];
+    if !p2_is_generator {
+        t2[0] = *p2;
+        unsafe {
+            P256_double_j(t2[7].as_mut_ptr() as *mut u32, t2[0].as_ptr() as *const u32);
+            for i in 1..8 {
+                t2[i] = t2[7];
+                P256_add_sub_j(
+                    t2[i].as_mut_ptr() as *mut u32,
+                    t2[i - 1].as_ptr() as *const u32,
+                    0,
+                    0,
+                );
+            }
+        }
+    }
+
+    let mut max_i = 256;
+    while max_i > 0 && s1[max_i] == 0 && s2[max_i] == 0 {
+        max_i -= 1;
+    }
+
+    let mut cp = [[0u32; 8]; 3];
+    for i in (0..=max_i).rev() {
+        unsafe {
+            P256_double_j(cp.as_mut_ptr() as *mut u32, cp.as_ptr() as *const u32);
+
+            if s1[i] > 0 {
+                let idx = (s1[i] as usize) / 2;
+                if p1_is_generator {
+                    P256_add_sub_j(
+                        cp.as_mut_ptr() as *mut u32,
+                        P256_BASEPOINT_PRECOMP.0[idx].as_ptr() as *const u32,
+                        0,
+                        1,
+                    );
+                } else {
+                    P256_add_sub_j(
+                        cp.as_mut_ptr() as *mut u32,
+                        t1[idx].as_ptr() as *const u32,
+                        0,
+                        0,
+                    );
+                }
+            } else if s1[i] < 0 {
+                let idx = ((-s1[i]) as usize) / 2;
+                if p1_is_generator {
+                    P256_add_sub_j(
+                        cp.as_mut_ptr() as *mut u32,
+                        P256_BASEPOINT_PRECOMP.0[idx].as_ptr() as *const u32,
+                        1,
+                        1,
+                    );
+                } else {
+                    P256_add_sub_j(
+                        cp.as_mut_ptr() as *mut u32,
+                        t1[idx].as_ptr() as *const u32,
+                        1,
+                        0,
+                    );
+                }
+            }
+
+            if s2[i] > 0 {
+                let idx = (s2[i] as usize) / 2;
+                if p2_is_generator {
+                    P256_add_sub_j(
+                        cp.as_mut_ptr() as *mut u32,
+                        P256_BASEPOINT_PRECOMP.0[idx].as_ptr() as *const u32,
+                        0,
+                        1,
+                    );
+                } else {
+                    P256_add_sub_j(
+                        cp.as_mut_ptr() as *mut u32,
+                        t2[idx].as_ptr() as *const u32,
+                        0,
+                        0,
+                    );
+                }
+            } else if s2[i] < 0 {
+                let idx = ((-s2[i]) as usize) / 2;
+                if p2_is_generator {
+                    P256_add_sub_j(
+                        cp.as_mut_ptr() as *mut u32,
+                        P256_BASEPOINT_PRECOMP.0[idx].as_ptr() as *const u32,
+                        1,
+                        1,
+                    );
+                } else {
+                    P256_add_sub_j(
+                        cp.as_mut_ptr() as *mut u32,
+                        t2[idx].as_ptr() as *const u32,
+                        1,
+                        0,
+                    );
+                }
+            }
+        }
+    }
+    *out_j = cp;
 }
 
 /// Convert hash to 256-bit little-endian integer z.
