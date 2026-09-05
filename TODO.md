@@ -148,6 +148,18 @@ All 42 microcontroller boards in the Teleprobe test farm plus modern IoT chips (
 - [x] **Cortex-M4 / Cortex-M33 P-256**: Hand-written UMAAL assembly, batch affine table, Bernstein-Yang `mod_n_inv`.
 - [x] **Cortex-M4 / Cortex-M33 P-384**: Hand-written 12-limb unrolled UMAAL multiplication, comb scalar mul.
 - [x] **Embassy `P256Ops` Driver**: Fully integrated and tested on hardware with zero secret branches.
+  - **Live Hardware Verification (Teleprobe `nucleo-stm32h563zi`, STM32H563ZITx Cortex-M33 @ 64 MHz, RAM-only execution)**:
+    | Benchmark Operation | `driver_mcu_crypto_asm` | `driver_p256_cm4` (Emil) | Speedup / Advantage |
+    | :--- | :---: | :---: | :--- |
+    | **Total Wall Time** | **1,782,470 µs (1.78 s)** | **2,302,917 µs (2.30 s)** | 🏆 **`mcu-crypto-asm` is 1.29× FASTER (22.6% less time)** |
+    | **`base_mul`** (keygen/ECDSA) | **5,331 µs** | 6,526 µs | 🏆 **18.3% faster** (comb filter) |
+    | **`point_add`** (projective) | **106 µs** | 1,678 µs | 🏆 **15.8× faster** (Renes-Costello-Batina complete) |
+    | **`inv`** (`mod_n_inv`) | **677 µs** | 640 µs | 🎯 **Parity achieved** (down from 8,742 µs in PR #1) |
+    | **`var_mul`** (peer public key) | 14,051 µs | 12,206 µs | Emil faster by ~1.8 ms (Emil disables CT cache check: `has_d_cache=0`) |
+    | **`ecdh`** | 14,083 µs | 11,324 µs | Emil faster by ~2.7 ms |
+    | **`lincomb`** (verify) | 19,385 µs | 16,375 µs | Emil faster by ~3.0 ms (joint sliding window) |
+    | **`TLS 1.3 ECDHE`** | 19,382 µs | 18,732 µs | Essentially neck-and-neck |
+
 - [ ] **Cortex-M0 / Cortex-M0+ (RP2040, STM32G0/L0/C0, nRF51) P-256 Backend**:
   - [ ] Vendor or adapt `P256-cortex-m0-ecdh-gcc.s` from `Emill/P256-cortex-ecdh`.
   - [ ] Implement constant-time 16-bit Thumb-1 field arithmetic (`mul`, `sqr`, `add`, `sub`).
