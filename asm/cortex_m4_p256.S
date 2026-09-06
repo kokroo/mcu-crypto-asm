@@ -1073,6 +1073,193 @@ P256_matrix_mul_mod_n:
  pop {r4-r11,pc}
  .ltorg
  .size P256_matrix_mul_mod_n, .-P256_matrix_mul_mod_n
+
+// *r0=u
+// *r1=x1
+ .type mod_inv_vartime_inner_n, %function
+mod_inv_vartime_inner_n:
+ adr r11,P256_order
+ ldm r0,{r2-r9}
+ cmp r2,#1
+ bne 1f
+
+ orrs r10,r3,r4
+ orrs r10,r5
+ orrs r10,r6
+ orrs r10,r7
+ orrs r10,r8
+ orrs r10,r9
+ itt eq
+ moveq r0,#1
+ bxeq lr
+
+1:
+ tst r2,#1
+ itt ne
+ movne r0,#0
+ bxne lr
+2:
+ lsrs r9,#1
+ rrxs r8,r8
+ rrxs r7,r7
+ rrxs r6,r6
+ rrxs r5,r5
+ rrxs r4,r4
+ rrxs r3,r3
+ rrxs r2,r2
+ stm r0,{r2-r9}
+ ldm r1,{r3-r10}
+ tst r3,#1
+ beq 3f
+ ldr r12,[r11,#0]
+ adds r3,r12
+ ldr r12,[r11,#4]
+ adcs r4,r4,r12
+ ldr r12,[r11,#8]
+ adcs r5,r5,r12
+ ldr r12,[r11,#12]
+ adcs r6,r6,r12
+ adcs r7,r7,#0xffffffff
+ adcs r8,r8,#0xffffffff
+ adcs r9,r9,#0
+ adcs r10,r10,#0xffffffff
+3:
+ rrxs r10,r10
+ rrxs r9,r9
+ rrxs r8,r8
+ rrxs r7,r7
+ rrxs r6,r6
+ rrxs r5,r5
+ rrxs r4,r4
+ rrx r3,r3
+ stm r1,{r3-r10}
+ tst r2,#1
+ itt ne
+ movne r0,#0
+ bxne lr
+ ldm r0,{r2-r9}
+ b 2b
+
+ .size mod_inv_vartime_inner_n, .-mod_inv_vartime_inner_n
+
+// *r0 = result
+// *r1 = input
+ .type P256_mod_n_inv_vartime, %function
+P256_mod_n_inv_vartime:
+ .global P256_mod_n_inv_vartime
+ push {r0,r4-r11,lr}
+ sub sp,#128
+ mov r0,sp
+
+ ldm r1,{r1-r8}
+ stm r0!,{r1-r8}
+
+ movs r1,#1
+ movs r2,#0
+ umull r3,r4,r2,r2
+ umull r5,r6,r2,r2
+ umull r7,r8,r2,r2
+ mov r9,#0
+
+ stm r0,{r1-r8}
+ add r0,sp,#96
+ stm r0,{r2-r9}
+ adr r2,P256_order
+ ldm r2,{r2-r9}
+ add r0,sp,#64
+ stm r0,{r2-r9}
+
+0:
+ mov r0,sp
+ add r1,sp,#32
+ bl mod_inv_vartime_inner_n
+ cmp r0,#0
+ it ne
+ addne r0,sp,#32
+ bne 2f
+
+ add r0,sp,#64
+ add r1,sp,#96
+ bl mod_inv_vartime_inner_n
+ cmp r0,#0
+ it ne
+ addne r0,sp,#96
+ bne 2f
+
+ ldm sp,{r0-r7}
+ add lr,sp,#64
+ ldm lr!,{r8-r11}
+ subs r0,r8
+ sbcs r1,r1,r9
+ sbcs r2,r2,r10
+ sbcs r3,r3,r11
+ ldm lr!,{r8-r11}
+ sbcs r4,r4,r8
+ sbcs r5,r5,r9
+ sbcs r6,r6,r10
+ sbcs r7,r7,r11
+
+ bcc 1f
+ stm sp,{r0-r7}
+ add r0,sp,#32
+ add r1,sp,#32
+ add r2,sp,#96
+3:
+ ldm r1,{r1,r3-r9}
+ ldm r2!,{r10,r11,r12,lr}
+ subs r1,r10
+ sbcs r3,r3,r11
+ sbcs r4,r4,r12
+ sbcs r5,r5,lr
+ ldm r2!,{r10,r11,r12,lr}
+ sbcs r6,r6,r10
+ sbcs r7,r7,r11
+ sbcs r8,r8,r12
+ sbcs r9,r9,lr
+
+ sbcs r10,r10,r10
+ adr r11,P256_order
+ ldm r11,{r2,r11,r12,lr}
+ and r2,r10
+ and r11,r10
+ and r12,r10
+ and lr,r10
+ adds r1,r2
+ adcs r3,r3,r11
+ adcs r4,r4,r12
+ adcs r5,r5,lr
+ adcs r6,r6,r10
+ adcs r7,r7,r10
+ adcs r8,r8,#0
+ adcs r9,r9,r10
+ stm r0,{r1,r3-r9}
+ b 0b
+1:
+ movs r8,#0
+ subs r0,r8,r0
+ sbcs r1,r8,r1
+ sbcs r2,r8,r2
+ sbcs r3,r8,r3
+ sbcs r4,r8,r4
+ sbcs r5,r8,r5
+ sbcs r6,r8,r6
+ sbcs r7,r8,r7
+ add r8,sp,#64
+ stm r8,{r0-r7}
+ add r0,sp,#96
+ add r1,sp,#96
+ add r2,sp,#32
+ b 3b
+
+2:
+ ldm r0,{r0-r7}
+ add sp,#128
+ pop {r8}
+ stm r8,{r0-r7}
+ pop {r4-r11,pc}
+
+ .size P256_mod_n_inv_vartime, .-P256_mod_n_inv_vartime
+
  .align 2
 P256_order_local:
  .type P256_order, %object
