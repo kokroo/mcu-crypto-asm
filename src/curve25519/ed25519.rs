@@ -1,6 +1,7 @@
 //! Ed25519 signature algorithm and Edwards curve point operations (RFC 8032).
 
 use core::ops::{Add, Index, IndexMut, Mul, Neg, Sub};
+use super::portable::Fe51;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct CompressedEdwardsY(pub [u8; 32]);
@@ -211,6 +212,105 @@ const RR: Scalar = Scalar([
 
 const LFACTOR: u32 = 0x12547e1b;
 
+#[cfg(not(nistp_asm_cm4))]
+const D_BYTES: [u8; 32] = [
+    163, 120, 89, 19, 202, 77, 235, 117, 171, 216, 65, 65, 77, 10, 112, 0,
+    152, 232, 121, 119, 121, 64, 199, 140, 115, 254, 111, 43, 238, 108, 3, 82,
+];
+
+#[cfg(not(nistp_asm_cm4))]
+const D2_BYTES: [u8; 32] = [
+    89, 241, 178, 38, 148, 155, 214, 235, 86, 177, 131, 130, 154, 20, 224, 0,
+    48, 209, 243, 238, 242, 128, 142, 25, 231, 252, 223, 86, 220, 217, 6, 36,
+];
+
+#[cfg(not(nistp_asm_cm4))]
+const SQRT_M1_BYTES: [u8; 32] = [
+    176, 160, 14, 74, 39, 27, 238, 196, 120, 228, 47, 173, 6, 24, 67, 47,
+    167, 215, 251, 61, 153, 0, 77, 43, 11, 223, 193, 79, 128, 36, 131, 43,
+];
+
+#[cfg(not(nistp_asm_cm4))]
+#[derive(Clone, Copy)]
+struct PointFe {
+    x: Fe51,
+    y: Fe51,
+    z: Fe51,
+    t: Fe51,
+}
+
+#[cfg(not(nistp_asm_cm4))]
+fn fe51_to_words(fe: &Fe51) -> [u32; 8] {
+    let bytes = fe.to_bytes();
+    let mut words = [0u32; 8];
+    for i in 0..8 {
+        words[i] = u32::from_le_bytes(bytes[i * 4..(i + 1) * 4].try_into().unwrap());
+    }
+    words
+}
+
+#[cfg(not(nistp_asm_cm4))]
+fn words_to_fe51(words: &[u32]) -> Fe51 {
+    let mut bytes = [0u8; 32];
+    for i in 0..8 {
+        bytes[i * 4..(i + 1) * 4].copy_from_slice(&words[i].to_le_bytes());
+    }
+    Fe51::from_bytes(&bytes)
+}
+
+#[cfg(not(nistp_asm_cm4))]
+impl EdwardsPoint {
+    fn to_fe(&self) -> PointFe {
+        PointFe {
+            x: words_to_fe51(&self.0[0..8]),
+            y: words_to_fe51(&self.0[8..16]),
+            z: words_to_fe51(&self.0[16..24]),
+            t: words_to_fe51(&self.0[24..32]),
+        }
+    }
+
+    fn from_fe(p: &PointFe) -> Self {
+        let mut words = [0u32; 32];
+        words[0..8].copy_from_slice(&fe51_to_words(&p.x));
+        words[8..16].copy_from_slice(&fe51_to_words(&p.y));
+        words[16..24].copy_from_slice(&fe51_to_words(&p.z));
+        words[24..32].copy_from_slice(&fe51_to_words(&p.t));
+        EdwardsPoint(words)
+    }
+}
+
+#[cfg(not(nistp_asm_cm4))]
+fn edwards_add_fe(p1: &PointFe, p2: &PointFe) -> PointFe {
+    let d2 = Fe51::from_bytes(&D2_BYTES);
+    let a = p1.y.sub(&p1.x).mul(&p2.y.sub(&p2.x));
+    let b = p1.y.add(&p1.x).mul(&p2.y.add(&p2.x));
+    let c = d2.mul(&p1.t).mul(&p2.t);
+    let d = p1.z.add(&p1.z).mul(&p2.z);
+    let e = b.sub(&a);
+    let f = d.sub(&c);
+    let g = d.add(&c);
+    let h = b.add(&a);
+
+    PointFe {
+        x: e.mul(&f),
+        y: g.mul(&h),
+        z: f.mul(&g),
+        t: e.mul(&h),
+    }
+}
+
+#[cfg(not(nistp_asm_cm4))]
+fn pow_p_plus_3_over_8(z: &Fe51) -> Fe51 {
+    let mut res = Fe51::ONE;
+    for i in (0..252).rev() {
+        res = res.sqr();
+        if i >= 1 {
+            res = res.mul(z);
+        }
+    }
+    res
+}
+
 impl CompressedEdwardsY {
     pub fn decompress(&self) -> Option<EdwardsPoint> {
         #[cfg(nistp_asm_cm4)]
@@ -223,7 +323,64 @@ impl CompressedEdwardsY {
         }
         #[cfg(not(nistp_asm_cm4))]
         {
-            None
+            let sign = (self.0[31] >> 7) != 0;
+            let mut y_bytes = self.0;
+            y_bytes[31] &= 0x7F;
+
+            let y = Fe51::from_bytes(&y_bytes);
+            let y_roundtrip = y.to_bytes();
+            if y_roundtrip != y_bytes {
+                return None;
+            }
+
+            let d = Fe51::from_bytes(&D_BYTES);
+            let y2 = y.sqr();
+            let u = y2.sub(&Fe51::ONE);
+            let v = d.mul(&y2).add(&Fe51::ONE);
+
+            let xx = u.mul(&v.invert());
+            let mut x = pow_p_plus_3_over_8(&xx);
+
+            let mut check = x.sqr().sub(&xx);
+            let check_bytes = check.to_bytes();
+            let mut is_zero = true;
+            for &b in &check_bytes {
+                if b != 0 {
+                    is_zero = false;
+                    break;
+                }
+            }
+
+            if !is_zero {
+                let sqrt_m1 = Fe51::from_bytes(&SQRT_M1_BYTES);
+                x = x.mul(&sqrt_m1);
+                check = x.sqr().sub(&xx);
+                let check_bytes2 = check.to_bytes();
+                let mut is_zero2 = true;
+                for &b in &check_bytes2 {
+                    if b != 0 {
+                        is_zero2 = false;
+                        break;
+                    }
+                }
+                if !is_zero2 {
+                    return None;
+                }
+            }
+
+            let x_bytes = x.to_bytes();
+            if ((x_bytes[0] & 1) != 0) != sign {
+                x = Fe51::ZERO.sub(&x);
+            }
+
+            let t = x.mul(&y);
+            let pt = PointFe {
+                x,
+                y,
+                z: Fe51::ONE,
+                t,
+            };
+            Some(EdwardsPoint::from_fe(&pt))
         }
     }
 }
@@ -238,7 +395,14 @@ impl EdwardsPoint {
         }
         #[cfg(not(nistp_asm_cm4))]
         {
-            CompressedEdwardsY([0u8; 32])
+            let pt = self.to_fe();
+            let zinv = pt.z.invert();
+            let x = pt.x.mul(&zinv);
+            let y = pt.y.mul(&zinv);
+            let mut out = y.to_bytes();
+            let x_bytes = x.to_bytes();
+            out[31] |= (x_bytes[0] & 1) << 7;
+            CompressedEdwardsY(out)
         }
     }
 }
@@ -254,7 +418,9 @@ impl Add<EdwardsPoint> for EdwardsPoint {
         }
         #[cfg(not(nistp_asm_cm4))]
         {
-            EdwardsPoint([0u32; 32])
+            let p1 = self.to_fe();
+            let p2 = rhs.to_fe();
+            EdwardsPoint::from_fe(&edwards_add_fe(&p1, &p2))
         }
     }
 }
@@ -270,7 +436,21 @@ impl Mul<EdwardsPoint> for Scalar {
         }
         #[cfg(not(nistp_asm_cm4))]
         {
-            EdwardsPoint([0u32; 32])
+            let p = rhs.to_fe();
+            let scalar_bytes = self.as_bytes();
+            let mut res = PointFe {
+                x: Fe51::ZERO,
+                y: Fe51::ONE,
+                z: Fe51::ONE,
+                t: Fe51::ZERO,
+            };
+            for bit_idx in (0..256).rev() {
+                res = edwards_add_fe(&res, &res);
+                if ((scalar_bytes[bit_idx / 8] >> (bit_idx % 8)) & 1) != 0 {
+                    res = edwards_add_fe(&res, &p);
+                }
+            }
+            EdwardsPoint::from_fe(&res)
         }
     }
 }
@@ -286,7 +466,13 @@ impl Neg for EdwardsPoint {
         }
         #[cfg(not(nistp_asm_cm4))]
         {
-            EdwardsPoint([0u32; 32])
+            let p = self.to_fe();
+            EdwardsPoint::from_fe(&PointFe {
+                x: Fe51::ZERO.sub(&p.x),
+                y: p.y,
+                z: p.z,
+                t: Fe51::ZERO.sub(&p.t),
+            })
         }
     }
 }
@@ -309,3 +495,50 @@ pub const ED25519_BASEPOINT_POINT: EdwardsPoint = EdwardsPoint([
     0xa5b7dda3, 0x6dde8ab3, 0x775152f5, 0x20f09f80,
     0x64abe37d, 0x66ea4e8e, 0xd78b7665, 0x67875f0f,
 ]);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_basepoint_compress() {
+        let b = ED25519_BASEPOINT_POINT;
+        let comp = b.compress();
+        let mut expected = [0x66u8; 32];
+        expected[0] = 0x58;
+        assert_eq!(comp.0, expected);
+    }
+
+    #[test]
+    fn test_basepoint_decompress() {
+        let mut b_bytes = [0x66u8; 32];
+        b_bytes[0] = 0x58;
+        let comp = CompressedEdwardsY(b_bytes);
+        let pt = comp.decompress().expect("Base point decompress failed");
+        let recomp = pt.compress();
+        assert_eq!(recomp.0, b_bytes);
+    }
+
+    #[test]
+    fn test_point_add_and_double() {
+        let b = ED25519_BASEPOINT_POINT;
+        let b2_add = b + b;
+
+        let s2 = Scalar([2, 0, 0, 0, 0, 0, 0, 0]);
+        let b2_mul = s2 * b;
+
+        assert_eq!(b2_add.compress().0, b2_mul.compress().0);
+    }
+
+    #[test]
+    fn test_point_neg_identity() {
+        let b = ED25519_BASEPOINT_POINT;
+        let b_neg = -b;
+        let id = b + b_neg;
+        // Identity has x=0, y=1, z=1
+        let comp = id.compress();
+        let mut expected = [0u8; 32];
+        expected[0] = 1;
+        assert_eq!(comp.0, expected);
+    }
+}
