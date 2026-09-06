@@ -251,12 +251,12 @@ pub static K512_PORTABLE: [u64; 80] = [
 
 #[inline]
 fn ch(x: u64, y: u64, z: u64) -> u64 {
-    (x & y) ^ (!x & z)
+    ((y ^ z) & x) ^ z
 }
 
 #[inline]
 fn maj(x: u64, y: u64, z: u64) -> u64 {
-    (x & y) ^ (x & z) ^ (y & z)
+    (x & y) | (z & (x | y))
 }
 
 #[inline]
