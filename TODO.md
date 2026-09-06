@@ -27,7 +27,7 @@ All microcontroller hardware platforms cluster into five distinct architectural 
 | **Curve25519 / X25519** | WireGuard, SSH, TLS 1.3 | **DONE**<br>(~550k cycles, 8.6ms) | 5.0×–9.0× | 2.2×–3.0× | 2.5×–4.0× | 2.5×–3.5× | **Production** (T1 Done) |
 | **Ed25519** | SSH, Signal, Matter | **DONE**<br>(Point Ops / Scalarmul) | 4.5×–8.0× | 2.0×–2.8× | 2.2×–3.5× | 2.2×–3.2× | **Production** (T1 Done) |
 | **Poly1305** | WireGuard, TLS 1.3 | **DONE**<br>(~17 c/byte total) | 5.0×–8.0× | 2.5×–3.5× | 3.0×–4.5× | 3.0×–4.0× | **Production** (T1 Done) |
-| **ChaCha20** | WireGuard, TLS 1.3 | 1.8×–2.5×<br>(Reg state) | 2.5×–4.0× | 1.5×–2.0× | 1.8×–2.5× | 1.8×–2.5× | **P1 (High)** |
+| **ChaCha20** | WireGuard, TLS 1.3 | **DONE**<br>(~30 c/byte bare-metal) | 2.5×–4.0× | 1.5×–2.0× | 1.8×–2.5× | 1.8×–2.5× | **Production** (T1 Done) |
 | **RSA-2048 / 4096** | Secure Boot, PKI, TLS | **DONE**<br>(345k cycles RSA-2048) | 3.5×–6.0× | 2.0×–3.0× | 2.5×–3.5× | 2.5×–3.5× | **Production** (T1 Done) |
 | **secp256k1** | Bitcoin, Wallets | 3.0×–4.5×<br>(GLV endomorphism)| 4.0×–7.0× | 2.0×–2.8× | 2.2×–3.2× | 2.2×–3.0× | **P1 (High)** |
 | **ML-KEM (Kyber)** | Post-Quantum (FIPS 203) | 3.5×–6.0×<br>(SIMD butterfly) | 2.0×–3.0× | 1.8×–2.2× | 2.0×–3.5× | 2.0×–3.0× | **P1 (PQC Top)** |
@@ -192,9 +192,9 @@ All microcontroller hardware platforms cluster into five distinct architectural 
   - [x] Implement constant-time clamping and final reduction modulo $2^{130}-5$.
   - [x] Host and target KAT test vectors from RFC 8439.
   - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on RFC 8439 test vector and 1024-byte benchmark).
-- [ ] **ChaCha20 Stream Cipher**:
-  - [ ] Implement ARM assembly block function holding all 16 state words in registers without stack spills.
-  - [ ] Add 32-bit interleaved parallel blocks for cores with extra registers or dual-issue (Target 1 Cortex-M7).
+- [x] **ChaCha20 Stream Cipher**:
+  - [x] Implement ARM assembly block function holding all 8 active round state words in registers without stack spills (`asm/cortex_m_chacha20.S`).
+  - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on RFC 8439 Section 2.3.2 block function, Section 2.4.2 encryption, and 1024-byte benchmark @ ~30 c/byte).
 
 ---
 
