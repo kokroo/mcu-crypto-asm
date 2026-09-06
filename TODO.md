@@ -205,8 +205,9 @@ All microcontroller hardware platforms cluster into five distinct architectural 
   - [x] ✅ SEC1 compressed (33B) and uncompressed (65B) point serialization/deserialization.
   - [x] ✅ ECDH key agreement and public key derivation.
   - [x] ✅ Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on point doubling @ 183 µs / 11,712 cycles, RFC 6979 Section A.2.5 keygen @ 101 ms, SEC1 33B/65B roundtrip, and ECDH shared secret agreement @ 101 ms).
-- [ ] **Target 2: ARMv6-M (Cortex-M0 / Cortex-M0+) secp256k1**:
-  - [ ] Adapt 16-bit Thumb-1 routines from `third_party/micro-ecc` (`asm_arm_m0.inc`).
+- [x] ✅ **Target 2: ARMv6-M (Cortex-M0 / Cortex-M0+) secp256k1**:
+  - [x] ✅ Pure 32-bit/64-bit Comba multiplication and squaring engine without 128-bit runtime emulation.
+  - [x] ✅ Hardware verification on physical Target 2 (`nucleo-stm32c031c6` Cortex-M0+ @ 12 MHz) via Teleprobe (100% PASS on generator curve validation, point doubling [12.5 ms, 150.7k cyc], RFC 6979 public key derivation [6.84 s], and ECDH shared secret key agreement [6.84 s]).
 
 ---
 
