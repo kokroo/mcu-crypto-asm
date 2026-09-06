@@ -34,7 +34,7 @@ All microcontroller hardware platforms cluster into five distinct architectural 
 | **ML-DSA (Dilithium)** | Post-Quantum (FIPS 204) | 3.0×–5.0×<br>(SIMD butterfly) | 2.0×–2.8× | 1.6×–2.0× | 2.0×–3.5× | 2.0×–3.0× | **P2 (Medium)** |
 | **SHA-512 / SHA-384** | Ed25519, P-384, Hashes | 2.2×–3.5×<br>(LDRD/STRD paired)| 3.5×–5.5× | 1.8×–2.5× | 2.0×–3.0× | 2.0×–3.0× | **P1 (High)** |
 | **Keccak / SHAKE** | ML-KEM, ML-DSA, Hashes | 2.5×–4.0×<br>(32-bit interleaved)| 3.0×–5.0× | 1.8×–2.5× | 2.0×–3.5× | 2.0×–3.2× | **P1 (PQC Core)** |
-| **Bitsliced AES** | Constant-Time AES | 2.5×–4.5×<br>(Fixsliced) | 3.0×–5.0× | 2.0×–3.5× | 1.5× *(10× Zk)* | 2.0×–3.5× | **P2 (Medium)** |
+| **Bitsliced AES** | Constant-Time AES | **DONE**<br>(Fixsliced AES-128/256) | 3.0×–5.0× | 2.0×–3.5× | 1.5× *(10× Zk)* | 2.0×–3.5× | **Production** (T1 Done) |
 | **GHASH (GCM)** | AES-GCM Authentication | 2.5×–4.0× | 3.0×–5.0× | 1.8×–2.5× | 1.8× *(8× Zbkc)*| 2.0×–3.0× | **P2 (Medium)** |
 
 ---
