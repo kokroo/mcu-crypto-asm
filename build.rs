@@ -16,6 +16,7 @@ fn main() {
     println!("cargo:rerun-if-changed=asm/cortex_m4.S");
     println!("cargo:rerun-if-changed=asm/cortex_m4_p256.S");
     println!("cargo:rerun-if-changed=asm/cortex_m0_p256.S");
+    println!("cargo:rerun-if-changed=asm/cortex_m0_curve25519.S");
     println!("cargo:rerun-if-changed=asm/cortex_m_fe25519.S");
     println!("cargo:rerun-if-changed=asm/cortex_m_curve25519.S");
     println!("cargo:rerun-if-changed=asm/cortex_m_ed25519.S");

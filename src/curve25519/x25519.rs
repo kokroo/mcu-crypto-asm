@@ -22,7 +22,19 @@ pub fn scalarmult(scalar: &[u8; 32], point: &[u8; 32]) -> [u8; 32] {
         }
         result
     }
-    #[cfg(not(nistp_asm_cm4))]
+    #[cfg(nistp_asm_cm0)]
+    {
+        let mut result = [0u8; 32];
+        unsafe {
+            super::cortex_m0::curve25519_scalarmult(
+                result.as_mut_ptr(),
+                scalar.as_ptr(),
+                point.as_ptr(),
+            );
+        }
+        result
+    }
+    #[cfg(not(any(nistp_asm_cm4, nistp_asm_cm0)))]
     {
         super::portable::scalarmult(scalar, point)
     }

@@ -6,6 +6,9 @@
 #[cfg(nistp_asm_cm4)]
 pub mod cortex_m;
 
+#[cfg(nistp_asm_cm0)]
+pub mod cortex_m0;
+
 pub mod ed25519;
 pub mod portable;
 pub mod x25519;
