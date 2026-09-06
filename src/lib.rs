@@ -42,6 +42,7 @@ pub mod backend;
 pub mod comb_tables;
 pub mod curve25519;
 pub mod params;
+pub mod rsa;
 
 pub mod ecdh;
 pub mod ecdsa;
