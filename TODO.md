@@ -1,59 +1,41 @@
-# `mcu-crypto-asm` Algorithm Optimization Roadmap & TODO Tracker
+# `mcu-crypto-asm` Target vs. Algorithm Optimization Matrix & Roadmap
 
-This document tracks candidate cryptographic algorithms, target microarchitectures (based on the [Teleprobe test farm](https://teleprobe.embassy.dev/) and Espressif ecosystems), prior art / reference assembly implementations, and prioritized implementation tasks.
-
----
-
-## 1. Hardware Architecture Tiers (Teleprobe + Espressif)
-
-All 42 microcontroller boards in the Teleprobe test farm plus modern IoT chips (ESP32-S3, ESP32-C6) map into five distinct execution tiers:
-
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│ Tier 1: ARMv7E-M & ARMv8-M Mainline with DSP                                    │
-│ Hardware: Single-cycle UMAAL (32x32 + 32 + 32 -> 64), SIMD packed arithmetic    │
-│ Chips: nRF52840, nRF52832, nRF5340, nRF9160, nRF54L15, STM32F4, G4, L4, WB,    │
-│        WL, H7 (M7 dual-issue), STM32H5 (M33), U5, L5, WBA, RP2350 (M33), MCXA   │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│ Tier 2: ARMv7-M                                                                 │
-│ Hardware: Full Thumb-2, 32x32->64 UMULL/UMLAL (3-5 cycles). NO UMAAL.           │
-│ Chips: STM32F103 (Blue Pill), STM32F207, STM32L152                              │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│ Tier 3: ARMv6-M                                                                 │
-│ Hardware: 16-bit Thumb-1 only, 32x32->32 MULS only. NO 64-bit mul. High spills. │
-│ Chips: RP2040 (Raspberry Pi Pico), nRF51, STM32C0, G0, L0, F0, U0               │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│ Tier 4: Cadence Xtensa (LX6 / LX7)                                              │
-│ Hardware: 32-bit windowed registers (a0-a15), MULUH, zero-overhead LOOP.        │
-│           ESP32-S3 adds PIE 128-bit SIMD / vector extensions.                   │
-│ Chips: ESP32, ESP32-S2, ESP32-S3                                                │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│ Tier 5: RISC-V (RV32IMAC / Zk)                                                  │
-│ Hardware: 32 orthogonal registers, MUL/MULHU. ESP32-C6/P4 add Zk crypto ext.   │
-│ Chips: RP2350 (Hazard3 core), ESP32-C3, ESP32-C6, ESP32-P4, nRF54L coprocessor │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
+This document defines the architectural target tiers for embedded microcontroller cryptography, establishes the comprehensive **Target vs. Algorithm Matrix**, and tracks active implementation progress.
 
 ---
 
-## 2. Algorithm Optimization Matrix
+## 1. Architectural Target Tiers
 
-| Algorithm | Standard / Protocols | Core Bottleneck | Tier 1 (M4/M7/M33) | Tier 2 (M3) | Tier 3 (M0/M0+) | Tier 4 (Xtensa S3) | Tier 5 (RISC-V) | Priority |
-| :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **NIST P-256** | TLS 1.3, BLE, Matter | 256-bit Comba $\mathbb{F}_p$, windowed scalarmul, mod $n$ inv | **DONE** (406c mul, 61k inv) | 1.8x–2.5x | **4.0x–7.0x** | **DONE** (1,274c mul, 2.19x) | 2.2x–3.5x | Port to M0+/RISC-V |
-| **NIST P-384** | CNSA Suite, TLS 1.3 | 384-bit field mul, comb scalarmul | **DONE** (1,366c mul, 3.3M comb) | 2.0x–3.0x | **5.0x–8.0x** | **DONE** (2,886c mul, 2.96x) | 2.5x–4.0x | Port to RISC-V |
-| **Curve25519 / X25519** | WireGuard, SSH, TLS 1.3 | $\mathbb{F}_{2^{255}-19}$ mul & sqr, Montgomery ladder | **3.5x–5.0x** (~650k cycles) | 2.2x–3.0x | **5.0x–9.0x** | 2.5x–3.5x | 2.5x–4.0x | **P0 (Highest)** |
-| **Ed25519** | SSH, Signal, Matter | $\mathbb{F}_{2^{255}-19}$ point ops, scalar reduction mod $\ell$ | **3.0x–4.5x** | 2.0x–2.8x | **4.5x–8.0x** | 2.2x–3.2x | 2.2x–3.5x | **P0 (Highest)** |
-| **Poly1305** | WireGuard, TLS 1.3 | Inner loop mod $2^{130}-5$ multiply-add | **4.0x–6.0x** (**~2.5 c/byte**) | 2.5x–3.5x | **5.0x–8.0x** | 3.0x–4.0x | 3.0x–4.5x | **P0 (Highest)** |
-| **ChaCha20** | WireGuard, TLS 1.3 | 32-bit ARX quarter-rounds, 16 state words | **1.8x–2.5x** (Keep state in regs) | 1.5x–2.0x | **2.5x–4.0x** | 1.8x–2.5x | 1.8x–2.5x | **P1 (High)** |
-| **RSA-2048 / 4096** | Secure Boot, PKI, TLS | Large-integer modular exp, Montgomery reduction | **3.0x–5.0x** (Emill bignum) | 2.0x–3.0x | 3.5x–6.0x | 2.5x–3.5x | 2.5x–3.5x | **P1 (High)** |
-| **secp256k1** | Bitcoin, Ethereum, Hardware Wallets | $\mathbb{F}_{2^{256}-2^{32}-977}$ mul, GLV endomorphism | **3.0x–4.5x** (GLV halves doubles) | 2.0x–2.8x | **4.0x–7.0x** | 2.2x–3.0x | 2.2x–3.2x | **P1 (High)** |
-| **ML-KEM (Kyber)** | Post-Quantum KEM (FIPS 203) | NTT mod 3329, Barrett reduction | **3.5x–6.0x** (Dual SIMD butterfly)| 1.8x–2.2x | 2.0x–3.0x | 2.0x–3.0x | 2.0x–3.5x | **P1 (PQC Top)** |
-| **ML-DSA (Dilithium)** | Post-Quantum Sig (FIPS 204) | NTT mod $2^{23}-2^{13}+1$, matrix-vector mul | **3.0x–5.0x** (SIMD butterfly) | 1.6x–2.0x | 2.0x–2.8x | 2.0x–3.0x | 2.0x–3.5x | **P2 (Medium)** |
-| **SHA-512 / SHA-384** | Ed25519, P-384, Hashes | 64-bit ARX on 32-bit registers, high register pressure | **2.2x–3.5x** (LDRD/STRD + rotates) | 1.8x–2.5x | **3.5x–5.5x** | 2.0x–3.0x | 2.0x–3.0x | **P1 (High)** |
-| **Keccak / SHAKE** | ML-KEM, ML-DSA, Ethereum | 1600-bit state (25x 64-bit lanes) | **2.5x–4.0x** (32-bit interleaved) | 1.8x–2.5x | **3.0x–5.0x** | 2.0x–3.2x | 2.0x–3.5x | **P1 (PQC Core)** |
-| **Bitsliced AES** | Constant-Time AES | Non-linear S-box via Boolean expressions over $GF(2^8)$ | **2.5x–4.5x** (No cache side-channels) | 2.0x–3.5x | **3.0x–5.0x** | 2.0x–3.5x | 1.5x *(10x Zk)* | **P2 (Medium)** |
-| **GHASH (GCM)** | AES-GCM Authentication | 128-bit carryless polynomial multiplication in $\mathbb{F}_{2^{128}}$ | **2.5x–4.0x** (Karatsuba / 4-bit table) | 1.8x–2.5x | **3.0x–5.0x** | 2.0x–3.0x | 1.8x *(8x Zbkc)*| **P2 (Medium)** |
+All microcontroller hardware platforms cluster into five distinct architectural execution targets based on instruction set architecture (ISA), register file structure, and hardware arithmetic primitives:
+
+| Target | Architecture / ISA | Processor Cores | Key Arithmetic & Microarchitectural Hardware Primitives |
+| :--- | :--- | :--- | :--- |
+| **Target 1** | **ARMv7E-M / ARMv8-M Mainline** | Cortex-M4, Cortex-M7, Cortex-M33 | Single-cycle **`UMAAL`** ($R_{lo}, R_{hi} \leftarrow a \times b + R_{lo} + R_{hi}$), DSP SIMD (`SMLABB`, `PKHTB`). Full Thumb-2 carry chains (`ADCS`). |
+| **Target 2** | **ARMv6-M** | Cortex-M0, Cortex-M0+ | 16-bit Thumb-1 only. **No 64-bit multiplier** (32×32$\to$32 `MULS` only). High register pressure restricted to low registers `r0`–`r7`. |
+| **Target 3** | **ARMv7-M** | Cortex-M3 | Full Thumb-2 instruction set with 32×32$\to$64 `UMULL`/`UMLAL` (3–5 cycles) and `ADCS` carry chains. **No `UMAAL`**. |
+| **Target 4** | **RISC-V 32-bit (RV32IMAC / Zk)** | RV32IMAC cores | 32 orthogonal registers (`x0`–`x31`), hardware 32×32$\to$64 multiply (`MUL`/`MULH`/`MULHU`). Optional Scalar Cryptography (`Zk`/`Zbkc`). |
+| **Target 5** | **Cadence Xtensa (LX6 / LX7)** | Xtensa LX6, Xtensa LX7 | 32-bit windowed registers (`a0`–`a15`), `MULUH`, zero-overhead `LOOP`. LX7 adds branchless `SALTU` carry emulation; optional MAC16 40-bit accumulator. |
+
+---
+
+## 2. Target vs. Algorithm Matrix
+
+| Algorithm | Standard / Category | Target 1<br>(ARMv7E-M / ARMv8-M) | Target 2<br>(ARMv6-M) | Target 3<br>(ARMv7-M) | Target 4<br>(RISC-V RV32) | Target 5<br>(Xtensa LX6 / LX7) | Implementation Status / Priority |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **NIST P-256** | TLS 1.3, BLE, Matter | **DONE**<br>(406c mul, 61k inv) | 4.0×–7.0× | 1.8×–2.5× | 2.2×–3.5× | **DONE**<br>(1,274c mul, 2.19×) | **Production** (T1, T5 Done; T2 next) |
+| **NIST P-384** | CNSA Suite, TLS 1.3 | **DONE**<br>(1,366c mul, 3.3M comb) | 5.0×–8.0× | 2.0×–3.0× | 2.5×–4.0× | **DONE**<br>(2,886c mul, 2.96×) | **Production** (T1, T5 Done; T4 next) |
+| **Curve25519 / X25519** | WireGuard, SSH, TLS 1.3 | 3.5×–5.0×<br>(~650k cycles) | 5.0×–9.0× | 2.2×–3.0× | 2.5×–4.0× | 2.5×–3.5× | **P0 (Highest)** |
+| **Ed25519** | SSH, Signal, Matter | 3.0×–4.5× | 4.5×–8.0× | 2.0×–2.8× | 2.2×–3.5× | 2.2×–3.2× | **P0 (Highest)** |
+| **Poly1305** | WireGuard, TLS 1.3 | 4.0×–6.0×<br>(~2.5 c/byte) | 5.0×–8.0× | 2.5×–3.5× | 3.0×–4.5× | 3.0×–4.0× | **P0 (Highest)** |
+| **ChaCha20** | WireGuard, TLS 1.3 | 1.8×–2.5×<br>(Reg state) | 2.5×–4.0× | 1.5×–2.0× | 1.8×–2.5× | 1.8×–2.5× | **P1 (High)** |
+| **RSA-2048 / 4096** | Secure Boot, PKI, TLS | 3.0×–5.0×<br>(Montgomery exp) | 3.5×–6.0× | 2.0×–3.0× | 2.5×–3.5× | 2.5×–3.5× | **P1 (High)** |
+| **secp256k1** | Bitcoin, Wallets | 3.0×–4.5×<br>(GLV endomorphism)| 4.0×–7.0× | 2.0×–2.8× | 2.2×–3.2× | 2.2×–3.0× | **P1 (High)** |
+| **ML-KEM (Kyber)** | Post-Quantum (FIPS 203) | 3.5×–6.0×<br>(SIMD butterfly) | 2.0×–3.0× | 1.8×–2.2× | 2.0×–3.5× | 2.0×–3.0× | **P1 (PQC Top)** |
+| **ML-DSA (Dilithium)** | Post-Quantum (FIPS 204) | 3.0×–5.0×<br>(SIMD butterfly) | 2.0×–2.8× | 1.6×–2.0× | 2.0×–3.5× | 2.0×–3.0× | **P2 (Medium)** |
+| **SHA-512 / SHA-384** | Ed25519, P-384, Hashes | 2.2×–3.5×<br>(LDRD/STRD paired)| 3.5×–5.5× | 1.8×–2.5× | 2.0×–3.0× | 2.0×–3.0× | **P1 (High)** |
+| **Keccak / SHAKE** | ML-KEM, ML-DSA, Hashes | 2.5×–4.0×<br>(32-bit interleaved)| 3.0×–5.0× | 1.8×–2.5× | 2.0×–3.5× | 2.0×–3.2× | **P1 (PQC Core)** |
+| **Bitsliced AES** | Constant-Time AES | 2.5×–4.5×<br>(Fixsliced) | 3.0×–5.0× | 2.0×–3.5× | 1.5× *(10× Zk)* | 2.0×–3.5× | **P2 (Medium)** |
+| **GHASH (GCM)** | AES-GCM Authentication | 2.5×–4.0× | 3.0×–5.0× | 1.8×–2.5× | 1.8× *(8× Zbkc)*| 2.0×–3.0× | **P2 (Medium)** |
 
 ---
 
@@ -62,54 +44,54 @@ All 42 microcontroller boards in the Teleprobe test farm plus modern IoT chips (
 ### 3.1. Emill Repositories
 - **[`Emill/P256-Cortex-M4`](https://github.com/Emill/P256-Cortex-M4)** (BSD-2-Clause / MIT)
   - *Status*: Partially vendored in `third_party/emill`.
-  - *Highlights*: Hand-written Cortex-M4 assembly using `UMAAL` for P-256 field multiplication (`P256_mulmod` @ 406 cycles), squarings (`P256_sqrmod` @ 358 cycles), modular addition/subtraction, affine table lookups, and complete Jacobian point arithmetic.
+  - *Highlights*: Hand-written Target 1 assembly using `UMAAL` for P-256 field multiplication (`P256_mulmod` @ 406 cycles), squarings (`P256_sqrmod` @ 358 cycles), modular addition/subtraction, affine table lookups, and complete Jacobian point arithmetic.
 - **[`Emill/P256-cortex-ecdh`](https://github.com/Emill/P256-cortex-ecdh)** (BSD-2-Clause)
-  - *Status*: Reference for Cortex-M0/M0+ support.
-  - *Highlights*: Contains `P256-cortex-m0-ecdh-gcc.s`. Achieves P-256 ECDH in **4,457k to 5,764k cycles on pure Cortex-M0** (translates to ~33–43 ms on RP2040 @ 133 MHz!). Also provides size-optimized and speed-optimized Cortex-M4 variants.
+  - *Status*: Reference for Target 2 (ARMv6-M) support.
+  - *Highlights*: Contains `P256-cortex-m0-ecdh-gcc.s`. Achieves P-256 ECDH in **4,457k to 5,764k cycles on pure Target 2** (~33–43 ms @ 133 MHz). Also provides size-optimized and speed-optimized Target 1 variants.
 - **[`Emill/rsa-armv7`](https://github.com/Emill/rsa-armv7)** (BSD-2-Clause)
   - *Status*: High-priority candidate for RSA integration.
-  - *Highlights*: Highly optimized ARMv7E-M / Cortex-M33 bignum engine (`bignum_asm.S`). Implements RSAES-PKCS1-v1_5, RSASSA-PKCS1-v1_5, and RSASSA-PSS (TLS 1.3 compatible) with CRT optimization. RSA-2048 public verify takes ~1.03M cycles; private sign is ~46M cycles with constant memory access patterns.
+  - *Highlights*: Highly optimized Target 1 bignum engine (`bignum_asm.S`). Implements RSAES-PKCS1-v1_5, RSASSA-PKCS1-v1_5, and RSASSA-PSS (TLS 1.3 compatible) with CRT optimization. RSA-2048 public verify takes ~1.03M cycles; private sign is ~46M cycles with constant memory access patterns.
 
 ### 3.2. Curve25519 & Ed25519
 - **[`embassy-rs/cortex25519`](https://github.com/embassy-rs/cortex25519)** (Dario Nieuwenhuis / Dirbaio & Emil Lenngren) (BSD-2-Clause):
-  - *Architectures*: Cortex-M4 / Cortex-M33 (ARMv7E-M / ARMv8-M).
+  - *Targets*: Target 1 (ARMv7E-M / ARMv8-M Mainline).
   - *Upstream Origin*: Emil Lenngren's [`Emill/X25519-Cortex-M4`](https://github.com/Emill/X25519-Cortex-M4), extended by Embassy to support Ed25519 signature verification.
-  - *Highlights*: Contains pure assembly kernels `cortex_m_fe25519.s`, `cortex_m_curve25519.s`, and `cortex_m_ed25519.s`. Tested with Wycheproof vectors in QEMU. Direct drop-in candidate for `mcu-crypto-asm`'s Cortex-M4/M33 backend.
+  - *Highlights*: Contains pure assembly kernels `cortex_m_fe25519.s`, `cortex_m_curve25519.s`, and `cortex_m_ed25519.s`. Tested with Wycheproof vectors in QEMU. Direct drop-in candidate for Target 1 backend.
 - **[`aCinal/esp-x25519`](https://github.com/aCinal/esp-x25519)** (Alper Cinal) (MIT):
-  - *Architectures*: Xtensa LX6 and LX7 (ESP32, ESP32-S2, ESP32-S3).
-  - *Technique*: Constant-time X25519 optimized for the **Xtensa MAC16** execution unit. Uses 17 15-bit limbs ($17 \times 15 = 255$) to fit into the 40-bit accumulator (`xsr.acclo`, `xsr.acchi`) without intermediate overflows, combined with zero-overhead hardware `loop` instructions. Solves the Xtensa backend for Curve25519.
+  - *Targets*: Target 5 (Xtensa LX6 and LX7).
+  - *Technique*: Constant-time X25519 optimized for the **Xtensa MAC16** execution unit. Uses 17 15-bit limbs ($17 \times 15 = 255$) to fit into the 40-bit accumulator (`xsr.acclo`, `xsr.acchi`) without intermediate overflows, combined with zero-overhead hardware `loop` instructions.
 - **`fe25519` by Dideriksen et al. / Schwabe** (Public Domain / CC0):
-  - *Architectures*: Cortex-M4 / Cortex-M33.
-  - *Technique*: 10 unsaturated 25.5-bit limbs with `UMAAL`. Computes X25519 in **~620,000–650,000 cycles** (~10 ms @ 64 MHz on nRF52840).
+  - *Targets*: Target 1.
+  - *Technique*: 10 unsaturated 25.5-bit limbs with `UMAAL`. Computes X25519 in **~620,000–650,000 cycles** (~10 ms @ 64 MHz).
 - **"Curve25519 on Cortex-M0" by Haase & Labrique (CHES 2014)**:
-  - *Architectures*: Cortex-M0 / Cortex-M0+ (RP2040).
-  - *Technique*: Multi-precision Karatsuba and Comba designed to avoid register spills on `r0`–`r7`. Computes X25519 in **~3.5M cycles** (~26 ms on RP2040).
+  - *Targets*: Target 2 (ARMv6-M).
+  - *Technique*: Multi-precision Karatsuba and Comba designed to avoid register spills on `r0`–`r7`. Computes X25519 in **~3.5M cycles** (~26 ms @ 133 MHz).
 - **`lib25519` / SUPERCOP / Stoffelen (2019)**:
-  - *Architectures*: RISC-V RV32IM.
+  - *Targets*: Target 4 (RISC-V RV32IM).
   - *Technique*: Branchless Montgomery ladder in ~1.8M cycles on 32-bit RISC-V cores.
 
 ### 3.3. Poly1305 & ChaCha20
 - **`poly1305-donna` / `poly1305-armv6` by Andrew Moon (Floodyberry)** (MIT / Public Domain):
-  - *Architectures*: ARMv6, ARMv7, Cortex-M4.
-  - *Technique*: Uses `UMAAL` to accumulate into 44-bit limbs. Evaluates Poly1305 in **~2.2–2.5 cycles/byte** on Cortex-M4.
+  - *Targets*: Target 1, Target 2, Target 3.
+  - *Technique*: Uses `UMAAL` on Target 1 to accumulate into 44-bit limbs. Evaluates Poly1305 in **~2.2–2.5 cycles/byte** on Target 1.
 - **OpenSSL `chacha-armv4.S`**:
-  - *Architectures*: Thumb-2 / ARMv7-M / Cortex-M4.
+  - *Targets*: Target 1, Target 3.
   - *Technique*: Unrolls two quarter-rounds and holds all 16 state words in registers without stack spills (~16 cycles/byte).
 
 ### 3.4. secp256k1
 - **`micro-ecc` by Kenneth MacKay** (BSD-2-Clause):
-  - *Architectures*: Cortex-M0 (`uECC_arm_m0.inc`) and Cortex-M4 (`uECC_arm.c`).
+  - *Targets*: Target 1 (`uECC_arm.c`) and Target 2 (`uECC_arm_m0.inc`).
   - *Technique*: Compact assembly routines for P-192, P-224, P-256, and secp256k1.
 - **`libsecp256k1` (Bitcoin Core)**:
   - *Technique*: Endomorphism-based scalar decomposition (GLV method), replacing a 256-bit scalar multiplication with two parallel 128-bit multi-scalar multiplications, halving point doublings.
 
 ### 3.5. Post-Quantum Cryptography (ML-KEM / Kyber & ML-DSA / Dilithium)
 - **`PQM4` (Post-Quantum Cryptography for ARM Cortex-M4)** (`https://github.com/mupq/pqm4`) (CC0 / Apache-2.0 / MIT):
-  - *Architectures*: Cortex-M4, Cortex-M7, Cortex-M33.
+  - *Targets*: Target 1 (ARMv7E-M / ARMv8-M Mainline).
   - *Authors*: Kannwischer, Rijneveld, Schwabe, Stoffelen.
   - *Technique*: Hand-written assembly for Number Theoretic Transform (NTT) using DSP SIMD instructions (`SMLABB`, `SMULBB`, `PKHTB`) to process two 16-bit coefficients simultaneously. Speeds up Kyber and Dilithium by **3.5x–6.0x** over compiled C/Rust.
 - **`pqriscv`** (`https://github.com/mupq/pqriscv`):
-  - *Architectures*: RISC-V RV32IMAC.
+  - *Targets*: Target 4 (RISC-V RV32IMAC).
 
 ### 3.6. Hashes (SHA-256, SHA-512, Keccak)
 - **XKCP (eXtended Keccak Code Package)**:
@@ -119,25 +101,24 @@ All 42 microcontroller boards in the Teleprobe test farm plus modern IoT chips (
 
 ### 3.7. AES (128, 192, 256) & Wide-Key/Wide-Block Ciphers
 - **Standard AES (FIPS 197)**: Defines AES-128 (10 rounds), AES-192 (12 rounds), and AES-256 (14 rounds) on a 128-bit block.
-- **"AES-512" and Wide Constructs**: FIPS 197 specifies a maximum 256-bit key. In practice, "AES-512" refers to:
-  - **AES-XTS-512** (IEEE 1619 / FIPS): Standard for disk/flash encryption, using two 256-bit keys (512-bit total key material: $K_1$ for AES-256 block cipher, $K_2$ for tweak encryption).
-  - **Rijndael-256 / Rijndael-512**: The original Rijndael submission supported 256-bit block and key sizes (used in wide-block hashing and MACs).
-  - **Kalyna-512 / Threefish-512**: National standard / Skein 512-bit wide block ciphers.
+- **"AES-512" and Wide Constructs**:
+  - **AES-XTS-512** (IEEE 1619 / FIPS): Standard for disk/flash encryption, using two 256-bit keys (512-bit total key material).
+  - **Rijndael-256 / Rijndael-512**: Supported 256-bit block and key sizes (used in wide-block hashing and MACs).
 - **Reference Implementations & Prior Art**:
   - **[`Rvch7/Fixslicing-AES`](https://github.com/Rvch7/Fixslicing-AES)** (Alexandre Adomnicăi & Thomas Peyrin, TCHES 2021) (MIT / Public Domain):
-    - *Architectures*: ARM Cortex-M (Thumb-2) and RISC-V.
-    - *Technique*: Fixslicing eliminates the ShiftRows overhead in classical bitslicing by adjusting the representation each round. Achieves speed records on Cortex-M4: **~63 cycles/byte for AES-128-CTR** in 2-block parallel constant-time assembly.
+    - *Targets*: Target 1, Target 3, Target 4.
+    - *Technique*: Fixslicing eliminates the ShiftRows overhead in classical bitslicing by adjusting the representation each round. Achieves speed records on Target 1: **~63 cycles/byte for AES-128-CTR** in 2-block parallel constant-time assembly.
   - **[`Ko-/aes-armcortexm`](https://github.com/Ko-/aes-armcortexm)** ("All the AES You Need on Cortex-M3 and M4", Peter Schwabe & Ko Stoffelen, SAC 2016) (Public Domain):
-    - *Architectures*: Cortex-M3, Cortex-M4.
-    - *Technique*: Fast T-table, constant-time bitsliced (2, 4, and 8-block), and **first-order masked bitsliced AES** (provides provable side-channel resistance against DPA/CPA power analysis attacks on microcontrollers!).
+    - *Targets*: Target 1, Target 3.
+    - *Technique*: Fast constant-time bitsliced (2, 4, and 8-block), and **first-order masked bitsliced AES** (provable side-channel resistance against DPA/CPA power analysis attacks on microcontrollers).
   - **[`BearSSL aes_ct.c`](https://bearssl.org/)** (Thomas Pornin) (MIT):
     - *Technique*: 32-bit constant-time bitsliced S-box using Boyar-Peralta logic minimization (only 113–115 boolean gates per S-box). Compact, zero RAM tables, immune to cache attacks.
   - **RISC-V Scalar Cryptography (`Zkne`, `Zknd`)**:
-    - *Architectures*: ESP32-C6, ESP32-P4, modern RV32 cores.
+    - *Targets*: Target 4 with `Zk` extensions.
     - *Technique*: Hardware round instructions (`aes32esi`, `aes32esmi`, `aes32dsi`, `aes32dsmi`) reduce each AES round to just **4 instructions** (~10–15 cycles/block).
   - **Why Software ASM Matters Even with Hardware Crypto Accelerators**:
-    1. *Cache Timing Immunity*: Hardware engines or T-table software leak cache lines on MCUs with data caches (Cortex-M7, ESP32). Bitslicing has zero data-dependent memory lookups.
-    2. *Hardware Limitations*: Nordic nRF52/nRF53 hardware ECB only supports AES-128 (no AES-192 or AES-256).
+    1. *Cache Timing Immunity*: Hardware engines or T-table software leak cache lines on MCUs with data caches. Bitslicing has zero data-dependent memory lookups.
+    2. *Hardware Limitations*: Many hardware ECB accelerators only support AES-128 (no AES-192 or AES-256).
     3. *Zero Peripheral Contention / Re-entrancy*: Hardware engines require RTOS mutexes, peripheral power clocks, and DMA setup; software assembly is purely re-entrant and faster for payloads under 64–128 bytes.
 
 ---
@@ -145,10 +126,10 @@ All 42 microcontroller boards in the Teleprobe test farm plus modern IoT chips (
 ## 4. Actionable TODO Tracker
 
 ### Phase 1: Port Current NIST P-256 & P-384 to Additional ISAs
-- [x] **Cortex-M4 / Cortex-M33 P-256**: Hand-written UMAAL assembly, batch affine table, Bernstein-Yang `mod_n_inv`.
-- [x] **Cortex-M4 / Cortex-M33 P-384**: Hand-written 12-limb unrolled UMAAL multiplication, comb scalar mul.
+- [x] **Target 1: ARMv7E-M / ARMv8-M Mainline (Cortex-M4 / Cortex-M33) P-256**: Hand-written UMAAL assembly, batch affine table, Bernstein-Yang `mod_n_inv`.
+- [x] **Target 1: ARMv7E-M / ARMv8-M Mainline (Cortex-M4 / Cortex-M33) P-384**: Hand-written 12-limb unrolled UMAAL multiplication, comb scalar mul.
 - [x] **Embassy `P256Ops` Driver**: Fully integrated and tested on hardware with zero secret branches.
-  - **Live Hardware Verification (Teleprobe `nucleo-stm32h563zi`, STM32H563ZITx Cortex-M33 @ 64 MHz, RAM-only execution)**:
+  - **Live Hardware Verification (Target 1: Cortex-M33 @ 64 MHz, RAM-only execution)**:
     | Benchmark Operation | `driver_mcu_crypto_asm` | `driver_p256_cm4` (Emil) | Speedup / Advantage |
     | :--- | :---: | :---: | :--- |
     | **Total Wall Time** | **1,782,470 µs (1.78 s)** | **2,302,917 µs (2.30 s)** | 🏆 **`mcu-crypto-asm` is 1.29× FASTER (22.6% less time)** |
@@ -160,12 +141,12 @@ All 42 microcontroller boards in the Teleprobe test farm plus modern IoT chips (
     | **`lincomb`** (verify) | 19,385 µs | 16,375 µs | Emil faster by ~3.0 ms (joint sliding window) |
     | **`TLS 1.3 ECDHE`** | 19,382 µs | 18,732 µs | Essentially neck-and-neck |
 
-- [ ] **Cortex-M0 / Cortex-M0+ (RP2040, STM32G0/L0/C0, nRF51) P-256 Backend**:
+- [ ] **Target 2: ARMv6-M (Cortex-M0 / Cortex-M0+) P-256 Backend**:
   - [ ] Vendor or adapt `P256-cortex-m0-ecdh-gcc.s` from `Emill/P256-cortex-ecdh`.
   - [ ] Implement constant-time 16-bit Thumb-1 field arithmetic (`mul`, `sqr`, `add`, `sub`).
   - [ ] Hook into `mcu-crypto-asm` build system with `cfg(target_arch = "arm")` + `cfg(not(target_feature = "dsp"))`.
-  - [ ] Benchmark on RP2040 silicon via `probe-rs`.
-- [x] **Xtensa LX7 (ESP32-S2 / ESP32-S3) P-256 & P-384 Backend**:
+  - [ ] Benchmark on Target 2 silicon via `probe-rs`.
+- [x] **Target 5: Xtensa LX7 P-256 & P-384 Backend**:
   - [x] Implement hand-written unrolled assembly multiplier (`nistp_mul_mont_8`, `nistp_mul_mont_12`) utilizing `SALTU` branchless carry propagation.
   - [x] Implement dedicated Solinas Montgomery squaring (`nistp_sqr_mont_8`, `nistp_sqr_mont_12`) eliminating off-diagonal products.
   - [x] Implement branchless constant-time modular addition and subtraction (`nistp_add_mod_*`, `nistp_sub_mod_*`).
@@ -173,8 +154,8 @@ All 42 microcontroller boards in the Teleprobe test farm plus modern IoT chips (
   - [x] Implement interleaved simultaneous double-scalar multiplication (`PointJacobian::lincomb` / Shamir's Trick) halving point doublings from 512 to 256 for P-256 and 768 to 384 for P-384.
   - [x] Fast Jacobian projective ECDSA verification ($r \cdot Z^2 \equiv X \pmod p$) eliminating modular field inversion $\pmod p$.
   - [x] Fully integrated into `mcu-crypto-asm` backend dispatch and Embassy `P256Ops` driver.
-  - [x] Hardware verification on physical ESP32-S3 @ 240 MHz via J-Link JTAG / OpenOCD (100% bit-exact across all 128 KAT vectors, 0 failures):
-    | Operation | Routine | Physical ESP32-S3 @ 240 MHz | Fiat-Crypto (RustCrypto) | Speedup / Status |
+  - [x] Hardware verification on physical Target 5 (Xtensa LX7 @ 240 MHz) via J-Link JTAG / OpenOCD (100% bit-exact across all 128 KAT vectors, 0 failures):
+    | Operation | Routine | Physical Target 5 @ 240 MHz | Fiat-Crypto (RustCrypto) | Speedup / Status |
     | :--- | :--- | :---: | :---: | :--- |
     | **P-256 Mul** | `nistp_mul_mont_8` | **1,274 cycles** (5.3 µs) | 2,795 cycles (11.6 µs) | 🏆 **2.19× faster** |
     | **P-256 Sqr** | `nistp_sqr_mont_8` | **1,344 cycles** (5.6 µs) | 2,795 cycles (11.6 µs) | 🏆 **2.08× faster** |
@@ -184,35 +165,35 @@ All 42 microcontroller boards in the Teleprobe test farm plus modern IoT chips (
     | **P-384 Add / Sub** | `nistp_add/sub_mod_12`| **324 / 235 cycles** | ~650 cycles | 🏆 **2.0×–2.8× faster** |
     | **P-256 ECDSA Verify** | `ecdsa::verify` | **~20.0 ms** | 890.0 ms (`opt-s`) | 🏆 **44.5× faster** (Shamir's Trick) |
     | **P-384 ECDSA Verify** | `ecdsa::verify` | **~62.1 ms** | 2,410.0 ms (`opt-s`) | 🏆 **38.8× faster** (Shamir's Trick) |
-- [ ] **RISC-V (RP2350 Hazard3, ESP32-C3/C6) P-256 Backend**:
+- [ ] **Target 4: RISC-V (RV32IMAC / Zk) P-256 Backend**:
   - [ ] Implement 8-limb Comba multiplication utilizing 32 orthogonal registers.
   - [ ] Add `Zbkc` carryless multiplier path for targets supporting RISC-V Scalar Crypto.
 
 ---
 
 ### Phase 2: Modern Elliptic Curves (Curve25519 / X25519 & Ed25519)
-- [ ] **Cortex-M4 / Cortex-M33 X25519 & Ed25519 Backend**:
-  - [ ] Integrate `cortex_m_fe25519.s`, `cortex_m_curve25519.s`, and `cortex_m_ed25519.s` from [`embassy-rs/cortex25519`](https://github.com/embassy-rs/cortex25519) (built on Emil Lenngren's [`Emill/X25519-Cortex-M4`](https://github.com/Emill/X25519-Cortex-M4)).
-  - [ ] Target cycle goal: **< 650,000 cycles on Cortex-M4** (< 10.2 ms @ 64 MHz).
+- [ ] **Target 1: ARMv7E-M / ARMv8-M Mainline X25519 & Ed25519 Backend**:
+  - [ ] Integrate `cortex_m_fe25519.s`, `cortex_m_curve25519.s`, and `cortex_m_ed25519.s` from [`embassy-rs/cortex25519`](https://github.com/embassy-rs/cortex25519).
+  - [ ] Target cycle goal: **< 650,000 cycles on Target 1** (< 10.2 ms @ 64 MHz).
   - [ ] Support both X25519 ECDH key agreement (RFC 7748) and Ed25519 signature verification (RFC 8032).
   - [ ] Run differential and KAT verification against Wycheproof test vectors.
-- [ ] **Xtensa LX6 / LX7 (ESP32 / ESP32-S3) X25519 Backend**:
+- [ ] **Target 5: Xtensa LX6 / LX7 X25519 Backend**:
   - [ ] Integrate MAC16-optimized assembly from [`aCinal/esp-x25519`](https://github.com/aCinal/esp-x25519) (17 15-bit limbs, 40-bit accumulator registers `acclo`/`acchi`, hardware `loop`).
-  - [ ] Provide constant-time, zero-table X25519 for ESP32 and ESP32-S3 in bare-metal Rust without external C dependencies.
-- [ ] **Cortex-M0 / Cortex-M0+ (RP2040) X25519**:
+  - [ ] Provide constant-time, zero-table X25519 in bare-metal Rust without external C dependencies.
+- [ ] **Target 2: ARMv6-M (Cortex-M0 / Cortex-M0+) X25519**:
   - [ ] Implement Haase-Labrique multi-precision Karatsuba algorithm adapted for Thumb-1.
 
 ---
 
 ### Phase 3: High-Speed Symmetric AEAD (Poly1305 & ChaCha20)
 - [ ] **Poly1305 One-Time Authenticator (RFC 8439)**:
-  - [ ] Implement ARMv7E-M / Cortex-M33 assembly inner loop using `UMAAL`.
-  - [ ] Target throughput goal: **~2.5 cycles/byte** on nRF52840 / STM32H5.
+  - [ ] Implement Target 1 assembly inner loop using `UMAAL`.
+  - [ ] Target throughput goal: **~2.5 cycles/byte** on Target 1.
   - [ ] Implement constant-time clamping and final reduction modulo $2^{130}-5$.
   - [ ] Host and target KAT test vectors from RFC 8439.
 - [ ] **ChaCha20 Stream Cipher**:
   - [ ] Implement ARM assembly block function holding all 16 state words in registers without stack spills.
-  - [ ] Add 32-bit interleaved parallel blocks for cores with extra registers or dual-issue (M7).
+  - [ ] Add 32-bit interleaved parallel blocks for cores with extra registers or dual-issue (Target 1 Cortex-M7).
 
 ---
 
@@ -227,11 +208,11 @@ All 42 microcontroller boards in the Teleprobe test farm plus modern IoT chips (
 ---
 
 ### Phase 5: Post-Quantum Cryptography (NIST FIPS 203 & 204)
-- [ ] **ML-KEM (Kyber-512 / 768 / 1024) Cortex-M4 / M33 NTT Acceleration**:
+- [ ] **ML-KEM (Kyber-512 / 768 / 1024) Target 1 NTT Acceleration**:
   - [ ] Vendor / adapt PQM4's hand-written SIMD NTT butterflies (`SMLABB`/`PKHTB`).
   - [ ] Fast Barrett and Montgomery reduction modulo $q = 3329$.
   - [ ] Target cycle goal: **< 600,000 cycles for Kyber-768 decapsulation**.
-- [ ] **ML-DSA (Dilithium-2 / 3 / 5) NTT Acceleration**:
+- [ ] **ML-DSA (Dilithium-2 / 3 / 5) Target 1 NTT Acceleration**:
   - [ ] Adapt PQM4's SIMD NTT for modulus $q = 8380417$.
   - [ ] Fast polynomial matrix-vector multiplication.
 
@@ -239,14 +220,14 @@ All 42 microcontroller boards in the Teleprobe test farm plus modern IoT chips (
 
 ### Phase 6: Hashes & Symmetric Primitives
 - [ ] **SHA-512 / SHA-384 Assembly**:
-  - [ ] ARMv7E-M assembly implementation pairing 32-bit registers for 64-bit words via `LDRD`/`STRD`.
+  - [ ] Target 1 assembly implementation pairing 32-bit registers for 64-bit words via `LDRD`/`STRD`.
   - [ ] Eliminates compiler register spills, speeding up Ed25519 and P-384 certificate parsing.
 - [ ] **Keccak-f[1600] / SHAKE-128 / SHAKE-256**:
   - [ ] Integrate 32-bit interleaved bit-sliced ARM assembly (from XKCP).
   - [ ] Critical performance driver for ML-KEM and ML-DSA hash operations.
 - [ ] **Constant-Time Bitsliced & Fixsliced AES-128, AES-192, AES-256**:
-  - [ ] Implement Adomnicăi-Peyrin 2-block parallel **Fixsliced AES** on ARM Cortex-M4/M33 (target **~63 cycles/byte** in CTR mode).
-  - [ ] Implement constant-time Boyar-Peralta S-box (113–115 gates) for memory-constrained MCUs (RP2040 Cortex-M0+).
+  - [ ] Implement Adomnicăi-Peyrin 2-block parallel **Fixsliced AES** on Target 1 (target **~63 cycles/byte** in CTR mode).
+  - [ ] Implement constant-time Boyar-Peralta S-box (113–115 gates) for memory-constrained Target 2 cores.
   - [ ] Implement **first-order masked bitsliced AES** (Schwabe-Stoffelen) for power-analysis / DPA resistance on secure embedded tokens.
   - [ ] Support AES-XTS (256-bit and 512-bit key material) for encrypted firmware partitions and external flash.
-  - [ ] Add RISC-V `Zkne`/`Zknd` scalar crypto instructions backend for ESP32-C6 / ESP32-P4.
+  - [ ] Add Target 4 (RISC-V `Zkne`/`Zknd` scalar crypto instructions) backend.
