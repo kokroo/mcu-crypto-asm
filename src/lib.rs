@@ -52,6 +52,7 @@ pub mod mlkem;
 pub use mlkem as kyber;
 pub mod mldsa;
 pub use mldsa as dilithium;
+pub mod sha512;
 
 pub mod ecdh;
 pub mod ecdsa;

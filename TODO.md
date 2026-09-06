@@ -32,7 +32,7 @@ All microcontroller hardware platforms cluster into five distinct architectural 
 | **secp256k1** | Bitcoin, Wallets | **DONE**<br>(~11.7k dbl, 101ms scalarmult) | 4.0×–7.0× | 2.0×–2.8× | 2.2×–3.2× | 2.2×–3.0× | **Production** (T1 Done) |
 | **ML-KEM (Kyber)** | Post-Quantum (FIPS 203) | **DONE**<br>(5.8kc NTT/InvNTT/Basemul) | 2.0×–3.0× | 1.8×–2.2× | 2.0×–3.5× | 2.0×–3.0× | **Production** (T1 Done) |
 | **ML-DSA (Dilithium)** | Post-Quantum (FIPS 204) | **DONE**<br>(11.7kc NTT/InvNTT, 3.9kc PW) | 2.0×–2.8× | 1.6×–2.0× | 2.0×–3.5× | 2.0×–3.0× | **Production** (T1 Done) |
-| **SHA-512 / SHA-384** | Ed25519, P-384, Hashes | 2.2×–3.5×<br>(LDRD/STRD paired)| 3.5×–5.5× | 1.8×–2.5× | 2.0×–3.0× | 2.0×–3.0× | **P1 (High)** |
+| **SHA-512 / SHA-384** | Ed25519, P-384, Hashes | **DONE**<br>(11.7kc/blk, ~97 cpb)| 3.5×–5.5× | 1.8×–2.5× | 2.0×–3.0× | 2.0×–3.0× | **Production** (T1 Done) |
 | **Keccak / SHAKE** | ML-KEM, ML-DSA, Hashes | **DONE**<br>(15.6k cycles / 24-rnd) | 3.0×–5.0× | 1.8×–2.5× | 2.0×–3.5× | 2.0×–3.2× | **Production** (T1 Done) |
 | **Bitsliced AES** | Constant-Time AES | **DONE**<br>(Fixsliced AES-128/256) | 3.0×–5.0× | 2.0×–3.5× | 1.5× *(10× Zk)* | 2.0×–3.5× | **Production** (T1 Done) |
 | **GHASH (GCM)** | AES-GCM Authentication | 2.5×–4.0× | 3.0×–5.0× | 1.8×–2.5× | 1.8× *(8× Zbkc)*| 2.0×–3.0× | **P2 (Medium)** |
@@ -237,9 +237,11 @@ All microcontroller hardware platforms cluster into five distinct architectural 
 ---
 
 ### Phase 6: Hashes & Symmetric Primitives
-- [ ] **SHA-512 / SHA-384 Assembly**:
-  - [ ] Target 1 assembly implementation pairing 32-bit registers for 64-bit words via `LDRD`/`STRD`.
-  - [ ] Eliminates compiler register spills, speeding up Ed25519 and P-384 certificate parsing.
+- [x] **SHA-512 / SHA-384 Assembly**:
+  - [x] Target 1 assembly implementation pairing 32-bit registers for 64-bit words via Andy Polyakov / OpenSSL `sha512-armv4.pl` (`asm/cortex_m_sha512.S`).
+  - [x] Eliminates compiler register spills, speeding up Ed25519, P-384 certificate parsing, and FIPS 180-4 hashing.
+  - [x] Safe, zero-dependency `no_std` Rust API (`src/sha512.rs`) with `Sha512`, `Sha384`, `compress_blocks()`, and portable fallback.
+  - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on raw 128-byte block compress [11,712 cycles, 91 cpb], NIST empty string, NIST 'abc', NIST 112-byte multi-block vectors, streaming incremental updates, and 1024-byte bulk throughput @ ~97 cycles/byte).
 - [x] **Keccak-f[1600] / SHAKE-128 / SHAKE-256**:
   - [x] Integrate 32-bit interleaved bit-sliced ARM assembly (`asm/cortex_m_keccak.S`, `src/keccak.rs`).
   - [x] Full FIPS 202 sponge implementation (SHA3-256, SHA3-512, SHAKE128, SHAKE256).
