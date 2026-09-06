@@ -15,8 +15,10 @@ use std::process::Command;
 fn main() {
     println!("cargo:rerun-if-changed=asm/cortex_m4.S");
     println!("cargo:rerun-if-changed=asm/cortex_m4_p256.S");
+    println!("cargo:rerun-if-changed=asm/cortex_m0_p256.S");
     println!("cargo:rerun-if-changed=asm/xtensa_lx7.S");
     println!("cargo:rustc-check-cfg=cfg(nistp_asm_cm4)");
+    println!("cargo:rustc-check-cfg=cfg(nistp_asm_cm0)");
     println!("cargo:rustc-check-cfg=cfg(nistp_asm_xtensa)");
 
     if std::env::var("CARGO_FEATURE_FORCE_PORTABLE").is_ok() {
@@ -27,6 +29,11 @@ fn main() {
     // --- Cortex-M4 / M7 / M33: UMAAL, constant-latency multiplier ---
     if target.starts_with("thumbv7em") || target.starts_with("thumbv8m.main") {
         println!("cargo:rustc-cfg=nistp_asm_cm4");
+    }
+
+    // --- Cortex-M0 / M0+: ARMv6-M (Thumb-1 only, no UMAAL) ---
+    if target.starts_with("thumbv6m") || target.starts_with("thumbv8m.base") {
+        println!("cargo:rustc-cfg=nistp_asm_cm0");
     }
 
     // Cortex-M3 is ARMv7-M and does have UMAAL, but its multiplier is

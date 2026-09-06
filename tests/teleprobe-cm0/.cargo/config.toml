@@ -1,0 +1,8 @@
+[build]
+target = "thumbv6m-none-eabi"
+
+[target.'cfg(all(target_arch = "arm", target_os = "none"))']
+runner = "teleprobe client run --target nucleo-stm32c031c6 -s"
+
+[env]
+DEFMT_LOG = "info"
