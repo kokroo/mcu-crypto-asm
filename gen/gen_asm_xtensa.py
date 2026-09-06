@@ -255,11 +255,421 @@ def emit_mul(n):
     return "\n".join(L)
 
 
+def emit_sqr(n):
+    """Constant-time out = a^2 * R^-1 mod p for n limbs using dedicated squaring + Montgomery reduction."""
+    L = []
+    e = L.append
+    name = f"nistp_sqr_mont_{n}"
+    pl = limbs(MODULI[n], n)
+    OUT_SLOT = (2 * n + 4) * 4
+
+    e("")
+    e(f"# out = a^2 * R^-1 mod p,  R = 2^{32*n}.  Dedicated squaring + Montgomery reduction.")
+    e(f"	.globl	{name}")
+    e(f"	.align	4")
+    e(f"	.type	{name}, @function")
+    e(f"{name}:")
+    if WINDOWED:
+        e("	entry	a1, 32")
+    else:
+        e("	addi	a1, a1, -16")
+        e("	s32i	a12, a1, 0")
+        e("	s32i	a13, a1, 4")
+        e("	s32i	a14, a1, 8")
+        e("	s32i	a15, a1, 12")
+
+    e("	mov	a6, a5			# scratch buffer pointer in a6")
+    e(f"	s32i	a2, a6, {OUT_SLOT}	# park `out` in scratch")
+
+    # Step 1: Zero out scratch buffer (2*n + 4 words)
+    e("	movi	a9, 0")
+    for j in range(2 * n + 4):
+        e(f"	s32i	a9, a6, {j * 4}")
+
+    # Step 2: Triangular off-diagonal products (i < j)
+    e("	# Stage 1: Off-diagonal triangular products")
+    for i in range(n - 1):
+        e(f"	l32i	a7, a3, {i * 4}		# a[{i}]")
+        e("	movi	a8, 0			# carry C = 0")
+        for j in range(i + 1, n):
+            e(f"	l32i	a10, a3, {j * 4}	# a[{j}]")
+            e(f"	l32i	a9, a6, {(i + j) * 4}	# t[{i + j}]")
+            e("	mull	a15, a10, a7")
+            e("	muluh	a14, a10, a7")
+            e("	add	a15, a15, a9")
+            e("	saltu	a12, a15, a9")
+            e("	add	a14, a14, a12")
+            e("	add	a15, a15, a8")
+            e("	saltu	a12, a15, a8")
+            e("	add	a8, a14, a12		# new carry C")
+            e(f"	s32i	a15, a6, {(i + j) * 4}	# t[{i + j}]")
+        e(f"	s32i	a8, a6, {(i + n) * 4}	# t[{i + n}] = tail carry")
+
+    # Step 3: Double off-diagonals (shift left 1)
+    e("	# Stage 2: Double off-diagonals (shift left 1)")
+    e("	movi	a8, 0			# carry = 0")
+    for k in range(1, 2 * n):
+        e(f"	l32i	a9, a6, {k * 4}")
+        e("	srli	a12, a9, 31		# next carry")
+        e("	slli	a9, a9, 1")
+        e("	or	a9, a9, a8")
+        e(f"	s32i	a9, a6, {k * 4}")
+        e("	mov	a8, a12")
+    e(f"	s32i	a8, a6, {(2 * n) * 4}	# t[{2 * n}] = final carry")
+
+    # Step 4: Add diagonal squares a[i]^2
+    e("	# Stage 3: Add diagonal squares a[i]^2")
+    for i in range(n):
+        e(f"	l32i	a7, a3, {i * 4}		# a[{i}]")
+        e("	mull	a15, a7, a7		# lo")
+        e("	muluh	a14, a7, a7		# hi")
+        e(f"	l32i	a9, a6, {(2 * i) * 4}")
+        e("	add	a15, a15, a9")
+        e("	saltu	a12, a15, a9")
+        e(f"	s32i	a15, a6, {(2 * i) * 4}")
+
+        e(f"	l32i	a9, a6, {(2 * i + 1) * 4}")
+        e("	add	a14, a14, a12")
+        e("	saltu	a8, a14, a12")
+        e("	add	a15, a9, a14")
+        e("	saltu	a10, a15, a9")
+        e("	add	a8, a8, a10		# carry into t[2*i + 2]")
+        e(f"	s32i	a15, a6, {(2 * i + 1) * 4}")
+
+        e(f"	l32i	a9, a6, {(2 * i + 2) * 4}")
+        e("	add	a15, a9, a8")
+        e("	saltu	a8, a15, a9")
+        e(f"	s32i	a15, a6, {(2 * i + 2) * 4}")
+
+        e(f"	l32i	a9, a6, {(2 * i + 3) * 4}")
+        e("	add	a15, a9, a8")
+        e(f"	s32i	a15, a6, {(2 * i + 3) * 4}")
+
+    # Step 5: Montgomery Reduction
+    e("	# Stage 4: Montgomery Reduction")
+    e("	movi	a5, -1			# 0xffffffff")
+
+    def pconst_sqr(j, tmp="a10"):
+        if pl[j] == 0xFFFFFFFF:
+            return "a5", []
+        return tmp, [f"	movi	{tmp}, {pl[j] - (1 << 32)}		# p[{j}] = 0x{pl[j]:08x}"]
+
+    for i in range(n):
+        e(f"	# ---- reduction row i = {i} ----")
+        e(f"	l32i	a7, a6, {i * 4}		# m = t[{i}]")
+        e("	mov	a8, a7			# j = 0: low word cancelled, carry is m")
+        for j in range(1, n):
+            e(f"	l32i	a9, a6, {(i + j) * 4}	# t[{i + j}]")
+            pj = pl[j]
+            if pj == 0:
+                e("	add	a15, a9, a8")
+                e("	saltu	a8, a15, a9")
+                e(f"	s32i	a15, a6, {(i + j) * 4}")
+            elif pj == 0xFFFFFFFF:
+                e("	add	a15, a9, a8")
+                e("	saltu	a12, a15, a9")
+                e("	sub	a11, a15, a7")
+                e("	saltu	a14, a15, a7")
+                e("	add	a8, a7, a12")
+                e("	sub	a8, a8, a14")
+                e(f"	s32i	a11, a6, {(i + j) * 4}")
+            elif pj == 1:
+                e("	add	a15, a9, a7")
+                e("	saltu	a12, a15, a9")
+                e("	add	a11, a15, a8")
+                e("	saltu	a14, a11, a15")
+                e("	add	a8, a12, a14")
+                e(f"	s32i	a11, a6, {(i + j) * 4}")
+            else:
+                reg, pre = pconst_sqr(j)
+                L.extend(pre)
+                e(f"	mull	a15, {reg}, a7")
+                e(f"	muluh	a14, {reg}, a7")
+                e("	add	a15, a15, a9")
+                e("	saltu	a12, a15, a9")
+                e("	add	a14, a14, a12")
+                e("	add	a15, a15, a8")
+                e("	saltu	a12, a15, a8")
+                e("	add	a8, a14, a12")
+                e(f"	s32i	a15, a6, {(i + j) * 4}")
+
+        # Propagate reduction carry a8 across 3 words:
+        k = i + n
+        e(f"	l32i	a9, a6, {k * 4}")
+        e("	add	a15, a9, a8")
+        e("	saltu	a8, a15, a9")
+        e(f"	s32i	a15, a6, {k * 4}")
+
+        e(f"	l32i	a9, a6, {(k + 1) * 4}")
+        e("	add	a15, a9, a8")
+        e("	saltu	a8, a15, a9")
+        e(f"	s32i	a15, a6, {(k + 1) * 4}")
+
+        e(f"	l32i	a9, a6, {(k + 2) * 4}")
+        e("	add	a15, a9, a8")
+        e(f"	s32i	a15, a6, {(k + 2) * 4}")
+
+    # Step 6: Conditional Subtraction
+    e(f"	l32i	a2, a6, {OUT_SLOT}	# recover `out`")
+    e("	movi	a8, 0			# borrow")
+    for j in range(n):
+        e(f"	l32i	a9, a6, {(n + j) * 4}")
+        if pl[j] == 0:
+            e("	sub	a15, a9, a8")
+            e("	saltu	a8, a9, a8")
+        else:
+            reg, pre = pconst_sqr(j, tmp="a10")
+            L.extend(pre)
+            e(f"	sub	a15, a9, {reg}")
+            e(f"	saltu	a12, a9, {reg}")
+            e("	sub	a11, a15, a8")
+            e("	saltu	a10, a15, a8")
+            e("	add	a8, a12, a10")
+            e("	mov	a15, a11")
+        e(f"	s32i	a15, a2, {j * 4}")
+    e(f"	l32i	a9, a6, {(2 * n) * 4}")
+    e("	saltu	a12, a9, a8")
+    e("	neg	a12, a12		# mask")
+    for j in range(n):
+        e(f"	l32i	a9, a2, {j * 4}")
+        e(f"	l32i	a10, a6, {(n + j) * 4}")
+        e("	xor	a11, a9, a10")
+        e("	and	a11, a11, a12")
+        e("	xor	a9, a9, a11		# branchless select")
+        e(f"	s32i	a9, a2, {j * 4}")
+
+    if WINDOWED:
+        e("	retw")
+    else:
+        e("	l32i	a12, a1, 0")
+        e("	l32i	a13, a1, 4")
+        e("	l32i	a14, a1, 8")
+        e("	l32i	a15, a1, 12")
+        e("	addi	a1, a1, 16")
+        e("	ret")
+    e(f"	.size	{name}, .-{name}")
+    return "\n".join(L)
+
+
+def emit_add_mod(n):
+    """Constant-time out = (a + b) mod p for n limbs."""
+    L = []
+    e = L.append
+    name = f"nistp_add_mod_{n}"
+    pl = limbs(MODULI[n], n)
+    stack_size = 112 if n == 8 else 144
+
+    e("")
+    e(f"# out = a + b mod p,  N = {n}")
+    e(f"	.globl	{name}")
+    e(f"	.align	4")
+    e(f"	.type	{name}, @function")
+    e(f"{name}:")
+    if WINDOWED:
+        e(f"	entry	a1, {stack_size}")
+        BASE = 32
+    else:
+        e(f"	addi	a1, a1, -{stack_size}")
+        e("	s32i	a12, a1, 0")
+        e("	s32i	a13, a1, 4")
+        e("	s32i	a14, a1, 8")
+        e("	s32i	a15, a1, 12")
+        BASE = 16
+
+    OUT_SLOT = BASE + 8 * n
+    e(f"	s32i	a2, a1, {OUT_SLOT}	# park `out`")
+
+    # 1. s = a + b
+    for j in range(n):
+        e(f"	l32i	a10, a3, {j*4}		# a[{j}]")
+        e(f"	l32i	a7, a4, {j*4}		# b[{j}]")
+        if j == 0:
+            e("	add	a15, a10, a7")
+            e("	saltu	a8, a15, a10		# carry")
+        else:
+            e("	add	a15, a10, a7")
+            e("	saltu	a12, a15, a10")
+            e("	add	a15, a15, a8")
+            e("	saltu	a8, a15, a8")
+            e("	add	a8, a8, a12")
+        e(f"	s32i	a15, a1, {BASE + j*4}		# s[{j}]")
+    e("	mov	a14, a8			# c_out in a14")
+
+    # 2. d = s - p
+    e("	movi	a5, -1			# 0xffffffff")
+    e("	movi	a6, 1			# 1")
+    if n == 12:
+        e("	movi	a13, -2			# 0xfffffffe")
+
+    for j in range(n):
+        e(f"	l32i	a9, a1, {BASE + j*4}		# s[{j}]")
+        pj = pl[j]
+        if pj == 0xFFFFFFFF:
+            preg = "a5"
+        elif pj == 1:
+            preg = "a6"
+        elif pj == 0xFFFFFFFE and n == 12:
+            preg = "a13"
+        elif pj == 0:
+            preg = None
+        else:
+            e(f"	movi	a7, {pj - (1<<32)}")
+            preg = "a7"
+
+        if j == 0:
+            e(f"	sub	a15, a9, {preg}")
+            e(f"	saltu	a8, a9, {preg}		# borrow")
+        else:
+            if preg is None:
+                e("	sub	a11, a9, a8")
+                e("	saltu	a8, a9, a8")
+                e("	mov	a15, a11")
+            else:
+                e(f"	sub	a15, a9, {preg}")
+                e(f"	saltu	a12, a9, {preg}")
+                e("	sub	a11, a15, a8")
+                e("	saltu	a10, a15, a8")
+                e("	add	a8, a12, a10")
+                e("	mov	a15, a11")
+        DIFF_SLOT = BASE + 4 * n + j * 4
+        e(f"	s32i	a15, a1, {DIFF_SLOT}		# d[{j}]")
+
+    # underflow = (c_out < b_out)
+    e("	saltu	a12, a14, a8		# underflow = (c_out < b_out)")
+    e("	neg	a12, a12		# mask: 0xffffffff if s < p, 0 if s >= p")
+
+    # 3. branchless select: out[j] = d[j] ^ ((d[j] ^ s[j]) & mask)
+    e(f"	l32i	a2, a1, {OUT_SLOT}	# recover `out`")
+    for j in range(n):
+        DIFF_SLOT = BASE + 4 * n + j * 4
+        e(f"	l32i	a15, a1, {DIFF_SLOT}	# d[{j}]")
+        e(f"	l32i	a9, a1, {BASE + j*4}		# s[{j}]")
+        e("	xor	a10, a15, a9")
+        e("	and	a10, a10, a12")
+        e("	xor	a15, a15, a10")
+        e(f"	s32i	a15, a2, {j*4}")
+
+    if WINDOWED:
+        e("	retw")
+    else:
+        e("	l32i	a12, a1, 0")
+        e("	l32i	a13, a1, 4")
+        e("	l32i	a14, a1, 8")
+        e("	l32i	a15, a1, 12")
+        e(f"	addi	a1, a1, {stack_size}")
+        e("	ret")
+    e(f"	.size	{name}, .-{name}")
+    return "\n".join(L)
+
+
+def emit_sub_mod(n):
+    """Constant-time out = (a - b) mod p for n limbs."""
+    L = []
+    e = L.append
+    name = f"nistp_sub_mod_{n}"
+    pl = limbs(MODULI[n], n)
+    stack_size = 80 if n == 8 else 96
+
+    e("")
+    e(f"# out = a - b mod p,  N = {n}")
+    e(f"	.globl	{name}")
+    e(f"	.align	4")
+    e(f"	.type	{name}, @function")
+    e(f"{name}:")
+    if WINDOWED:
+        e(f"	entry	a1, {stack_size}")
+        BASE = 32
+    else:
+        e(f"	addi	a1, a1, -{stack_size}")
+        e("	s32i	a12, a1, 0")
+        e("	s32i	a13, a1, 4")
+        e("	s32i	a14, a1, 8")
+        e("	s32i	a15, a1, 12")
+        BASE = 16
+
+    OUT_SLOT = BASE + 4 * n
+    e(f"	s32i	a2, a1, {OUT_SLOT}	# park `out`")
+
+    # 1. d = a - b
+    for j in range(n):
+        e(f"	l32i	a10, a3, {j*4}		# a[{j}]")
+        e(f"	l32i	a7, a4, {j*4}		# b[{j}]")
+        if j == 0:
+            e("	sub	a15, a10, a7")
+            e("	saltu	a8, a10, a7		# borrow")
+        else:
+            e("	sub	a15, a10, a7")
+            e("	saltu	a12, a10, a7")
+            e("	sub	a11, a15, a8")
+            e("	saltu	a10, a15, a8")
+            e("	add	a8, a12, a10")
+            e("	mov	a15, a11")
+        e(f"	s32i	a15, a1, {BASE + j*4}		# d[{j}]")
+
+    e("	neg	a12, a8			# mask: 0xffffffff if a < b, 0 if a >= b")
+
+    # 2. out = d + (p & mask)
+    e("	movi	a5, -1			# 0xffffffff")
+    e("	movi	a6, 1			# 1")
+    if n == 12:
+        e("	movi	a13, -2			# 0xfffffffe")
+
+    e(f"	l32i	a2, a1, {OUT_SLOT}	# recover `out`")
+    for j in range(n):
+        e(f"	l32i	a15, a1, {BASE + j*4}		# d[{j}]")
+        pj = pl[j]
+        if pj == 0xFFFFFFFF:
+            preg = "a5"
+        elif pj == 1:
+            preg = "a6"
+        elif pj == 0xFFFFFFFE and n == 12:
+            preg = "a13"
+        elif pj == 0:
+            preg = None
+        else:
+            e(f"	movi	a7, {pj - (1<<32)}")
+            preg = "a7"
+
+        if preg is None:
+            if j == 0:
+                pass
+            else:
+                e("	add	a15, a15, a8")
+                e("	saltu	a8, a15, a8")
+        else:
+            e(f"	and	a7, {preg}, a12		# p[{j}] & mask")
+            if j == 0:
+                e("	add	a15, a15, a7")
+                e("	saltu	a8, a15, a7		# carry")
+            else:
+                e("	add	a15, a15, a7")
+                e("	saltu	a10, a15, a7")
+                e("	add	a15, a15, a8")
+                e("	saltu	a8, a15, a8")
+                e("	add	a8, a8, a10")
+        e(f"	s32i	a15, a2, {j*4}")
+
+    if WINDOWED:
+        e("	retw")
+    else:
+        e("	l32i	a12, a1, 0")
+        e("	l32i	a13, a1, 4")
+        e("	l32i	a14, a1, 8")
+        e("	l32i	a15, a1, 12")
+        e(f"	addi	a1, a1, {stack_size}")
+        e("	ret")
+    e(f"	.size	{name}, .-{name}")
+    return "\n".join(L)
+
+
 out = [
     HEADER.format(abi="windowed (ENTRY/RETW)" if WINDOWED else "call0")
 ]
 for n in (8, 12):
     out.append(emit_mul(n))
+    out.append(emit_sqr(n))
+    out.append(emit_add_mod(n))
+    out.append(emit_sub_mod(n))
 out.append("")
 
 name = "xtensa_lx7_call0.S" if not WINDOWED else "xtensa_lx7.S"
@@ -269,3 +679,4 @@ dst.write_text("\n".join(out))
 txt = dst.read_text()
 print(f"wrote {dst}  ({txt.count(chr(10))} lines)")
 print(f"  mull={txt.count('	mull')}  muluh={txt.count('	muluh')}  saltu={txt.count('	saltu')}")
+

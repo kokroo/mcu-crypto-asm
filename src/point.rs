@@ -301,6 +301,13 @@ impl<const N: usize> Point<N> {
         pj.mul_scalar(c, k).to_projective(&c.field)
     }
 
+    /// `k1 * p1 + k2 * p2` using interleaved simultaneous double-scalar multiplication (Shamir's Trick).
+    pub fn lincomb(c: &CurveParams, k1: &[u32], p1: &Self, k2: &[u32], p2: &Self) -> Self {
+        let pj1 = PointJacobian::from_projective(p1, &c.field);
+        let pj2 = PointJacobian::from_projective(p2, &c.field);
+        PointJacobian::lincomb(c, k1, &pj1, k2, &pj2).to_projective(&c.field)
+    }
+
     /// `k * G` using the compile-time comb table for this curve.
     ///
     /// Evaluated in Jacobian coordinates with mixed addition, saving over 30%
@@ -1175,5 +1182,127 @@ impl<const N: usize> PointJacobian<N> {
             acc.y.v[j] = acc.y.v[j] ^ ((acc.y.v[j] ^ neg_acc_y.v[j]) & even_mask);
         }
         acc
+    }
+
+    /// Interleaved double-scalar multiplication: `k1 * p1 + k2 * p2` using
+    /// joint sliding window (Shamir's Trick).
+    ///
+    /// Evaluates both scalars simultaneously with a single doubling ladder,
+    /// cutting the number of Jacobian point doublings in half (from 512 to 256
+    /// for P-256, and from 768 to 384 for P-384).
+    pub fn lincomb(c: &CurveParams, k1: &[u32], p1: &Self, k2: &[u32], p2: &Self) -> Self {
+        let f = &c.field;
+        let mut is_zero1 = 0u32;
+        for v in k1.iter() {
+            is_zero1 |= *v;
+        }
+        let mut is_zero2 = 0u32;
+        for v in k2.iter() {
+            is_zero2 |= *v;
+        }
+
+        if (is_zero1 == 0 || p1.is_identity()) && (is_zero2 == 0 || p2.is_identity()) {
+            return Self::identity(f);
+        }
+        if is_zero1 == 0 || p1.is_identity() {
+            return p2.mul_scalar(c, k2);
+        }
+        if is_zero2 == 0 || p2.is_identity() {
+            return p1.mul_scalar(c, k1);
+        }
+
+        let mut s1 = [0i8; 385];
+        let mut s2 = [0i8; 385];
+        slide(&mut s1, k1);
+        slide(&mut s2, k2);
+
+        // Precompute tables: odd multiples 1P, 3P, ..., 15P
+        let mut t1 = [Self::identity(f); 8];
+        t1[0] = *p1;
+        let two_p1 = p1.double(c);
+        for i in 1..8 {
+            t1[i] = two_p1.add(c, &t1[i - 1]);
+        }
+
+        let mut t2 = [Self::identity(f); 8];
+        t2[0] = *p2;
+        let two_p2 = p2.double(c);
+        for i in 1..8 {
+            t2[i] = two_p2.add(c, &t2[i - 1]);
+        }
+
+        let num_bits = k1.len() * 32;
+        let mut max_i = num_bits;
+        while max_i > 0 && s1[max_i] == 0 && s2[max_i] == 0 {
+            max_i -= 1;
+        }
+
+        let mut acc = Self::identity(f);
+        for i in (0..=max_i).rev() {
+            acc = acc.double(c);
+
+            if s1[i] > 0 {
+                let idx = (s1[i] as usize) / 2;
+                acc = acc.add(c, &t1[idx]);
+            } else if s1[i] < 0 {
+                let idx = ((-s1[i]) as usize) / 2;
+                let mut pt = t1[idx];
+                pt.y = Fe::ZERO.sub(f, &pt.y);
+                acc = acc.add(c, &pt);
+            }
+
+            if s2[i] > 0 {
+                let idx = (s2[i] as usize) / 2;
+                acc = acc.add(c, &t2[idx]);
+            } else if s2[i] < 0 {
+                let idx = ((-s2[i]) as usize) / 2;
+                let mut pt = t2[idx];
+                pt.y = Fe::ZERO.sub(f, &pt.y);
+                acc = acc.add(c, &pt);
+            }
+        }
+        acc
+    }
+}
+
+/// Sliding window recoding: each r[i] is in {-15, -13, ..., 13, 15} or 0.
+pub fn slide(r: &mut [i8; 385], k: &[u32]) {
+    let num_bits = k.len() * 32;
+    for i in 0..num_bits {
+        r[i] = ((k[i >> 5] >> (i & 31)) & 1) as i8;
+    }
+    r[num_bits] = 0;
+
+    let mut i = 0;
+    while i < num_bits {
+        if r[i] != 0 {
+            let mut b = 1;
+            while b <= 4 && i + b < num_bits {
+                if r[i + b] != 0 {
+                    let term = (r[i + b] as i32) << b;
+                    let sum = (r[i] as i32) + term;
+                    let diff = (r[i] as i32) - term;
+                    if sum <= 15 {
+                        r[i] = sum as i8;
+                        r[i + b] = 0;
+                    } else if diff >= -15 {
+                        r[i] = diff as i8;
+                        loop {
+                            r[i + b] = 0;
+                            b += 1;
+                            if r[i + b] == 0 {
+                                r[i + b] = 1;
+                                b -= 1;
+                                break;
+                            }
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                b += 1;
+            }
+        }
+        i += 1;
     }
 }

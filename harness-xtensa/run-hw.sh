@@ -23,4 +23,4 @@ timeout 150 "$OOCD" -s "$SCR" -f interface/jlink.cfg -f target/esp32s3.cfg \
   -c "adapter serial 000069651147" -c "adapter speed 2000" \
   -c "init" -c "reset halt" -c "load_image $HERE/xtensa-hw.elf" \
   -c "reg pc $ENTRY" -c "resume" -c "sleep 6000" -c "halt" \
-  -c "mdw 0x3FCB0000 12" -c "shutdown" 2>&1 | grep -E "0x3fcb0000|halted, PC"
+  -c "mdw 0x3FCB0000 24" -c "shutdown" 2>&1 | grep -E "0x3fcb00|halted, PC"

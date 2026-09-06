@@ -159,7 +159,7 @@ const XTENSA_SRC: &str = include_str!("../asm/xtensa_lx7.S");
 /// comparison primitive. No conditional-execution or division forms.
 const XTENSA_ALLOWED: &[&str] = &[
     "l32i", "s32i", "mull", "muluh", "add", "addi", "sub", "saltu", "mov", "movi", "xor", "and",
-    "or", "neg", "srli", "entry", "retw", "bnez",
+    "or", "neg", "srli", "slli", "entry", "retw", "bnez",
 ];
 
 #[test]

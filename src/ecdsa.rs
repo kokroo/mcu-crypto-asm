@@ -33,9 +33,9 @@ pub fn verify<const N: usize>(
     msg_hash: &[u8],
     r: &[u8],
     s: &[u8],
-    comb: &[([u32; N], [u32; N])],
-    comb_d: usize,
-    comb_t: usize,
+    _comb: &[([u32; N], [u32; N])],
+    _comb_d: usize,
+    _comb_t: usize,
 ) -> Result<(), Error> {
     if r.len() != 4 * N || s.len() != 4 * N {
         return Err(Error::BadLength);
@@ -57,10 +57,8 @@ pub fn verify<const N: usize>(
     let u2_limbs = u2.to_int(c);
 
     let q_j = PointJacobian::<N>::from_affine(&q.x, &q.y, &c.field);
-    let u1_g_proj = Point::<N>::mul_base(c, &u1_limbs, comb, comb_d, comb_t);
-    let u1_g = PointJacobian::<N>::from_projective(&u1_g_proj, &c.field);
-    let u2_q = q_j.mul_scalar(c, &u2_limbs);
-    let r_pt = u1_g.add(c, &u2_q);
+    let g_j = PointJacobian::<N>::generator(c);
+    let r_pt = PointJacobian::<N>::lincomb(c, &u1_limbs, &g_j, &u2_limbs, &q_j);
 
     if r_pt.is_identity() {
         return Err(Error::BadSignature);

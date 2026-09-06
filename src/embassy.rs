@@ -143,6 +143,7 @@ fn limbs_to_be_384(limbs: &[u32; 12]) -> [u8; 48] {
 
 /// Projective equality: `(X1:Y1:Z1) == (X2:Y2:Z2)` iff `X1*Z2 == X2*Z1` and
 /// `Y1*Z2 == Y2*Z1` (Montgomery form; valid for complete-formula coordinates).
+#[allow(dead_code)]
 fn projective_eq<const N: usize>(a: &Point<N>, b: &Point<N>, field: &Params) -> bool {
     let lhs_x = a.x.mul(field, &b.z);
     let rhs_x = b.x.mul(field, &a.z);
@@ -532,20 +533,13 @@ impl drv::P256Lincomb for McuCryptoAsmDriver {
             let p1 = p256_point_from_canonical(&p1).unwrap_or_else(|| Point::identity(&P256_FIELD));
             let p2 = p256_point_from_canonical(&p2).unwrap_or_else(|| Point::identity(&P256_FIELD));
 
-            let g = Point::generator(&P256_CURVE);
-            let result = if projective_eq(&p1, &g, &P256_FIELD) {
-                let a = crate::p256::mul_base(&k1_sc.to_int(&P256_CURVE));
-                let b = p2.mul_scalar(&P256_CURVE, &k2_sc.to_int(&P256_CURVE));
-                a.add(&P256_CURVE, &b)
-            } else if projective_eq(&p2, &g, &P256_FIELD) {
-                let a = p1.mul_scalar(&P256_CURVE, &k1_sc.to_int(&P256_CURVE));
-                let b = crate::p256::mul_base(&k2_sc.to_int(&P256_CURVE));
-                a.add(&P256_CURVE, &b)
-            } else {
-                let a = p1.mul_scalar(&P256_CURVE, &k1_sc.to_int(&P256_CURVE));
-                let b = p2.mul_scalar(&P256_CURVE, &k2_sc.to_int(&P256_CURVE));
-                a.add(&P256_CURVE, &b)
-            };
+            let result = Point::lincomb(
+                &P256_CURVE,
+                &k1_sc.to_int(&P256_CURVE),
+                &p1,
+                &k2_sc.to_int(&P256_CURVE),
+                &p2,
+            );
 
             p256_point_to_canonical_opt(&result)
         }
@@ -566,20 +560,13 @@ impl drv::P384Lincomb for McuCryptoAsmDriver {
         let p1 = p384_point_from_canonical(&p1).unwrap_or_else(|| Point::identity(&P384_FIELD));
         let p2 = p384_point_from_canonical(&p2).unwrap_or_else(|| Point::identity(&P384_FIELD));
 
-        let g = Point::generator(&P384_CURVE);
-        let result = if projective_eq(&p1, &g, &P384_FIELD) {
-            let a = crate::p384::mul_base(&k1.to_int(&P384_CURVE));
-            let b = p2.mul_scalar(&P384_CURVE, &k2.to_int(&P384_CURVE));
-            a.add(&P384_CURVE, &b)
-        } else if projective_eq(&p2, &g, &P384_FIELD) {
-            let a = p1.mul_scalar(&P384_CURVE, &k1.to_int(&P384_CURVE));
-            let b = crate::p384::mul_base(&k2.to_int(&P384_CURVE));
-            a.add(&P384_CURVE, &b)
-        } else {
-            let a = p1.mul_scalar(&P384_CURVE, &k1.to_int(&P384_CURVE));
-            let b = p2.mul_scalar(&P384_CURVE, &k2.to_int(&P384_CURVE));
-            a.add(&P384_CURVE, &b)
-        };
+        let result = Point::lincomb(
+            &P384_CURVE,
+            &k1.to_int(&P384_CURVE),
+            &p1,
+            &k2.to_int(&P384_CURVE),
+            &p2,
+        );
 
         p384_point_to_canonical_opt(&result)
     }

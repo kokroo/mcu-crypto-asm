@@ -1261,6 +1261,1528 @@ nistp_mul_mont_8:
 	ret
 	.size	nistp_mul_mont_8, .-nistp_mul_mont_8
 
+# out = a^2 * R^-1 mod p,  R = 2^256.  Dedicated squaring + Montgomery reduction.
+	.globl	nistp_sqr_mont_8
+	.align	4
+	.type	nistp_sqr_mont_8, @function
+nistp_sqr_mont_8:
+	addi	a1, a1, -16
+	s32i	a12, a1, 0
+	s32i	a13, a1, 4
+	s32i	a14, a1, 8
+	s32i	a15, a1, 12
+	mov	a6, a5			# scratch buffer pointer in a6
+	s32i	a2, a6, 80	# park `out` in scratch
+	movi	a9, 0
+	s32i	a9, a6, 0
+	s32i	a9, a6, 4
+	s32i	a9, a6, 8
+	s32i	a9, a6, 12
+	s32i	a9, a6, 16
+	s32i	a9, a6, 20
+	s32i	a9, a6, 24
+	s32i	a9, a6, 28
+	s32i	a9, a6, 32
+	s32i	a9, a6, 36
+	s32i	a9, a6, 40
+	s32i	a9, a6, 44
+	s32i	a9, a6, 48
+	s32i	a9, a6, 52
+	s32i	a9, a6, 56
+	s32i	a9, a6, 60
+	s32i	a9, a6, 64
+	s32i	a9, a6, 68
+	s32i	a9, a6, 72
+	s32i	a9, a6, 76
+	# Stage 1: Off-diagonal triangular products
+	l32i	a7, a3, 0		# a[0]
+	movi	a8, 0			# carry C = 0
+	l32i	a10, a3, 4	# a[1]
+	l32i	a9, a6, 4	# t[1]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 4	# t[1]
+	l32i	a10, a3, 8	# a[2]
+	l32i	a9, a6, 8	# t[2]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 8	# t[2]
+	l32i	a10, a3, 12	# a[3]
+	l32i	a9, a6, 12	# t[3]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 12	# t[3]
+	l32i	a10, a3, 16	# a[4]
+	l32i	a9, a6, 16	# t[4]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 16	# t[4]
+	l32i	a10, a3, 20	# a[5]
+	l32i	a9, a6, 20	# t[5]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 20	# t[5]
+	l32i	a10, a3, 24	# a[6]
+	l32i	a9, a6, 24	# t[6]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 24	# t[6]
+	l32i	a10, a3, 28	# a[7]
+	l32i	a9, a6, 28	# t[7]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 28	# t[7]
+	s32i	a8, a6, 32	# t[8] = tail carry
+	l32i	a7, a3, 4		# a[1]
+	movi	a8, 0			# carry C = 0
+	l32i	a10, a3, 8	# a[2]
+	l32i	a9, a6, 12	# t[3]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 12	# t[3]
+	l32i	a10, a3, 12	# a[3]
+	l32i	a9, a6, 16	# t[4]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 16	# t[4]
+	l32i	a10, a3, 16	# a[4]
+	l32i	a9, a6, 20	# t[5]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 20	# t[5]
+	l32i	a10, a3, 20	# a[5]
+	l32i	a9, a6, 24	# t[6]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 24	# t[6]
+	l32i	a10, a3, 24	# a[6]
+	l32i	a9, a6, 28	# t[7]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 28	# t[7]
+	l32i	a10, a3, 28	# a[7]
+	l32i	a9, a6, 32	# t[8]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 32	# t[8]
+	s32i	a8, a6, 36	# t[9] = tail carry
+	l32i	a7, a3, 8		# a[2]
+	movi	a8, 0			# carry C = 0
+	l32i	a10, a3, 12	# a[3]
+	l32i	a9, a6, 20	# t[5]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 20	# t[5]
+	l32i	a10, a3, 16	# a[4]
+	l32i	a9, a6, 24	# t[6]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 24	# t[6]
+	l32i	a10, a3, 20	# a[5]
+	l32i	a9, a6, 28	# t[7]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 28	# t[7]
+	l32i	a10, a3, 24	# a[6]
+	l32i	a9, a6, 32	# t[8]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 32	# t[8]
+	l32i	a10, a3, 28	# a[7]
+	l32i	a9, a6, 36	# t[9]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 36	# t[9]
+	s32i	a8, a6, 40	# t[10] = tail carry
+	l32i	a7, a3, 12		# a[3]
+	movi	a8, 0			# carry C = 0
+	l32i	a10, a3, 16	# a[4]
+	l32i	a9, a6, 28	# t[7]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 28	# t[7]
+	l32i	a10, a3, 20	# a[5]
+	l32i	a9, a6, 32	# t[8]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 32	# t[8]
+	l32i	a10, a3, 24	# a[6]
+	l32i	a9, a6, 36	# t[9]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 36	# t[9]
+	l32i	a10, a3, 28	# a[7]
+	l32i	a9, a6, 40	# t[10]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 40	# t[10]
+	s32i	a8, a6, 44	# t[11] = tail carry
+	l32i	a7, a3, 16		# a[4]
+	movi	a8, 0			# carry C = 0
+	l32i	a10, a3, 20	# a[5]
+	l32i	a9, a6, 36	# t[9]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 36	# t[9]
+	l32i	a10, a3, 24	# a[6]
+	l32i	a9, a6, 40	# t[10]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 40	# t[10]
+	l32i	a10, a3, 28	# a[7]
+	l32i	a9, a6, 44	# t[11]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 44	# t[11]
+	s32i	a8, a6, 48	# t[12] = tail carry
+	l32i	a7, a3, 20		# a[5]
+	movi	a8, 0			# carry C = 0
+	l32i	a10, a3, 24	# a[6]
+	l32i	a9, a6, 44	# t[11]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 44	# t[11]
+	l32i	a10, a3, 28	# a[7]
+	l32i	a9, a6, 48	# t[12]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 48	# t[12]
+	s32i	a8, a6, 52	# t[13] = tail carry
+	l32i	a7, a3, 24		# a[6]
+	movi	a8, 0			# carry C = 0
+	l32i	a10, a3, 28	# a[7]
+	l32i	a9, a6, 52	# t[13]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 52	# t[13]
+	s32i	a8, a6, 56	# t[14] = tail carry
+	# Stage 2: Double off-diagonals (shift left 1)
+	movi	a8, 0			# carry = 0
+	l32i	a9, a6, 4
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 4
+	mov	a8, a12
+	l32i	a9, a6, 8
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 8
+	mov	a8, a12
+	l32i	a9, a6, 12
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 12
+	mov	a8, a12
+	l32i	a9, a6, 16
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 16
+	mov	a8, a12
+	l32i	a9, a6, 20
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 20
+	mov	a8, a12
+	l32i	a9, a6, 24
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 24
+	mov	a8, a12
+	l32i	a9, a6, 28
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 28
+	mov	a8, a12
+	l32i	a9, a6, 32
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 32
+	mov	a8, a12
+	l32i	a9, a6, 36
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 36
+	mov	a8, a12
+	l32i	a9, a6, 40
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 40
+	mov	a8, a12
+	l32i	a9, a6, 44
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 44
+	mov	a8, a12
+	l32i	a9, a6, 48
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 48
+	mov	a8, a12
+	l32i	a9, a6, 52
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 52
+	mov	a8, a12
+	l32i	a9, a6, 56
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 56
+	mov	a8, a12
+	l32i	a9, a6, 60
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 60
+	mov	a8, a12
+	s32i	a8, a6, 64	# t[16] = final carry
+	# Stage 3: Add diagonal squares a[i]^2
+	l32i	a7, a3, 0		# a[0]
+	mull	a15, a7, a7		# lo
+	muluh	a14, a7, a7		# hi
+	l32i	a9, a6, 0
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	s32i	a15, a6, 0
+	l32i	a9, a6, 4
+	add	a14, a14, a12
+	saltu	a8, a14, a12
+	add	a15, a9, a14
+	saltu	a10, a15, a9
+	add	a8, a8, a10		# carry into t[2*i + 2]
+	s32i	a15, a6, 4
+	l32i	a9, a6, 8
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 8
+	l32i	a9, a6, 12
+	add	a15, a9, a8
+	s32i	a15, a6, 12
+	l32i	a7, a3, 4		# a[1]
+	mull	a15, a7, a7		# lo
+	muluh	a14, a7, a7		# hi
+	l32i	a9, a6, 8
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	s32i	a15, a6, 8
+	l32i	a9, a6, 12
+	add	a14, a14, a12
+	saltu	a8, a14, a12
+	add	a15, a9, a14
+	saltu	a10, a15, a9
+	add	a8, a8, a10		# carry into t[2*i + 2]
+	s32i	a15, a6, 12
+	l32i	a9, a6, 16
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 16
+	l32i	a9, a6, 20
+	add	a15, a9, a8
+	s32i	a15, a6, 20
+	l32i	a7, a3, 8		# a[2]
+	mull	a15, a7, a7		# lo
+	muluh	a14, a7, a7		# hi
+	l32i	a9, a6, 16
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	s32i	a15, a6, 16
+	l32i	a9, a6, 20
+	add	a14, a14, a12
+	saltu	a8, a14, a12
+	add	a15, a9, a14
+	saltu	a10, a15, a9
+	add	a8, a8, a10		# carry into t[2*i + 2]
+	s32i	a15, a6, 20
+	l32i	a9, a6, 24
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 24
+	l32i	a9, a6, 28
+	add	a15, a9, a8
+	s32i	a15, a6, 28
+	l32i	a7, a3, 12		# a[3]
+	mull	a15, a7, a7		# lo
+	muluh	a14, a7, a7		# hi
+	l32i	a9, a6, 24
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	s32i	a15, a6, 24
+	l32i	a9, a6, 28
+	add	a14, a14, a12
+	saltu	a8, a14, a12
+	add	a15, a9, a14
+	saltu	a10, a15, a9
+	add	a8, a8, a10		# carry into t[2*i + 2]
+	s32i	a15, a6, 28
+	l32i	a9, a6, 32
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 32
+	l32i	a9, a6, 36
+	add	a15, a9, a8
+	s32i	a15, a6, 36
+	l32i	a7, a3, 16		# a[4]
+	mull	a15, a7, a7		# lo
+	muluh	a14, a7, a7		# hi
+	l32i	a9, a6, 32
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	s32i	a15, a6, 32
+	l32i	a9, a6, 36
+	add	a14, a14, a12
+	saltu	a8, a14, a12
+	add	a15, a9, a14
+	saltu	a10, a15, a9
+	add	a8, a8, a10		# carry into t[2*i + 2]
+	s32i	a15, a6, 36
+	l32i	a9, a6, 40
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 40
+	l32i	a9, a6, 44
+	add	a15, a9, a8
+	s32i	a15, a6, 44
+	l32i	a7, a3, 20		# a[5]
+	mull	a15, a7, a7		# lo
+	muluh	a14, a7, a7		# hi
+	l32i	a9, a6, 40
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	s32i	a15, a6, 40
+	l32i	a9, a6, 44
+	add	a14, a14, a12
+	saltu	a8, a14, a12
+	add	a15, a9, a14
+	saltu	a10, a15, a9
+	add	a8, a8, a10		# carry into t[2*i + 2]
+	s32i	a15, a6, 44
+	l32i	a9, a6, 48
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 48
+	l32i	a9, a6, 52
+	add	a15, a9, a8
+	s32i	a15, a6, 52
+	l32i	a7, a3, 24		# a[6]
+	mull	a15, a7, a7		# lo
+	muluh	a14, a7, a7		# hi
+	l32i	a9, a6, 48
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	s32i	a15, a6, 48
+	l32i	a9, a6, 52
+	add	a14, a14, a12
+	saltu	a8, a14, a12
+	add	a15, a9, a14
+	saltu	a10, a15, a9
+	add	a8, a8, a10		# carry into t[2*i + 2]
+	s32i	a15, a6, 52
+	l32i	a9, a6, 56
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 56
+	l32i	a9, a6, 60
+	add	a15, a9, a8
+	s32i	a15, a6, 60
+	l32i	a7, a3, 28		# a[7]
+	mull	a15, a7, a7		# lo
+	muluh	a14, a7, a7		# hi
+	l32i	a9, a6, 56
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	s32i	a15, a6, 56
+	l32i	a9, a6, 60
+	add	a14, a14, a12
+	saltu	a8, a14, a12
+	add	a15, a9, a14
+	saltu	a10, a15, a9
+	add	a8, a8, a10		# carry into t[2*i + 2]
+	s32i	a15, a6, 60
+	l32i	a9, a6, 64
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 64
+	l32i	a9, a6, 68
+	add	a15, a9, a8
+	s32i	a15, a6, 68
+	# Stage 4: Montgomery Reduction
+	movi	a5, -1			# 0xffffffff
+	# ---- reduction row i = 0 ----
+	l32i	a7, a6, 0		# m = t[0]
+	mov	a8, a7			# j = 0: low word cancelled, carry is m
+	l32i	a9, a6, 4	# t[1]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 4
+	l32i	a9, a6, 8	# t[2]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 8
+	l32i	a9, a6, 12	# t[3]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 12
+	l32i	a9, a6, 16	# t[4]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 16
+	l32i	a9, a6, 20	# t[5]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 20
+	l32i	a9, a6, 24	# t[6]
+	add	a15, a9, a7
+	saltu	a12, a15, a9
+	add	a11, a15, a8
+	saltu	a14, a11, a15
+	add	a8, a12, a14
+	s32i	a11, a6, 24
+	l32i	a9, a6, 28	# t[7]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 28
+	l32i	a9, a6, 32
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 32
+	l32i	a9, a6, 36
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 36
+	l32i	a9, a6, 40
+	add	a15, a9, a8
+	s32i	a15, a6, 40
+	# ---- reduction row i = 1 ----
+	l32i	a7, a6, 4		# m = t[1]
+	mov	a8, a7			# j = 0: low word cancelled, carry is m
+	l32i	a9, a6, 8	# t[2]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 8
+	l32i	a9, a6, 12	# t[3]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 12
+	l32i	a9, a6, 16	# t[4]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 16
+	l32i	a9, a6, 20	# t[5]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 20
+	l32i	a9, a6, 24	# t[6]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 24
+	l32i	a9, a6, 28	# t[7]
+	add	a15, a9, a7
+	saltu	a12, a15, a9
+	add	a11, a15, a8
+	saltu	a14, a11, a15
+	add	a8, a12, a14
+	s32i	a11, a6, 28
+	l32i	a9, a6, 32	# t[8]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 32
+	l32i	a9, a6, 36
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 36
+	l32i	a9, a6, 40
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 40
+	l32i	a9, a6, 44
+	add	a15, a9, a8
+	s32i	a15, a6, 44
+	# ---- reduction row i = 2 ----
+	l32i	a7, a6, 8		# m = t[2]
+	mov	a8, a7			# j = 0: low word cancelled, carry is m
+	l32i	a9, a6, 12	# t[3]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 12
+	l32i	a9, a6, 16	# t[4]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 16
+	l32i	a9, a6, 20	# t[5]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 20
+	l32i	a9, a6, 24	# t[6]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 24
+	l32i	a9, a6, 28	# t[7]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 28
+	l32i	a9, a6, 32	# t[8]
+	add	a15, a9, a7
+	saltu	a12, a15, a9
+	add	a11, a15, a8
+	saltu	a14, a11, a15
+	add	a8, a12, a14
+	s32i	a11, a6, 32
+	l32i	a9, a6, 36	# t[9]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 36
+	l32i	a9, a6, 40
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 40
+	l32i	a9, a6, 44
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 44
+	l32i	a9, a6, 48
+	add	a15, a9, a8
+	s32i	a15, a6, 48
+	# ---- reduction row i = 3 ----
+	l32i	a7, a6, 12		# m = t[3]
+	mov	a8, a7			# j = 0: low word cancelled, carry is m
+	l32i	a9, a6, 16	# t[4]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 16
+	l32i	a9, a6, 20	# t[5]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 20
+	l32i	a9, a6, 24	# t[6]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 24
+	l32i	a9, a6, 28	# t[7]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 28
+	l32i	a9, a6, 32	# t[8]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 32
+	l32i	a9, a6, 36	# t[9]
+	add	a15, a9, a7
+	saltu	a12, a15, a9
+	add	a11, a15, a8
+	saltu	a14, a11, a15
+	add	a8, a12, a14
+	s32i	a11, a6, 36
+	l32i	a9, a6, 40	# t[10]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 40
+	l32i	a9, a6, 44
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 44
+	l32i	a9, a6, 48
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 48
+	l32i	a9, a6, 52
+	add	a15, a9, a8
+	s32i	a15, a6, 52
+	# ---- reduction row i = 4 ----
+	l32i	a7, a6, 16		# m = t[4]
+	mov	a8, a7			# j = 0: low word cancelled, carry is m
+	l32i	a9, a6, 20	# t[5]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 20
+	l32i	a9, a6, 24	# t[6]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 24
+	l32i	a9, a6, 28	# t[7]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 28
+	l32i	a9, a6, 32	# t[8]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 32
+	l32i	a9, a6, 36	# t[9]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 36
+	l32i	a9, a6, 40	# t[10]
+	add	a15, a9, a7
+	saltu	a12, a15, a9
+	add	a11, a15, a8
+	saltu	a14, a11, a15
+	add	a8, a12, a14
+	s32i	a11, a6, 40
+	l32i	a9, a6, 44	# t[11]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 44
+	l32i	a9, a6, 48
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 48
+	l32i	a9, a6, 52
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 52
+	l32i	a9, a6, 56
+	add	a15, a9, a8
+	s32i	a15, a6, 56
+	# ---- reduction row i = 5 ----
+	l32i	a7, a6, 20		# m = t[5]
+	mov	a8, a7			# j = 0: low word cancelled, carry is m
+	l32i	a9, a6, 24	# t[6]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 24
+	l32i	a9, a6, 28	# t[7]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 28
+	l32i	a9, a6, 32	# t[8]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 32
+	l32i	a9, a6, 36	# t[9]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 36
+	l32i	a9, a6, 40	# t[10]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 40
+	l32i	a9, a6, 44	# t[11]
+	add	a15, a9, a7
+	saltu	a12, a15, a9
+	add	a11, a15, a8
+	saltu	a14, a11, a15
+	add	a8, a12, a14
+	s32i	a11, a6, 44
+	l32i	a9, a6, 48	# t[12]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 48
+	l32i	a9, a6, 52
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 52
+	l32i	a9, a6, 56
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 56
+	l32i	a9, a6, 60
+	add	a15, a9, a8
+	s32i	a15, a6, 60
+	# ---- reduction row i = 6 ----
+	l32i	a7, a6, 24		# m = t[6]
+	mov	a8, a7			# j = 0: low word cancelled, carry is m
+	l32i	a9, a6, 28	# t[7]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 28
+	l32i	a9, a6, 32	# t[8]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 32
+	l32i	a9, a6, 36	# t[9]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 36
+	l32i	a9, a6, 40	# t[10]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 40
+	l32i	a9, a6, 44	# t[11]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 44
+	l32i	a9, a6, 48	# t[12]
+	add	a15, a9, a7
+	saltu	a12, a15, a9
+	add	a11, a15, a8
+	saltu	a14, a11, a15
+	add	a8, a12, a14
+	s32i	a11, a6, 48
+	l32i	a9, a6, 52	# t[13]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 52
+	l32i	a9, a6, 56
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 56
+	l32i	a9, a6, 60
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 60
+	l32i	a9, a6, 64
+	add	a15, a9, a8
+	s32i	a15, a6, 64
+	# ---- reduction row i = 7 ----
+	l32i	a7, a6, 28		# m = t[7]
+	mov	a8, a7			# j = 0: low word cancelled, carry is m
+	l32i	a9, a6, 32	# t[8]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 32
+	l32i	a9, a6, 36	# t[9]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 36
+	l32i	a9, a6, 40	# t[10]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 40
+	l32i	a9, a6, 44	# t[11]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 44
+	l32i	a9, a6, 48	# t[12]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 48
+	l32i	a9, a6, 52	# t[13]
+	add	a15, a9, a7
+	saltu	a12, a15, a9
+	add	a11, a15, a8
+	saltu	a14, a11, a15
+	add	a8, a12, a14
+	s32i	a11, a6, 52
+	l32i	a9, a6, 56	# t[14]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 56
+	l32i	a9, a6, 60
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 60
+	l32i	a9, a6, 64
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 64
+	l32i	a9, a6, 68
+	add	a15, a9, a8
+	s32i	a15, a6, 68
+	l32i	a2, a6, 80	# recover `out`
+	movi	a8, 0			# borrow
+	l32i	a9, a6, 32
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 0
+	l32i	a9, a6, 36
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 4
+	l32i	a9, a6, 40
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 8
+	l32i	a9, a6, 44
+	sub	a15, a9, a8
+	saltu	a8, a9, a8
+	s32i	a15, a2, 12
+	l32i	a9, a6, 48
+	sub	a15, a9, a8
+	saltu	a8, a9, a8
+	s32i	a15, a2, 16
+	l32i	a9, a6, 52
+	sub	a15, a9, a8
+	saltu	a8, a9, a8
+	s32i	a15, a2, 20
+	l32i	a9, a6, 56
+	movi	a10, -4294967295		# p[6] = 0x00000001
+	sub	a15, a9, a10
+	saltu	a12, a9, a10
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 24
+	l32i	a9, a6, 60
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 28
+	l32i	a9, a6, 64
+	saltu	a12, a9, a8
+	neg	a12, a12		# mask
+	l32i	a9, a2, 0
+	l32i	a10, a6, 32
+	xor	a11, a9, a10
+	and	a11, a11, a12
+	xor	a9, a9, a11		# branchless select
+	s32i	a9, a2, 0
+	l32i	a9, a2, 4
+	l32i	a10, a6, 36
+	xor	a11, a9, a10
+	and	a11, a11, a12
+	xor	a9, a9, a11		# branchless select
+	s32i	a9, a2, 4
+	l32i	a9, a2, 8
+	l32i	a10, a6, 40
+	xor	a11, a9, a10
+	and	a11, a11, a12
+	xor	a9, a9, a11		# branchless select
+	s32i	a9, a2, 8
+	l32i	a9, a2, 12
+	l32i	a10, a6, 44
+	xor	a11, a9, a10
+	and	a11, a11, a12
+	xor	a9, a9, a11		# branchless select
+	s32i	a9, a2, 12
+	l32i	a9, a2, 16
+	l32i	a10, a6, 48
+	xor	a11, a9, a10
+	and	a11, a11, a12
+	xor	a9, a9, a11		# branchless select
+	s32i	a9, a2, 16
+	l32i	a9, a2, 20
+	l32i	a10, a6, 52
+	xor	a11, a9, a10
+	and	a11, a11, a12
+	xor	a9, a9, a11		# branchless select
+	s32i	a9, a2, 20
+	l32i	a9, a2, 24
+	l32i	a10, a6, 56
+	xor	a11, a9, a10
+	and	a11, a11, a12
+	xor	a9, a9, a11		# branchless select
+	s32i	a9, a2, 24
+	l32i	a9, a2, 28
+	l32i	a10, a6, 60
+	xor	a11, a9, a10
+	and	a11, a11, a12
+	xor	a9, a9, a11		# branchless select
+	s32i	a9, a2, 28
+	l32i	a12, a1, 0
+	l32i	a13, a1, 4
+	l32i	a14, a1, 8
+	l32i	a15, a1, 12
+	addi	a1, a1, 16
+	ret
+	.size	nistp_sqr_mont_8, .-nistp_sqr_mont_8
+
+# out = a + b mod p,  N = 8
+	.globl	nistp_add_mod_8
+	.align	4
+	.type	nistp_add_mod_8, @function
+nistp_add_mod_8:
+	addi	a1, a1, -112
+	s32i	a12, a1, 0
+	s32i	a13, a1, 4
+	s32i	a14, a1, 8
+	s32i	a15, a1, 12
+	s32i	a2, a1, 80	# park `out`
+	l32i	a10, a3, 0		# a[0]
+	l32i	a7, a4, 0		# b[0]
+	add	a15, a10, a7
+	saltu	a8, a15, a10		# carry
+	s32i	a15, a1, 16		# s[0]
+	l32i	a10, a3, 4		# a[1]
+	l32i	a7, a4, 4		# b[1]
+	add	a15, a10, a7
+	saltu	a12, a15, a10
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a12
+	s32i	a15, a1, 20		# s[1]
+	l32i	a10, a3, 8		# a[2]
+	l32i	a7, a4, 8		# b[2]
+	add	a15, a10, a7
+	saltu	a12, a15, a10
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a12
+	s32i	a15, a1, 24		# s[2]
+	l32i	a10, a3, 12		# a[3]
+	l32i	a7, a4, 12		# b[3]
+	add	a15, a10, a7
+	saltu	a12, a15, a10
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a12
+	s32i	a15, a1, 28		# s[3]
+	l32i	a10, a3, 16		# a[4]
+	l32i	a7, a4, 16		# b[4]
+	add	a15, a10, a7
+	saltu	a12, a15, a10
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a12
+	s32i	a15, a1, 32		# s[4]
+	l32i	a10, a3, 20		# a[5]
+	l32i	a7, a4, 20		# b[5]
+	add	a15, a10, a7
+	saltu	a12, a15, a10
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a12
+	s32i	a15, a1, 36		# s[5]
+	l32i	a10, a3, 24		# a[6]
+	l32i	a7, a4, 24		# b[6]
+	add	a15, a10, a7
+	saltu	a12, a15, a10
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a12
+	s32i	a15, a1, 40		# s[6]
+	l32i	a10, a3, 28		# a[7]
+	l32i	a7, a4, 28		# b[7]
+	add	a15, a10, a7
+	saltu	a12, a15, a10
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a12
+	s32i	a15, a1, 44		# s[7]
+	mov	a14, a8			# c_out in a14
+	movi	a5, -1			# 0xffffffff
+	movi	a6, 1			# 1
+	l32i	a9, a1, 16		# s[0]
+	sub	a15, a9, a5
+	saltu	a8, a9, a5		# borrow
+	s32i	a15, a1, 48		# d[0]
+	l32i	a9, a1, 20		# s[1]
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 52		# d[1]
+	l32i	a9, a1, 24		# s[2]
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 56		# d[2]
+	l32i	a9, a1, 28		# s[3]
+	sub	a11, a9, a8
+	saltu	a8, a9, a8
+	mov	a15, a11
+	s32i	a15, a1, 60		# d[3]
+	l32i	a9, a1, 32		# s[4]
+	sub	a11, a9, a8
+	saltu	a8, a9, a8
+	mov	a15, a11
+	s32i	a15, a1, 64		# d[4]
+	l32i	a9, a1, 36		# s[5]
+	sub	a11, a9, a8
+	saltu	a8, a9, a8
+	mov	a15, a11
+	s32i	a15, a1, 68		# d[5]
+	l32i	a9, a1, 40		# s[6]
+	sub	a15, a9, a6
+	saltu	a12, a9, a6
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 72		# d[6]
+	l32i	a9, a1, 44		# s[7]
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 76		# d[7]
+	saltu	a12, a14, a8		# underflow = (c_out < b_out)
+	neg	a12, a12		# mask: 0xffffffff if s < p, 0 if s >= p
+	l32i	a2, a1, 80	# recover `out`
+	l32i	a15, a1, 48	# d[0]
+	l32i	a9, a1, 16		# s[0]
+	xor	a10, a15, a9
+	and	a10, a10, a12
+	xor	a15, a15, a10
+	s32i	a15, a2, 0
+	l32i	a15, a1, 52	# d[1]
+	l32i	a9, a1, 20		# s[1]
+	xor	a10, a15, a9
+	and	a10, a10, a12
+	xor	a15, a15, a10
+	s32i	a15, a2, 4
+	l32i	a15, a1, 56	# d[2]
+	l32i	a9, a1, 24		# s[2]
+	xor	a10, a15, a9
+	and	a10, a10, a12
+	xor	a15, a15, a10
+	s32i	a15, a2, 8
+	l32i	a15, a1, 60	# d[3]
+	l32i	a9, a1, 28		# s[3]
+	xor	a10, a15, a9
+	and	a10, a10, a12
+	xor	a15, a15, a10
+	s32i	a15, a2, 12
+	l32i	a15, a1, 64	# d[4]
+	l32i	a9, a1, 32		# s[4]
+	xor	a10, a15, a9
+	and	a10, a10, a12
+	xor	a15, a15, a10
+	s32i	a15, a2, 16
+	l32i	a15, a1, 68	# d[5]
+	l32i	a9, a1, 36		# s[5]
+	xor	a10, a15, a9
+	and	a10, a10, a12
+	xor	a15, a15, a10
+	s32i	a15, a2, 20
+	l32i	a15, a1, 72	# d[6]
+	l32i	a9, a1, 40		# s[6]
+	xor	a10, a15, a9
+	and	a10, a10, a12
+	xor	a15, a15, a10
+	s32i	a15, a2, 24
+	l32i	a15, a1, 76	# d[7]
+	l32i	a9, a1, 44		# s[7]
+	xor	a10, a15, a9
+	and	a10, a10, a12
+	xor	a15, a15, a10
+	s32i	a15, a2, 28
+	l32i	a12, a1, 0
+	l32i	a13, a1, 4
+	l32i	a14, a1, 8
+	l32i	a15, a1, 12
+	addi	a1, a1, 112
+	ret
+	.size	nistp_add_mod_8, .-nistp_add_mod_8
+
+# out = a - b mod p,  N = 8
+	.globl	nistp_sub_mod_8
+	.align	4
+	.type	nistp_sub_mod_8, @function
+nistp_sub_mod_8:
+	addi	a1, a1, -80
+	s32i	a12, a1, 0
+	s32i	a13, a1, 4
+	s32i	a14, a1, 8
+	s32i	a15, a1, 12
+	s32i	a2, a1, 48	# park `out`
+	l32i	a10, a3, 0		# a[0]
+	l32i	a7, a4, 0		# b[0]
+	sub	a15, a10, a7
+	saltu	a8, a10, a7		# borrow
+	s32i	a15, a1, 16		# d[0]
+	l32i	a10, a3, 4		# a[1]
+	l32i	a7, a4, 4		# b[1]
+	sub	a15, a10, a7
+	saltu	a12, a10, a7
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 20		# d[1]
+	l32i	a10, a3, 8		# a[2]
+	l32i	a7, a4, 8		# b[2]
+	sub	a15, a10, a7
+	saltu	a12, a10, a7
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 24		# d[2]
+	l32i	a10, a3, 12		# a[3]
+	l32i	a7, a4, 12		# b[3]
+	sub	a15, a10, a7
+	saltu	a12, a10, a7
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 28		# d[3]
+	l32i	a10, a3, 16		# a[4]
+	l32i	a7, a4, 16		# b[4]
+	sub	a15, a10, a7
+	saltu	a12, a10, a7
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 32		# d[4]
+	l32i	a10, a3, 20		# a[5]
+	l32i	a7, a4, 20		# b[5]
+	sub	a15, a10, a7
+	saltu	a12, a10, a7
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 36		# d[5]
+	l32i	a10, a3, 24		# a[6]
+	l32i	a7, a4, 24		# b[6]
+	sub	a15, a10, a7
+	saltu	a12, a10, a7
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 40		# d[6]
+	l32i	a10, a3, 28		# a[7]
+	l32i	a7, a4, 28		# b[7]
+	sub	a15, a10, a7
+	saltu	a12, a10, a7
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 44		# d[7]
+	neg	a12, a8			# mask: 0xffffffff if a < b, 0 if a >= b
+	movi	a5, -1			# 0xffffffff
+	movi	a6, 1			# 1
+	l32i	a2, a1, 48	# recover `out`
+	l32i	a15, a1, 16		# d[0]
+	and	a7, a5, a12		# p[0] & mask
+	add	a15, a15, a7
+	saltu	a8, a15, a7		# carry
+	s32i	a15, a2, 0
+	l32i	a15, a1, 20		# d[1]
+	and	a7, a5, a12		# p[1] & mask
+	add	a15, a15, a7
+	saltu	a10, a15, a7
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a10
+	s32i	a15, a2, 4
+	l32i	a15, a1, 24		# d[2]
+	and	a7, a5, a12		# p[2] & mask
+	add	a15, a15, a7
+	saltu	a10, a15, a7
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a10
+	s32i	a15, a2, 8
+	l32i	a15, a1, 28		# d[3]
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	s32i	a15, a2, 12
+	l32i	a15, a1, 32		# d[4]
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	s32i	a15, a2, 16
+	l32i	a15, a1, 36		# d[5]
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	s32i	a15, a2, 20
+	l32i	a15, a1, 40		# d[6]
+	and	a7, a6, a12		# p[6] & mask
+	add	a15, a15, a7
+	saltu	a10, a15, a7
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a10
+	s32i	a15, a2, 24
+	l32i	a15, a1, 44		# d[7]
+	and	a7, a5, a12		# p[7] & mask
+	add	a15, a15, a7
+	saltu	a10, a15, a7
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a10
+	s32i	a15, a2, 28
+	l32i	a12, a1, 0
+	l32i	a13, a1, 4
+	l32i	a14, a1, 8
+	l32i	a15, a1, 12
+	addi	a1, a1, 80
+	ret
+	.size	nistp_sub_mod_8, .-nistp_sub_mod_8
+
 # out = a * b * R^-1 mod p,  R = 2^384.  FIOS, fully unrolled.
 # NOTE: the p argument is ignored; the modulus is a compile-time constant.
 	.globl	nistp_mul_mont_12
@@ -4114,3 +5636,3028 @@ nistp_mul_mont_12:
 	addi	a1, a1, 16
 	ret
 	.size	nistp_mul_mont_12, .-nistp_mul_mont_12
+
+# out = a^2 * R^-1 mod p,  R = 2^384.  Dedicated squaring + Montgomery reduction.
+	.globl	nistp_sqr_mont_12
+	.align	4
+	.type	nistp_sqr_mont_12, @function
+nistp_sqr_mont_12:
+	addi	a1, a1, -16
+	s32i	a12, a1, 0
+	s32i	a13, a1, 4
+	s32i	a14, a1, 8
+	s32i	a15, a1, 12
+	mov	a6, a5			# scratch buffer pointer in a6
+	s32i	a2, a6, 112	# park `out` in scratch
+	movi	a9, 0
+	s32i	a9, a6, 0
+	s32i	a9, a6, 4
+	s32i	a9, a6, 8
+	s32i	a9, a6, 12
+	s32i	a9, a6, 16
+	s32i	a9, a6, 20
+	s32i	a9, a6, 24
+	s32i	a9, a6, 28
+	s32i	a9, a6, 32
+	s32i	a9, a6, 36
+	s32i	a9, a6, 40
+	s32i	a9, a6, 44
+	s32i	a9, a6, 48
+	s32i	a9, a6, 52
+	s32i	a9, a6, 56
+	s32i	a9, a6, 60
+	s32i	a9, a6, 64
+	s32i	a9, a6, 68
+	s32i	a9, a6, 72
+	s32i	a9, a6, 76
+	s32i	a9, a6, 80
+	s32i	a9, a6, 84
+	s32i	a9, a6, 88
+	s32i	a9, a6, 92
+	s32i	a9, a6, 96
+	s32i	a9, a6, 100
+	s32i	a9, a6, 104
+	s32i	a9, a6, 108
+	# Stage 1: Off-diagonal triangular products
+	l32i	a7, a3, 0		# a[0]
+	movi	a8, 0			# carry C = 0
+	l32i	a10, a3, 4	# a[1]
+	l32i	a9, a6, 4	# t[1]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 4	# t[1]
+	l32i	a10, a3, 8	# a[2]
+	l32i	a9, a6, 8	# t[2]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 8	# t[2]
+	l32i	a10, a3, 12	# a[3]
+	l32i	a9, a6, 12	# t[3]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 12	# t[3]
+	l32i	a10, a3, 16	# a[4]
+	l32i	a9, a6, 16	# t[4]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 16	# t[4]
+	l32i	a10, a3, 20	# a[5]
+	l32i	a9, a6, 20	# t[5]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 20	# t[5]
+	l32i	a10, a3, 24	# a[6]
+	l32i	a9, a6, 24	# t[6]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 24	# t[6]
+	l32i	a10, a3, 28	# a[7]
+	l32i	a9, a6, 28	# t[7]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 28	# t[7]
+	l32i	a10, a3, 32	# a[8]
+	l32i	a9, a6, 32	# t[8]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 32	# t[8]
+	l32i	a10, a3, 36	# a[9]
+	l32i	a9, a6, 36	# t[9]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 36	# t[9]
+	l32i	a10, a3, 40	# a[10]
+	l32i	a9, a6, 40	# t[10]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 40	# t[10]
+	l32i	a10, a3, 44	# a[11]
+	l32i	a9, a6, 44	# t[11]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 44	# t[11]
+	s32i	a8, a6, 48	# t[12] = tail carry
+	l32i	a7, a3, 4		# a[1]
+	movi	a8, 0			# carry C = 0
+	l32i	a10, a3, 8	# a[2]
+	l32i	a9, a6, 12	# t[3]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 12	# t[3]
+	l32i	a10, a3, 12	# a[3]
+	l32i	a9, a6, 16	# t[4]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 16	# t[4]
+	l32i	a10, a3, 16	# a[4]
+	l32i	a9, a6, 20	# t[5]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 20	# t[5]
+	l32i	a10, a3, 20	# a[5]
+	l32i	a9, a6, 24	# t[6]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 24	# t[6]
+	l32i	a10, a3, 24	# a[6]
+	l32i	a9, a6, 28	# t[7]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 28	# t[7]
+	l32i	a10, a3, 28	# a[7]
+	l32i	a9, a6, 32	# t[8]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 32	# t[8]
+	l32i	a10, a3, 32	# a[8]
+	l32i	a9, a6, 36	# t[9]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 36	# t[9]
+	l32i	a10, a3, 36	# a[9]
+	l32i	a9, a6, 40	# t[10]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 40	# t[10]
+	l32i	a10, a3, 40	# a[10]
+	l32i	a9, a6, 44	# t[11]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 44	# t[11]
+	l32i	a10, a3, 44	# a[11]
+	l32i	a9, a6, 48	# t[12]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 48	# t[12]
+	s32i	a8, a6, 52	# t[13] = tail carry
+	l32i	a7, a3, 8		# a[2]
+	movi	a8, 0			# carry C = 0
+	l32i	a10, a3, 12	# a[3]
+	l32i	a9, a6, 20	# t[5]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 20	# t[5]
+	l32i	a10, a3, 16	# a[4]
+	l32i	a9, a6, 24	# t[6]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 24	# t[6]
+	l32i	a10, a3, 20	# a[5]
+	l32i	a9, a6, 28	# t[7]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 28	# t[7]
+	l32i	a10, a3, 24	# a[6]
+	l32i	a9, a6, 32	# t[8]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 32	# t[8]
+	l32i	a10, a3, 28	# a[7]
+	l32i	a9, a6, 36	# t[9]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 36	# t[9]
+	l32i	a10, a3, 32	# a[8]
+	l32i	a9, a6, 40	# t[10]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 40	# t[10]
+	l32i	a10, a3, 36	# a[9]
+	l32i	a9, a6, 44	# t[11]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 44	# t[11]
+	l32i	a10, a3, 40	# a[10]
+	l32i	a9, a6, 48	# t[12]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 48	# t[12]
+	l32i	a10, a3, 44	# a[11]
+	l32i	a9, a6, 52	# t[13]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 52	# t[13]
+	s32i	a8, a6, 56	# t[14] = tail carry
+	l32i	a7, a3, 12		# a[3]
+	movi	a8, 0			# carry C = 0
+	l32i	a10, a3, 16	# a[4]
+	l32i	a9, a6, 28	# t[7]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 28	# t[7]
+	l32i	a10, a3, 20	# a[5]
+	l32i	a9, a6, 32	# t[8]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 32	# t[8]
+	l32i	a10, a3, 24	# a[6]
+	l32i	a9, a6, 36	# t[9]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 36	# t[9]
+	l32i	a10, a3, 28	# a[7]
+	l32i	a9, a6, 40	# t[10]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 40	# t[10]
+	l32i	a10, a3, 32	# a[8]
+	l32i	a9, a6, 44	# t[11]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 44	# t[11]
+	l32i	a10, a3, 36	# a[9]
+	l32i	a9, a6, 48	# t[12]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 48	# t[12]
+	l32i	a10, a3, 40	# a[10]
+	l32i	a9, a6, 52	# t[13]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 52	# t[13]
+	l32i	a10, a3, 44	# a[11]
+	l32i	a9, a6, 56	# t[14]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 56	# t[14]
+	s32i	a8, a6, 60	# t[15] = tail carry
+	l32i	a7, a3, 16		# a[4]
+	movi	a8, 0			# carry C = 0
+	l32i	a10, a3, 20	# a[5]
+	l32i	a9, a6, 36	# t[9]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 36	# t[9]
+	l32i	a10, a3, 24	# a[6]
+	l32i	a9, a6, 40	# t[10]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 40	# t[10]
+	l32i	a10, a3, 28	# a[7]
+	l32i	a9, a6, 44	# t[11]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 44	# t[11]
+	l32i	a10, a3, 32	# a[8]
+	l32i	a9, a6, 48	# t[12]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 48	# t[12]
+	l32i	a10, a3, 36	# a[9]
+	l32i	a9, a6, 52	# t[13]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 52	# t[13]
+	l32i	a10, a3, 40	# a[10]
+	l32i	a9, a6, 56	# t[14]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 56	# t[14]
+	l32i	a10, a3, 44	# a[11]
+	l32i	a9, a6, 60	# t[15]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 60	# t[15]
+	s32i	a8, a6, 64	# t[16] = tail carry
+	l32i	a7, a3, 20		# a[5]
+	movi	a8, 0			# carry C = 0
+	l32i	a10, a3, 24	# a[6]
+	l32i	a9, a6, 44	# t[11]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 44	# t[11]
+	l32i	a10, a3, 28	# a[7]
+	l32i	a9, a6, 48	# t[12]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 48	# t[12]
+	l32i	a10, a3, 32	# a[8]
+	l32i	a9, a6, 52	# t[13]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 52	# t[13]
+	l32i	a10, a3, 36	# a[9]
+	l32i	a9, a6, 56	# t[14]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 56	# t[14]
+	l32i	a10, a3, 40	# a[10]
+	l32i	a9, a6, 60	# t[15]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 60	# t[15]
+	l32i	a10, a3, 44	# a[11]
+	l32i	a9, a6, 64	# t[16]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 64	# t[16]
+	s32i	a8, a6, 68	# t[17] = tail carry
+	l32i	a7, a3, 24		# a[6]
+	movi	a8, 0			# carry C = 0
+	l32i	a10, a3, 28	# a[7]
+	l32i	a9, a6, 52	# t[13]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 52	# t[13]
+	l32i	a10, a3, 32	# a[8]
+	l32i	a9, a6, 56	# t[14]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 56	# t[14]
+	l32i	a10, a3, 36	# a[9]
+	l32i	a9, a6, 60	# t[15]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 60	# t[15]
+	l32i	a10, a3, 40	# a[10]
+	l32i	a9, a6, 64	# t[16]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 64	# t[16]
+	l32i	a10, a3, 44	# a[11]
+	l32i	a9, a6, 68	# t[17]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 68	# t[17]
+	s32i	a8, a6, 72	# t[18] = tail carry
+	l32i	a7, a3, 28		# a[7]
+	movi	a8, 0			# carry C = 0
+	l32i	a10, a3, 32	# a[8]
+	l32i	a9, a6, 60	# t[15]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 60	# t[15]
+	l32i	a10, a3, 36	# a[9]
+	l32i	a9, a6, 64	# t[16]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 64	# t[16]
+	l32i	a10, a3, 40	# a[10]
+	l32i	a9, a6, 68	# t[17]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 68	# t[17]
+	l32i	a10, a3, 44	# a[11]
+	l32i	a9, a6, 72	# t[18]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 72	# t[18]
+	s32i	a8, a6, 76	# t[19] = tail carry
+	l32i	a7, a3, 32		# a[8]
+	movi	a8, 0			# carry C = 0
+	l32i	a10, a3, 36	# a[9]
+	l32i	a9, a6, 68	# t[17]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 68	# t[17]
+	l32i	a10, a3, 40	# a[10]
+	l32i	a9, a6, 72	# t[18]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 72	# t[18]
+	l32i	a10, a3, 44	# a[11]
+	l32i	a9, a6, 76	# t[19]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 76	# t[19]
+	s32i	a8, a6, 80	# t[20] = tail carry
+	l32i	a7, a3, 36		# a[9]
+	movi	a8, 0			# carry C = 0
+	l32i	a10, a3, 40	# a[10]
+	l32i	a9, a6, 76	# t[19]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 76	# t[19]
+	l32i	a10, a3, 44	# a[11]
+	l32i	a9, a6, 80	# t[20]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 80	# t[20]
+	s32i	a8, a6, 84	# t[21] = tail carry
+	l32i	a7, a3, 40		# a[10]
+	movi	a8, 0			# carry C = 0
+	l32i	a10, a3, 44	# a[11]
+	l32i	a9, a6, 84	# t[21]
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12		# new carry C
+	s32i	a15, a6, 84	# t[21]
+	s32i	a8, a6, 88	# t[22] = tail carry
+	# Stage 2: Double off-diagonals (shift left 1)
+	movi	a8, 0			# carry = 0
+	l32i	a9, a6, 4
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 4
+	mov	a8, a12
+	l32i	a9, a6, 8
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 8
+	mov	a8, a12
+	l32i	a9, a6, 12
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 12
+	mov	a8, a12
+	l32i	a9, a6, 16
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 16
+	mov	a8, a12
+	l32i	a9, a6, 20
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 20
+	mov	a8, a12
+	l32i	a9, a6, 24
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 24
+	mov	a8, a12
+	l32i	a9, a6, 28
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 28
+	mov	a8, a12
+	l32i	a9, a6, 32
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 32
+	mov	a8, a12
+	l32i	a9, a6, 36
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 36
+	mov	a8, a12
+	l32i	a9, a6, 40
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 40
+	mov	a8, a12
+	l32i	a9, a6, 44
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 44
+	mov	a8, a12
+	l32i	a9, a6, 48
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 48
+	mov	a8, a12
+	l32i	a9, a6, 52
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 52
+	mov	a8, a12
+	l32i	a9, a6, 56
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 56
+	mov	a8, a12
+	l32i	a9, a6, 60
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 60
+	mov	a8, a12
+	l32i	a9, a6, 64
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 64
+	mov	a8, a12
+	l32i	a9, a6, 68
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 68
+	mov	a8, a12
+	l32i	a9, a6, 72
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 72
+	mov	a8, a12
+	l32i	a9, a6, 76
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 76
+	mov	a8, a12
+	l32i	a9, a6, 80
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 80
+	mov	a8, a12
+	l32i	a9, a6, 84
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 84
+	mov	a8, a12
+	l32i	a9, a6, 88
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 88
+	mov	a8, a12
+	l32i	a9, a6, 92
+	srli	a12, a9, 31		# next carry
+	slli	a9, a9, 1
+	or	a9, a9, a8
+	s32i	a9, a6, 92
+	mov	a8, a12
+	s32i	a8, a6, 96	# t[24] = final carry
+	# Stage 3: Add diagonal squares a[i]^2
+	l32i	a7, a3, 0		# a[0]
+	mull	a15, a7, a7		# lo
+	muluh	a14, a7, a7		# hi
+	l32i	a9, a6, 0
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	s32i	a15, a6, 0
+	l32i	a9, a6, 4
+	add	a14, a14, a12
+	saltu	a8, a14, a12
+	add	a15, a9, a14
+	saltu	a10, a15, a9
+	add	a8, a8, a10		# carry into t[2*i + 2]
+	s32i	a15, a6, 4
+	l32i	a9, a6, 8
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 8
+	l32i	a9, a6, 12
+	add	a15, a9, a8
+	s32i	a15, a6, 12
+	l32i	a7, a3, 4		# a[1]
+	mull	a15, a7, a7		# lo
+	muluh	a14, a7, a7		# hi
+	l32i	a9, a6, 8
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	s32i	a15, a6, 8
+	l32i	a9, a6, 12
+	add	a14, a14, a12
+	saltu	a8, a14, a12
+	add	a15, a9, a14
+	saltu	a10, a15, a9
+	add	a8, a8, a10		# carry into t[2*i + 2]
+	s32i	a15, a6, 12
+	l32i	a9, a6, 16
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 16
+	l32i	a9, a6, 20
+	add	a15, a9, a8
+	s32i	a15, a6, 20
+	l32i	a7, a3, 8		# a[2]
+	mull	a15, a7, a7		# lo
+	muluh	a14, a7, a7		# hi
+	l32i	a9, a6, 16
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	s32i	a15, a6, 16
+	l32i	a9, a6, 20
+	add	a14, a14, a12
+	saltu	a8, a14, a12
+	add	a15, a9, a14
+	saltu	a10, a15, a9
+	add	a8, a8, a10		# carry into t[2*i + 2]
+	s32i	a15, a6, 20
+	l32i	a9, a6, 24
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 24
+	l32i	a9, a6, 28
+	add	a15, a9, a8
+	s32i	a15, a6, 28
+	l32i	a7, a3, 12		# a[3]
+	mull	a15, a7, a7		# lo
+	muluh	a14, a7, a7		# hi
+	l32i	a9, a6, 24
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	s32i	a15, a6, 24
+	l32i	a9, a6, 28
+	add	a14, a14, a12
+	saltu	a8, a14, a12
+	add	a15, a9, a14
+	saltu	a10, a15, a9
+	add	a8, a8, a10		# carry into t[2*i + 2]
+	s32i	a15, a6, 28
+	l32i	a9, a6, 32
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 32
+	l32i	a9, a6, 36
+	add	a15, a9, a8
+	s32i	a15, a6, 36
+	l32i	a7, a3, 16		# a[4]
+	mull	a15, a7, a7		# lo
+	muluh	a14, a7, a7		# hi
+	l32i	a9, a6, 32
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	s32i	a15, a6, 32
+	l32i	a9, a6, 36
+	add	a14, a14, a12
+	saltu	a8, a14, a12
+	add	a15, a9, a14
+	saltu	a10, a15, a9
+	add	a8, a8, a10		# carry into t[2*i + 2]
+	s32i	a15, a6, 36
+	l32i	a9, a6, 40
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 40
+	l32i	a9, a6, 44
+	add	a15, a9, a8
+	s32i	a15, a6, 44
+	l32i	a7, a3, 20		# a[5]
+	mull	a15, a7, a7		# lo
+	muluh	a14, a7, a7		# hi
+	l32i	a9, a6, 40
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	s32i	a15, a6, 40
+	l32i	a9, a6, 44
+	add	a14, a14, a12
+	saltu	a8, a14, a12
+	add	a15, a9, a14
+	saltu	a10, a15, a9
+	add	a8, a8, a10		# carry into t[2*i + 2]
+	s32i	a15, a6, 44
+	l32i	a9, a6, 48
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 48
+	l32i	a9, a6, 52
+	add	a15, a9, a8
+	s32i	a15, a6, 52
+	l32i	a7, a3, 24		# a[6]
+	mull	a15, a7, a7		# lo
+	muluh	a14, a7, a7		# hi
+	l32i	a9, a6, 48
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	s32i	a15, a6, 48
+	l32i	a9, a6, 52
+	add	a14, a14, a12
+	saltu	a8, a14, a12
+	add	a15, a9, a14
+	saltu	a10, a15, a9
+	add	a8, a8, a10		# carry into t[2*i + 2]
+	s32i	a15, a6, 52
+	l32i	a9, a6, 56
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 56
+	l32i	a9, a6, 60
+	add	a15, a9, a8
+	s32i	a15, a6, 60
+	l32i	a7, a3, 28		# a[7]
+	mull	a15, a7, a7		# lo
+	muluh	a14, a7, a7		# hi
+	l32i	a9, a6, 56
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	s32i	a15, a6, 56
+	l32i	a9, a6, 60
+	add	a14, a14, a12
+	saltu	a8, a14, a12
+	add	a15, a9, a14
+	saltu	a10, a15, a9
+	add	a8, a8, a10		# carry into t[2*i + 2]
+	s32i	a15, a6, 60
+	l32i	a9, a6, 64
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 64
+	l32i	a9, a6, 68
+	add	a15, a9, a8
+	s32i	a15, a6, 68
+	l32i	a7, a3, 32		# a[8]
+	mull	a15, a7, a7		# lo
+	muluh	a14, a7, a7		# hi
+	l32i	a9, a6, 64
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	s32i	a15, a6, 64
+	l32i	a9, a6, 68
+	add	a14, a14, a12
+	saltu	a8, a14, a12
+	add	a15, a9, a14
+	saltu	a10, a15, a9
+	add	a8, a8, a10		# carry into t[2*i + 2]
+	s32i	a15, a6, 68
+	l32i	a9, a6, 72
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 72
+	l32i	a9, a6, 76
+	add	a15, a9, a8
+	s32i	a15, a6, 76
+	l32i	a7, a3, 36		# a[9]
+	mull	a15, a7, a7		# lo
+	muluh	a14, a7, a7		# hi
+	l32i	a9, a6, 72
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	s32i	a15, a6, 72
+	l32i	a9, a6, 76
+	add	a14, a14, a12
+	saltu	a8, a14, a12
+	add	a15, a9, a14
+	saltu	a10, a15, a9
+	add	a8, a8, a10		# carry into t[2*i + 2]
+	s32i	a15, a6, 76
+	l32i	a9, a6, 80
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 80
+	l32i	a9, a6, 84
+	add	a15, a9, a8
+	s32i	a15, a6, 84
+	l32i	a7, a3, 40		# a[10]
+	mull	a15, a7, a7		# lo
+	muluh	a14, a7, a7		# hi
+	l32i	a9, a6, 80
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	s32i	a15, a6, 80
+	l32i	a9, a6, 84
+	add	a14, a14, a12
+	saltu	a8, a14, a12
+	add	a15, a9, a14
+	saltu	a10, a15, a9
+	add	a8, a8, a10		# carry into t[2*i + 2]
+	s32i	a15, a6, 84
+	l32i	a9, a6, 88
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 88
+	l32i	a9, a6, 92
+	add	a15, a9, a8
+	s32i	a15, a6, 92
+	l32i	a7, a3, 44		# a[11]
+	mull	a15, a7, a7		# lo
+	muluh	a14, a7, a7		# hi
+	l32i	a9, a6, 88
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	s32i	a15, a6, 88
+	l32i	a9, a6, 92
+	add	a14, a14, a12
+	saltu	a8, a14, a12
+	add	a15, a9, a14
+	saltu	a10, a15, a9
+	add	a8, a8, a10		# carry into t[2*i + 2]
+	s32i	a15, a6, 92
+	l32i	a9, a6, 96
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 96
+	l32i	a9, a6, 100
+	add	a15, a9, a8
+	s32i	a15, a6, 100
+	# Stage 4: Montgomery Reduction
+	movi	a5, -1			# 0xffffffff
+	# ---- reduction row i = 0 ----
+	l32i	a7, a6, 0		# m = t[0]
+	mov	a8, a7			# j = 0: low word cancelled, carry is m
+	l32i	a9, a6, 4	# t[1]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 4
+	l32i	a9, a6, 8	# t[2]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 8
+	l32i	a9, a6, 12	# t[3]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 12
+	l32i	a9, a6, 16	# t[4]
+	movi	a10, -2		# p[4] = 0xfffffffe
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12
+	s32i	a15, a6, 16
+	l32i	a9, a6, 20	# t[5]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 20
+	l32i	a9, a6, 24	# t[6]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 24
+	l32i	a9, a6, 28	# t[7]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 28
+	l32i	a9, a6, 32	# t[8]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 32
+	l32i	a9, a6, 36	# t[9]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 36
+	l32i	a9, a6, 40	# t[10]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 40
+	l32i	a9, a6, 44	# t[11]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 44
+	l32i	a9, a6, 48
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 48
+	l32i	a9, a6, 52
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 52
+	l32i	a9, a6, 56
+	add	a15, a9, a8
+	s32i	a15, a6, 56
+	# ---- reduction row i = 1 ----
+	l32i	a7, a6, 4		# m = t[1]
+	mov	a8, a7			# j = 0: low word cancelled, carry is m
+	l32i	a9, a6, 8	# t[2]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 8
+	l32i	a9, a6, 12	# t[3]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 12
+	l32i	a9, a6, 16	# t[4]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 16
+	l32i	a9, a6, 20	# t[5]
+	movi	a10, -2		# p[4] = 0xfffffffe
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12
+	s32i	a15, a6, 20
+	l32i	a9, a6, 24	# t[6]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 24
+	l32i	a9, a6, 28	# t[7]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 28
+	l32i	a9, a6, 32	# t[8]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 32
+	l32i	a9, a6, 36	# t[9]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 36
+	l32i	a9, a6, 40	# t[10]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 40
+	l32i	a9, a6, 44	# t[11]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 44
+	l32i	a9, a6, 48	# t[12]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 48
+	l32i	a9, a6, 52
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 52
+	l32i	a9, a6, 56
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 56
+	l32i	a9, a6, 60
+	add	a15, a9, a8
+	s32i	a15, a6, 60
+	# ---- reduction row i = 2 ----
+	l32i	a7, a6, 8		# m = t[2]
+	mov	a8, a7			# j = 0: low word cancelled, carry is m
+	l32i	a9, a6, 12	# t[3]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 12
+	l32i	a9, a6, 16	# t[4]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 16
+	l32i	a9, a6, 20	# t[5]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 20
+	l32i	a9, a6, 24	# t[6]
+	movi	a10, -2		# p[4] = 0xfffffffe
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12
+	s32i	a15, a6, 24
+	l32i	a9, a6, 28	# t[7]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 28
+	l32i	a9, a6, 32	# t[8]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 32
+	l32i	a9, a6, 36	# t[9]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 36
+	l32i	a9, a6, 40	# t[10]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 40
+	l32i	a9, a6, 44	# t[11]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 44
+	l32i	a9, a6, 48	# t[12]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 48
+	l32i	a9, a6, 52	# t[13]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 52
+	l32i	a9, a6, 56
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 56
+	l32i	a9, a6, 60
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 60
+	l32i	a9, a6, 64
+	add	a15, a9, a8
+	s32i	a15, a6, 64
+	# ---- reduction row i = 3 ----
+	l32i	a7, a6, 12		# m = t[3]
+	mov	a8, a7			# j = 0: low word cancelled, carry is m
+	l32i	a9, a6, 16	# t[4]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 16
+	l32i	a9, a6, 20	# t[5]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 20
+	l32i	a9, a6, 24	# t[6]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 24
+	l32i	a9, a6, 28	# t[7]
+	movi	a10, -2		# p[4] = 0xfffffffe
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12
+	s32i	a15, a6, 28
+	l32i	a9, a6, 32	# t[8]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 32
+	l32i	a9, a6, 36	# t[9]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 36
+	l32i	a9, a6, 40	# t[10]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 40
+	l32i	a9, a6, 44	# t[11]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 44
+	l32i	a9, a6, 48	# t[12]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 48
+	l32i	a9, a6, 52	# t[13]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 52
+	l32i	a9, a6, 56	# t[14]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 56
+	l32i	a9, a6, 60
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 60
+	l32i	a9, a6, 64
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 64
+	l32i	a9, a6, 68
+	add	a15, a9, a8
+	s32i	a15, a6, 68
+	# ---- reduction row i = 4 ----
+	l32i	a7, a6, 16		# m = t[4]
+	mov	a8, a7			# j = 0: low word cancelled, carry is m
+	l32i	a9, a6, 20	# t[5]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 20
+	l32i	a9, a6, 24	# t[6]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 24
+	l32i	a9, a6, 28	# t[7]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 28
+	l32i	a9, a6, 32	# t[8]
+	movi	a10, -2		# p[4] = 0xfffffffe
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12
+	s32i	a15, a6, 32
+	l32i	a9, a6, 36	# t[9]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 36
+	l32i	a9, a6, 40	# t[10]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 40
+	l32i	a9, a6, 44	# t[11]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 44
+	l32i	a9, a6, 48	# t[12]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 48
+	l32i	a9, a6, 52	# t[13]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 52
+	l32i	a9, a6, 56	# t[14]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 56
+	l32i	a9, a6, 60	# t[15]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 60
+	l32i	a9, a6, 64
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 64
+	l32i	a9, a6, 68
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 68
+	l32i	a9, a6, 72
+	add	a15, a9, a8
+	s32i	a15, a6, 72
+	# ---- reduction row i = 5 ----
+	l32i	a7, a6, 20		# m = t[5]
+	mov	a8, a7			# j = 0: low word cancelled, carry is m
+	l32i	a9, a6, 24	# t[6]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 24
+	l32i	a9, a6, 28	# t[7]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 28
+	l32i	a9, a6, 32	# t[8]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 32
+	l32i	a9, a6, 36	# t[9]
+	movi	a10, -2		# p[4] = 0xfffffffe
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12
+	s32i	a15, a6, 36
+	l32i	a9, a6, 40	# t[10]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 40
+	l32i	a9, a6, 44	# t[11]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 44
+	l32i	a9, a6, 48	# t[12]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 48
+	l32i	a9, a6, 52	# t[13]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 52
+	l32i	a9, a6, 56	# t[14]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 56
+	l32i	a9, a6, 60	# t[15]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 60
+	l32i	a9, a6, 64	# t[16]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 64
+	l32i	a9, a6, 68
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 68
+	l32i	a9, a6, 72
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 72
+	l32i	a9, a6, 76
+	add	a15, a9, a8
+	s32i	a15, a6, 76
+	# ---- reduction row i = 6 ----
+	l32i	a7, a6, 24		# m = t[6]
+	mov	a8, a7			# j = 0: low word cancelled, carry is m
+	l32i	a9, a6, 28	# t[7]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 28
+	l32i	a9, a6, 32	# t[8]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 32
+	l32i	a9, a6, 36	# t[9]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 36
+	l32i	a9, a6, 40	# t[10]
+	movi	a10, -2		# p[4] = 0xfffffffe
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12
+	s32i	a15, a6, 40
+	l32i	a9, a6, 44	# t[11]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 44
+	l32i	a9, a6, 48	# t[12]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 48
+	l32i	a9, a6, 52	# t[13]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 52
+	l32i	a9, a6, 56	# t[14]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 56
+	l32i	a9, a6, 60	# t[15]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 60
+	l32i	a9, a6, 64	# t[16]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 64
+	l32i	a9, a6, 68	# t[17]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 68
+	l32i	a9, a6, 72
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 72
+	l32i	a9, a6, 76
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 76
+	l32i	a9, a6, 80
+	add	a15, a9, a8
+	s32i	a15, a6, 80
+	# ---- reduction row i = 7 ----
+	l32i	a7, a6, 28		# m = t[7]
+	mov	a8, a7			# j = 0: low word cancelled, carry is m
+	l32i	a9, a6, 32	# t[8]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 32
+	l32i	a9, a6, 36	# t[9]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 36
+	l32i	a9, a6, 40	# t[10]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 40
+	l32i	a9, a6, 44	# t[11]
+	movi	a10, -2		# p[4] = 0xfffffffe
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12
+	s32i	a15, a6, 44
+	l32i	a9, a6, 48	# t[12]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 48
+	l32i	a9, a6, 52	# t[13]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 52
+	l32i	a9, a6, 56	# t[14]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 56
+	l32i	a9, a6, 60	# t[15]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 60
+	l32i	a9, a6, 64	# t[16]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 64
+	l32i	a9, a6, 68	# t[17]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 68
+	l32i	a9, a6, 72	# t[18]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 72
+	l32i	a9, a6, 76
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 76
+	l32i	a9, a6, 80
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 80
+	l32i	a9, a6, 84
+	add	a15, a9, a8
+	s32i	a15, a6, 84
+	# ---- reduction row i = 8 ----
+	l32i	a7, a6, 32		# m = t[8]
+	mov	a8, a7			# j = 0: low word cancelled, carry is m
+	l32i	a9, a6, 36	# t[9]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 36
+	l32i	a9, a6, 40	# t[10]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 40
+	l32i	a9, a6, 44	# t[11]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 44
+	l32i	a9, a6, 48	# t[12]
+	movi	a10, -2		# p[4] = 0xfffffffe
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12
+	s32i	a15, a6, 48
+	l32i	a9, a6, 52	# t[13]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 52
+	l32i	a9, a6, 56	# t[14]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 56
+	l32i	a9, a6, 60	# t[15]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 60
+	l32i	a9, a6, 64	# t[16]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 64
+	l32i	a9, a6, 68	# t[17]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 68
+	l32i	a9, a6, 72	# t[18]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 72
+	l32i	a9, a6, 76	# t[19]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 76
+	l32i	a9, a6, 80
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 80
+	l32i	a9, a6, 84
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 84
+	l32i	a9, a6, 88
+	add	a15, a9, a8
+	s32i	a15, a6, 88
+	# ---- reduction row i = 9 ----
+	l32i	a7, a6, 36		# m = t[9]
+	mov	a8, a7			# j = 0: low word cancelled, carry is m
+	l32i	a9, a6, 40	# t[10]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 40
+	l32i	a9, a6, 44	# t[11]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 44
+	l32i	a9, a6, 48	# t[12]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 48
+	l32i	a9, a6, 52	# t[13]
+	movi	a10, -2		# p[4] = 0xfffffffe
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12
+	s32i	a15, a6, 52
+	l32i	a9, a6, 56	# t[14]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 56
+	l32i	a9, a6, 60	# t[15]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 60
+	l32i	a9, a6, 64	# t[16]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 64
+	l32i	a9, a6, 68	# t[17]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 68
+	l32i	a9, a6, 72	# t[18]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 72
+	l32i	a9, a6, 76	# t[19]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 76
+	l32i	a9, a6, 80	# t[20]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 80
+	l32i	a9, a6, 84
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 84
+	l32i	a9, a6, 88
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 88
+	l32i	a9, a6, 92
+	add	a15, a9, a8
+	s32i	a15, a6, 92
+	# ---- reduction row i = 10 ----
+	l32i	a7, a6, 40		# m = t[10]
+	mov	a8, a7			# j = 0: low word cancelled, carry is m
+	l32i	a9, a6, 44	# t[11]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 44
+	l32i	a9, a6, 48	# t[12]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 48
+	l32i	a9, a6, 52	# t[13]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 52
+	l32i	a9, a6, 56	# t[14]
+	movi	a10, -2		# p[4] = 0xfffffffe
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12
+	s32i	a15, a6, 56
+	l32i	a9, a6, 60	# t[15]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 60
+	l32i	a9, a6, 64	# t[16]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 64
+	l32i	a9, a6, 68	# t[17]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 68
+	l32i	a9, a6, 72	# t[18]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 72
+	l32i	a9, a6, 76	# t[19]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 76
+	l32i	a9, a6, 80	# t[20]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 80
+	l32i	a9, a6, 84	# t[21]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 84
+	l32i	a9, a6, 88
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 88
+	l32i	a9, a6, 92
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 92
+	l32i	a9, a6, 96
+	add	a15, a9, a8
+	s32i	a15, a6, 96
+	# ---- reduction row i = 11 ----
+	l32i	a7, a6, 44		# m = t[11]
+	mov	a8, a7			# j = 0: low word cancelled, carry is m
+	l32i	a9, a6, 48	# t[12]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 48
+	l32i	a9, a6, 52	# t[13]
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 52
+	l32i	a9, a6, 56	# t[14]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 56
+	l32i	a9, a6, 60	# t[15]
+	movi	a10, -2		# p[4] = 0xfffffffe
+	mull	a15, a10, a7
+	muluh	a14, a10, a7
+	add	a15, a15, a9
+	saltu	a12, a15, a9
+	add	a14, a14, a12
+	add	a15, a15, a8
+	saltu	a12, a15, a8
+	add	a8, a14, a12
+	s32i	a15, a6, 60
+	l32i	a9, a6, 64	# t[16]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 64
+	l32i	a9, a6, 68	# t[17]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 68
+	l32i	a9, a6, 72	# t[18]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 72
+	l32i	a9, a6, 76	# t[19]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 76
+	l32i	a9, a6, 80	# t[20]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 80
+	l32i	a9, a6, 84	# t[21]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 84
+	l32i	a9, a6, 88	# t[22]
+	add	a15, a9, a8
+	saltu	a12, a15, a9
+	sub	a11, a15, a7
+	saltu	a14, a15, a7
+	add	a8, a7, a12
+	sub	a8, a8, a14
+	s32i	a11, a6, 88
+	l32i	a9, a6, 92
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 92
+	l32i	a9, a6, 96
+	add	a15, a9, a8
+	saltu	a8, a15, a9
+	s32i	a15, a6, 96
+	l32i	a9, a6, 100
+	add	a15, a9, a8
+	s32i	a15, a6, 100
+	l32i	a2, a6, 112	# recover `out`
+	movi	a8, 0			# borrow
+	l32i	a9, a6, 48
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 0
+	l32i	a9, a6, 52
+	sub	a15, a9, a8
+	saltu	a8, a9, a8
+	s32i	a15, a2, 4
+	l32i	a9, a6, 56
+	sub	a15, a9, a8
+	saltu	a8, a9, a8
+	s32i	a15, a2, 8
+	l32i	a9, a6, 60
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 12
+	l32i	a9, a6, 64
+	movi	a10, -2		# p[4] = 0xfffffffe
+	sub	a15, a9, a10
+	saltu	a12, a9, a10
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 16
+	l32i	a9, a6, 68
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 20
+	l32i	a9, a6, 72
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 24
+	l32i	a9, a6, 76
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 28
+	l32i	a9, a6, 80
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 32
+	l32i	a9, a6, 84
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 36
+	l32i	a9, a6, 88
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 40
+	l32i	a9, a6, 92
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a2, 44
+	l32i	a9, a6, 96
+	saltu	a12, a9, a8
+	neg	a12, a12		# mask
+	l32i	a9, a2, 0
+	l32i	a10, a6, 48
+	xor	a11, a9, a10
+	and	a11, a11, a12
+	xor	a9, a9, a11		# branchless select
+	s32i	a9, a2, 0
+	l32i	a9, a2, 4
+	l32i	a10, a6, 52
+	xor	a11, a9, a10
+	and	a11, a11, a12
+	xor	a9, a9, a11		# branchless select
+	s32i	a9, a2, 4
+	l32i	a9, a2, 8
+	l32i	a10, a6, 56
+	xor	a11, a9, a10
+	and	a11, a11, a12
+	xor	a9, a9, a11		# branchless select
+	s32i	a9, a2, 8
+	l32i	a9, a2, 12
+	l32i	a10, a6, 60
+	xor	a11, a9, a10
+	and	a11, a11, a12
+	xor	a9, a9, a11		# branchless select
+	s32i	a9, a2, 12
+	l32i	a9, a2, 16
+	l32i	a10, a6, 64
+	xor	a11, a9, a10
+	and	a11, a11, a12
+	xor	a9, a9, a11		# branchless select
+	s32i	a9, a2, 16
+	l32i	a9, a2, 20
+	l32i	a10, a6, 68
+	xor	a11, a9, a10
+	and	a11, a11, a12
+	xor	a9, a9, a11		# branchless select
+	s32i	a9, a2, 20
+	l32i	a9, a2, 24
+	l32i	a10, a6, 72
+	xor	a11, a9, a10
+	and	a11, a11, a12
+	xor	a9, a9, a11		# branchless select
+	s32i	a9, a2, 24
+	l32i	a9, a2, 28
+	l32i	a10, a6, 76
+	xor	a11, a9, a10
+	and	a11, a11, a12
+	xor	a9, a9, a11		# branchless select
+	s32i	a9, a2, 28
+	l32i	a9, a2, 32
+	l32i	a10, a6, 80
+	xor	a11, a9, a10
+	and	a11, a11, a12
+	xor	a9, a9, a11		# branchless select
+	s32i	a9, a2, 32
+	l32i	a9, a2, 36
+	l32i	a10, a6, 84
+	xor	a11, a9, a10
+	and	a11, a11, a12
+	xor	a9, a9, a11		# branchless select
+	s32i	a9, a2, 36
+	l32i	a9, a2, 40
+	l32i	a10, a6, 88
+	xor	a11, a9, a10
+	and	a11, a11, a12
+	xor	a9, a9, a11		# branchless select
+	s32i	a9, a2, 40
+	l32i	a9, a2, 44
+	l32i	a10, a6, 92
+	xor	a11, a9, a10
+	and	a11, a11, a12
+	xor	a9, a9, a11		# branchless select
+	s32i	a9, a2, 44
+	l32i	a12, a1, 0
+	l32i	a13, a1, 4
+	l32i	a14, a1, 8
+	l32i	a15, a1, 12
+	addi	a1, a1, 16
+	ret
+	.size	nistp_sqr_mont_12, .-nistp_sqr_mont_12
+
+# out = a + b mod p,  N = 12
+	.globl	nistp_add_mod_12
+	.align	4
+	.type	nistp_add_mod_12, @function
+nistp_add_mod_12:
+	addi	a1, a1, -144
+	s32i	a12, a1, 0
+	s32i	a13, a1, 4
+	s32i	a14, a1, 8
+	s32i	a15, a1, 12
+	s32i	a2, a1, 112	# park `out`
+	l32i	a10, a3, 0		# a[0]
+	l32i	a7, a4, 0		# b[0]
+	add	a15, a10, a7
+	saltu	a8, a15, a10		# carry
+	s32i	a15, a1, 16		# s[0]
+	l32i	a10, a3, 4		# a[1]
+	l32i	a7, a4, 4		# b[1]
+	add	a15, a10, a7
+	saltu	a12, a15, a10
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a12
+	s32i	a15, a1, 20		# s[1]
+	l32i	a10, a3, 8		# a[2]
+	l32i	a7, a4, 8		# b[2]
+	add	a15, a10, a7
+	saltu	a12, a15, a10
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a12
+	s32i	a15, a1, 24		# s[2]
+	l32i	a10, a3, 12		# a[3]
+	l32i	a7, a4, 12		# b[3]
+	add	a15, a10, a7
+	saltu	a12, a15, a10
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a12
+	s32i	a15, a1, 28		# s[3]
+	l32i	a10, a3, 16		# a[4]
+	l32i	a7, a4, 16		# b[4]
+	add	a15, a10, a7
+	saltu	a12, a15, a10
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a12
+	s32i	a15, a1, 32		# s[4]
+	l32i	a10, a3, 20		# a[5]
+	l32i	a7, a4, 20		# b[5]
+	add	a15, a10, a7
+	saltu	a12, a15, a10
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a12
+	s32i	a15, a1, 36		# s[5]
+	l32i	a10, a3, 24		# a[6]
+	l32i	a7, a4, 24		# b[6]
+	add	a15, a10, a7
+	saltu	a12, a15, a10
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a12
+	s32i	a15, a1, 40		# s[6]
+	l32i	a10, a3, 28		# a[7]
+	l32i	a7, a4, 28		# b[7]
+	add	a15, a10, a7
+	saltu	a12, a15, a10
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a12
+	s32i	a15, a1, 44		# s[7]
+	l32i	a10, a3, 32		# a[8]
+	l32i	a7, a4, 32		# b[8]
+	add	a15, a10, a7
+	saltu	a12, a15, a10
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a12
+	s32i	a15, a1, 48		# s[8]
+	l32i	a10, a3, 36		# a[9]
+	l32i	a7, a4, 36		# b[9]
+	add	a15, a10, a7
+	saltu	a12, a15, a10
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a12
+	s32i	a15, a1, 52		# s[9]
+	l32i	a10, a3, 40		# a[10]
+	l32i	a7, a4, 40		# b[10]
+	add	a15, a10, a7
+	saltu	a12, a15, a10
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a12
+	s32i	a15, a1, 56		# s[10]
+	l32i	a10, a3, 44		# a[11]
+	l32i	a7, a4, 44		# b[11]
+	add	a15, a10, a7
+	saltu	a12, a15, a10
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a12
+	s32i	a15, a1, 60		# s[11]
+	mov	a14, a8			# c_out in a14
+	movi	a5, -1			# 0xffffffff
+	movi	a6, 1			# 1
+	movi	a13, -2			# 0xfffffffe
+	l32i	a9, a1, 16		# s[0]
+	sub	a15, a9, a5
+	saltu	a8, a9, a5		# borrow
+	s32i	a15, a1, 64		# d[0]
+	l32i	a9, a1, 20		# s[1]
+	sub	a11, a9, a8
+	saltu	a8, a9, a8
+	mov	a15, a11
+	s32i	a15, a1, 68		# d[1]
+	l32i	a9, a1, 24		# s[2]
+	sub	a11, a9, a8
+	saltu	a8, a9, a8
+	mov	a15, a11
+	s32i	a15, a1, 72		# d[2]
+	l32i	a9, a1, 28		# s[3]
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 76		# d[3]
+	l32i	a9, a1, 32		# s[4]
+	sub	a15, a9, a13
+	saltu	a12, a9, a13
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 80		# d[4]
+	l32i	a9, a1, 36		# s[5]
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 84		# d[5]
+	l32i	a9, a1, 40		# s[6]
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 88		# d[6]
+	l32i	a9, a1, 44		# s[7]
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 92		# d[7]
+	l32i	a9, a1, 48		# s[8]
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 96		# d[8]
+	l32i	a9, a1, 52		# s[9]
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 100		# d[9]
+	l32i	a9, a1, 56		# s[10]
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 104		# d[10]
+	l32i	a9, a1, 60		# s[11]
+	sub	a15, a9, a5
+	saltu	a12, a9, a5
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 108		# d[11]
+	saltu	a12, a14, a8		# underflow = (c_out < b_out)
+	neg	a12, a12		# mask: 0xffffffff if s < p, 0 if s >= p
+	l32i	a2, a1, 112	# recover `out`
+	l32i	a15, a1, 64	# d[0]
+	l32i	a9, a1, 16		# s[0]
+	xor	a10, a15, a9
+	and	a10, a10, a12
+	xor	a15, a15, a10
+	s32i	a15, a2, 0
+	l32i	a15, a1, 68	# d[1]
+	l32i	a9, a1, 20		# s[1]
+	xor	a10, a15, a9
+	and	a10, a10, a12
+	xor	a15, a15, a10
+	s32i	a15, a2, 4
+	l32i	a15, a1, 72	# d[2]
+	l32i	a9, a1, 24		# s[2]
+	xor	a10, a15, a9
+	and	a10, a10, a12
+	xor	a15, a15, a10
+	s32i	a15, a2, 8
+	l32i	a15, a1, 76	# d[3]
+	l32i	a9, a1, 28		# s[3]
+	xor	a10, a15, a9
+	and	a10, a10, a12
+	xor	a15, a15, a10
+	s32i	a15, a2, 12
+	l32i	a15, a1, 80	# d[4]
+	l32i	a9, a1, 32		# s[4]
+	xor	a10, a15, a9
+	and	a10, a10, a12
+	xor	a15, a15, a10
+	s32i	a15, a2, 16
+	l32i	a15, a1, 84	# d[5]
+	l32i	a9, a1, 36		# s[5]
+	xor	a10, a15, a9
+	and	a10, a10, a12
+	xor	a15, a15, a10
+	s32i	a15, a2, 20
+	l32i	a15, a1, 88	# d[6]
+	l32i	a9, a1, 40		# s[6]
+	xor	a10, a15, a9
+	and	a10, a10, a12
+	xor	a15, a15, a10
+	s32i	a15, a2, 24
+	l32i	a15, a1, 92	# d[7]
+	l32i	a9, a1, 44		# s[7]
+	xor	a10, a15, a9
+	and	a10, a10, a12
+	xor	a15, a15, a10
+	s32i	a15, a2, 28
+	l32i	a15, a1, 96	# d[8]
+	l32i	a9, a1, 48		# s[8]
+	xor	a10, a15, a9
+	and	a10, a10, a12
+	xor	a15, a15, a10
+	s32i	a15, a2, 32
+	l32i	a15, a1, 100	# d[9]
+	l32i	a9, a1, 52		# s[9]
+	xor	a10, a15, a9
+	and	a10, a10, a12
+	xor	a15, a15, a10
+	s32i	a15, a2, 36
+	l32i	a15, a1, 104	# d[10]
+	l32i	a9, a1, 56		# s[10]
+	xor	a10, a15, a9
+	and	a10, a10, a12
+	xor	a15, a15, a10
+	s32i	a15, a2, 40
+	l32i	a15, a1, 108	# d[11]
+	l32i	a9, a1, 60		# s[11]
+	xor	a10, a15, a9
+	and	a10, a10, a12
+	xor	a15, a15, a10
+	s32i	a15, a2, 44
+	l32i	a12, a1, 0
+	l32i	a13, a1, 4
+	l32i	a14, a1, 8
+	l32i	a15, a1, 12
+	addi	a1, a1, 144
+	ret
+	.size	nistp_add_mod_12, .-nistp_add_mod_12
+
+# out = a - b mod p,  N = 12
+	.globl	nistp_sub_mod_12
+	.align	4
+	.type	nistp_sub_mod_12, @function
+nistp_sub_mod_12:
+	addi	a1, a1, -96
+	s32i	a12, a1, 0
+	s32i	a13, a1, 4
+	s32i	a14, a1, 8
+	s32i	a15, a1, 12
+	s32i	a2, a1, 64	# park `out`
+	l32i	a10, a3, 0		# a[0]
+	l32i	a7, a4, 0		# b[0]
+	sub	a15, a10, a7
+	saltu	a8, a10, a7		# borrow
+	s32i	a15, a1, 16		# d[0]
+	l32i	a10, a3, 4		# a[1]
+	l32i	a7, a4, 4		# b[1]
+	sub	a15, a10, a7
+	saltu	a12, a10, a7
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 20		# d[1]
+	l32i	a10, a3, 8		# a[2]
+	l32i	a7, a4, 8		# b[2]
+	sub	a15, a10, a7
+	saltu	a12, a10, a7
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 24		# d[2]
+	l32i	a10, a3, 12		# a[3]
+	l32i	a7, a4, 12		# b[3]
+	sub	a15, a10, a7
+	saltu	a12, a10, a7
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 28		# d[3]
+	l32i	a10, a3, 16		# a[4]
+	l32i	a7, a4, 16		# b[4]
+	sub	a15, a10, a7
+	saltu	a12, a10, a7
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 32		# d[4]
+	l32i	a10, a3, 20		# a[5]
+	l32i	a7, a4, 20		# b[5]
+	sub	a15, a10, a7
+	saltu	a12, a10, a7
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 36		# d[5]
+	l32i	a10, a3, 24		# a[6]
+	l32i	a7, a4, 24		# b[6]
+	sub	a15, a10, a7
+	saltu	a12, a10, a7
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 40		# d[6]
+	l32i	a10, a3, 28		# a[7]
+	l32i	a7, a4, 28		# b[7]
+	sub	a15, a10, a7
+	saltu	a12, a10, a7
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 44		# d[7]
+	l32i	a10, a3, 32		# a[8]
+	l32i	a7, a4, 32		# b[8]
+	sub	a15, a10, a7
+	saltu	a12, a10, a7
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 48		# d[8]
+	l32i	a10, a3, 36		# a[9]
+	l32i	a7, a4, 36		# b[9]
+	sub	a15, a10, a7
+	saltu	a12, a10, a7
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 52		# d[9]
+	l32i	a10, a3, 40		# a[10]
+	l32i	a7, a4, 40		# b[10]
+	sub	a15, a10, a7
+	saltu	a12, a10, a7
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 56		# d[10]
+	l32i	a10, a3, 44		# a[11]
+	l32i	a7, a4, 44		# b[11]
+	sub	a15, a10, a7
+	saltu	a12, a10, a7
+	sub	a11, a15, a8
+	saltu	a10, a15, a8
+	add	a8, a12, a10
+	mov	a15, a11
+	s32i	a15, a1, 60		# d[11]
+	neg	a12, a8			# mask: 0xffffffff if a < b, 0 if a >= b
+	movi	a5, -1			# 0xffffffff
+	movi	a6, 1			# 1
+	movi	a13, -2			# 0xfffffffe
+	l32i	a2, a1, 64	# recover `out`
+	l32i	a15, a1, 16		# d[0]
+	and	a7, a5, a12		# p[0] & mask
+	add	a15, a15, a7
+	saltu	a8, a15, a7		# carry
+	s32i	a15, a2, 0
+	l32i	a15, a1, 20		# d[1]
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	s32i	a15, a2, 4
+	l32i	a15, a1, 24		# d[2]
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	s32i	a15, a2, 8
+	l32i	a15, a1, 28		# d[3]
+	and	a7, a5, a12		# p[3] & mask
+	add	a15, a15, a7
+	saltu	a10, a15, a7
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a10
+	s32i	a15, a2, 12
+	l32i	a15, a1, 32		# d[4]
+	and	a7, a13, a12		# p[4] & mask
+	add	a15, a15, a7
+	saltu	a10, a15, a7
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a10
+	s32i	a15, a2, 16
+	l32i	a15, a1, 36		# d[5]
+	and	a7, a5, a12		# p[5] & mask
+	add	a15, a15, a7
+	saltu	a10, a15, a7
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a10
+	s32i	a15, a2, 20
+	l32i	a15, a1, 40		# d[6]
+	and	a7, a5, a12		# p[6] & mask
+	add	a15, a15, a7
+	saltu	a10, a15, a7
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a10
+	s32i	a15, a2, 24
+	l32i	a15, a1, 44		# d[7]
+	and	a7, a5, a12		# p[7] & mask
+	add	a15, a15, a7
+	saltu	a10, a15, a7
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a10
+	s32i	a15, a2, 28
+	l32i	a15, a1, 48		# d[8]
+	and	a7, a5, a12		# p[8] & mask
+	add	a15, a15, a7
+	saltu	a10, a15, a7
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a10
+	s32i	a15, a2, 32
+	l32i	a15, a1, 52		# d[9]
+	and	a7, a5, a12		# p[9] & mask
+	add	a15, a15, a7
+	saltu	a10, a15, a7
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a10
+	s32i	a15, a2, 36
+	l32i	a15, a1, 56		# d[10]
+	and	a7, a5, a12		# p[10] & mask
+	add	a15, a15, a7
+	saltu	a10, a15, a7
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a10
+	s32i	a15, a2, 40
+	l32i	a15, a1, 60		# d[11]
+	and	a7, a5, a12		# p[11] & mask
+	add	a15, a15, a7
+	saltu	a10, a15, a7
+	add	a15, a15, a8
+	saltu	a8, a15, a8
+	add	a8, a8, a10
+	s32i	a15, a2, 44
+	l32i	a12, a1, 0
+	l32i	a13, a1, 4
+	l32i	a14, a1, 8
+	l32i	a15, a1, 12
+	addi	a1, a1, 96
+	ret
+	.size	nistp_sub_mod_12, .-nistp_sub_mod_12

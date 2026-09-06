@@ -31,6 +31,12 @@ extern "C" {
         p: *const u32,
         scratch: *mut u32,
     );
+    fn nistp_sqr_mont_8(out: *mut u32, a: *const u32, p: *const u32, scratch: *mut u32);
+    fn nistp_sqr_mont_12(out: *mut u32, a: *const u32, p: *const u32, scratch: *mut u32);
+    fn nistp_add_mod_8(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
+    fn nistp_sub_mod_8(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
+    fn nistp_add_mod_12(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
+    fn nistp_sub_mod_12(out: *mut u32, a: *const u32, b: *const u32, p: *const u32);
 }
 
 /// Dispatch to assembly if a routine exists for this limb count.
@@ -69,6 +75,80 @@ pub fn try_mul_mont(a: &[u32], b: &[u32], p: &[u32], n0inv: u32, out: &mut [u32]
                 p.as_ptr(),
                 scratch.as_mut_ptr(),
             );
+            true
+        },
+        _ => false,
+    }
+}
+
+/// Dispatch squaring to assembly if a routine exists for this limb count.
+#[inline]
+pub fn try_sqr_mont(a: &[u32], p: &[u32], n0inv: u32, out: &mut [u32]) -> bool {
+    if n0inv != 1 {
+        return false;
+    }
+    debug_assert_eq!(p.len(), a.len());
+    debug_assert_eq!(out.len(), a.len());
+
+    let mut scratch = [0u32; 32];
+
+    match a.len() {
+        8 => unsafe {
+            nistp_sqr_mont_8(
+                out.as_mut_ptr(),
+                a.as_ptr(),
+                p.as_ptr(),
+                scratch.as_mut_ptr(),
+            );
+            true
+        },
+        12 => unsafe {
+            nistp_sqr_mont_12(
+                out.as_mut_ptr(),
+                a.as_ptr(),
+                p.as_ptr(),
+                scratch.as_mut_ptr(),
+            );
+            true
+        },
+        _ => false,
+    }
+}
+
+/// Dispatch addition to assembly if a routine exists for this limb count.
+#[inline]
+pub fn try_add_mod(a: &[u32], b: &[u32], p: &[u32], out: &mut [u32]) -> bool {
+    debug_assert_eq!(b.len(), a.len());
+    debug_assert_eq!(p.len(), a.len());
+    debug_assert_eq!(out.len(), a.len());
+
+    match a.len() {
+        8 => unsafe {
+            nistp_add_mod_8(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), p.as_ptr());
+            true
+        },
+        12 => unsafe {
+            nistp_add_mod_12(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), p.as_ptr());
+            true
+        },
+        _ => false,
+    }
+}
+
+/// Dispatch subtraction to assembly if a routine exists for this limb count.
+#[inline]
+pub fn try_sub_mod(a: &[u32], b: &[u32], p: &[u32], out: &mut [u32]) -> bool {
+    debug_assert_eq!(b.len(), a.len());
+    debug_assert_eq!(p.len(), a.len());
+    debug_assert_eq!(out.len(), a.len());
+
+    match a.len() {
+        8 => unsafe {
+            nistp_sub_mod_8(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), p.as_ptr());
+            true
+        },
+        12 => unsafe {
+            nistp_sub_mod_12(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), p.as_ptr());
             true
         },
         _ => false,

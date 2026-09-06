@@ -32,7 +32,15 @@
 #define R_GOT 11u
 #define R_WANT 12u
 #define R_LIMB 13u
-volatile uint32_t g_results[16] __attribute__((used, section(".results")));
+#define R_P256_ADD_CYCLES 14u
+#define R_P256_SUB_CYCLES 15u
+#define R_P384_ADD_CYCLES 16u
+#define R_P384_SUB_CYCLES 17u
+#define R_ADD_SUB_FAILS 18u
+#define R_P256_SQR_CYCLES 19u
+#define R_P384_SQR_CYCLES 20u
+#define R_SQR_FAILS 21u
+volatile uint32_t g_results[32] __attribute__((used, section(".results")));
 
 /* Baseline: fiat-crypto's generated Montgomery multiply -- the same operation,
  * and the code RustCrypto ships. Without this the Xtensa numbers have nothing
@@ -74,11 +82,17 @@ extern void nistp_mul_mont_8(uint32_t *out, const uint32_t *a, const uint32_t *b
                              const uint32_t *p, uint32_t *scratch);
 extern void nistp_mul_mont_12(uint32_t *out, const uint32_t *a, const uint32_t *b,
                               const uint32_t *p, uint32_t *scratch);
+extern void nistp_add_mod_8(uint32_t *out, const uint32_t *a, const uint32_t *b, const uint32_t *p);
+extern void nistp_sub_mod_8(uint32_t *out, const uint32_t *a, const uint32_t *b, const uint32_t *p);
+extern void nistp_add_mod_12(uint32_t *out, const uint32_t *a, const uint32_t *b, const uint32_t *p);
+extern void nistp_sub_mod_12(uint32_t *out, const uint32_t *a, const uint32_t *b, const uint32_t *p);
+extern void nistp_sqr_mont_8(uint32_t *out, const uint32_t *a, const uint32_t *p, uint32_t *scratch);
+extern void nistp_sqr_mont_12(uint32_t *out, const uint32_t *a, const uint32_t *p, uint32_t *scratch);
 
 typedef void (*mulfn)(uint32_t *, const uint32_t *, const uint32_t *,
                       const uint32_t *, uint32_t *);
 
-static uint32_t scratch[16];
+static uint32_t scratch[32];
 
 static int eq(const uint32_t *x, const uint32_t *y, int n) {
     for (int i = 0; i < n; i++)
@@ -200,8 +214,90 @@ void xmain(void) {
         g_results[R_FIAT_P384_CYCLES] = ccount() - t0;
     }
 
-    if (!(f256 + f384)) puts_("ALL PASS\n");
-    else { puts_("FAILURES: "); putu_((uint32_t)(f256 + f384)); putc_('\n'); }
+    /* Add/sub correctness and benchmarks */
+    int add_sub_fails = 0;
+    for (int i = 0; i < P256_NCASES; i++) {
+        uint32_t s[8], d[8], rec[8];
+        const uint32_t *a = P256_CASES[i][0];
+        const uint32_t *b = P256_CASES[i][1];
+        nistp_add_mod_8(s, a, b, P256_P);
+        nistp_sub_mod_8(rec, s, b, P256_P);
+        if (!eq(rec, a, 8)) add_sub_fails++;
+        nistp_sub_mod_8(d, a, b, P256_P);
+        nistp_add_mod_8(rec, d, b, P256_P);
+        if (!eq(rec, a, 8)) add_sub_fails++;
+    }
+    for (int i = 0; i < P384_NCASES; i++) {
+        uint32_t s[12], d[12], rec[12];
+        const uint32_t *a = P384_CASES[i][0];
+        const uint32_t *b = P384_CASES[i][1];
+        nistp_add_mod_12(s, a, b, P384_P);
+        nistp_sub_mod_12(rec, s, b, P384_P);
+        if (!eq(rec, a, 12)) add_sub_fails++;
+        nistp_sub_mod_12(d, a, b, P384_P);
+        nistp_add_mod_12(rec, d, b, P384_P);
+        if (!eq(rec, a, 12)) add_sub_fails++;
+    }
+    g_results[R_ADD_SUB_FAILS] = (uint32_t)add_sub_fails;
+
+    {
+        uint32_t s8[8], s12[12];
+        const uint32_t *a8 = P256_CASES[8][0];
+        const uint32_t *b8 = P256_CASES[8][1];
+        const uint32_t *a12 = P384_CASES[8][0];
+        const uint32_t *b12 = P384_CASES[8][1];
+
+        uint32_t t0 = ccount();
+        for (unsigned i = 0; i < BENCH_ITERS; i++) nistp_add_mod_8(s8, a8, b8, P256_P);
+        g_results[R_P256_ADD_CYCLES] = ccount() - t0;
+
+        t0 = ccount();
+        for (unsigned i = 0; i < BENCH_ITERS; i++) nistp_sub_mod_8(s8, a8, b8, P256_P);
+        g_results[R_P256_SUB_CYCLES] = ccount() - t0;
+
+        t0 = ccount();
+        for (unsigned i = 0; i < BENCH_ITERS; i++) nistp_add_mod_12(s12, a12, b12, P384_P);
+        g_results[R_P384_ADD_CYCLES] = ccount() - t0;
+
+        t0 = ccount();
+        for (unsigned i = 0; i < BENCH_ITERS; i++) nistp_sub_mod_12(s12, a12, b12, P384_P);
+        g_results[R_P384_SUB_CYCLES] = ccount() - t0;
+    }
+
+    /* Squaring correctness and benchmarks */
+    int sqr_fails = 0;
+    for (int i = 0; i < P256_NCASES; i++) {
+        uint32_t sqr_res[8], mul_res[8];
+        const uint32_t *a = P256_CASES[i][0];
+        nistp_sqr_mont_8(sqr_res, a, P256_P, scratch);
+        nistp_mul_mont_8(mul_res, a, a, P256_P, scratch);
+        if (!eq(sqr_res, mul_res, 8)) sqr_fails++;
+    }
+    for (int i = 0; i < P384_NCASES; i++) {
+        uint32_t sqr_res[12], mul_res[12];
+        const uint32_t *a = P384_CASES[i][0];
+        nistp_sqr_mont_12(sqr_res, a, P384_P, scratch);
+        nistp_mul_mont_12(mul_res, a, a, P384_P, scratch);
+        if (!eq(sqr_res, mul_res, 12)) sqr_fails++;
+    }
+    g_results[R_SQR_FAILS] = (uint32_t)sqr_fails;
+
+    {
+        uint32_t am8[8], am12[12], out8[8], out12[12];
+        nistp_mul_mont_8(am8, P256_CASES[8][0], P256_R2, P256_P, scratch);
+        nistp_mul_mont_12(am12, P384_CASES[8][0], P384_R2, P384_P, scratch);
+
+        uint32_t t0 = ccount();
+        for (unsigned i = 0; i < BENCH_ITERS; i++) nistp_sqr_mont_8(out8, am8, P256_P, scratch);
+        g_results[R_P256_SQR_CYCLES] = ccount() - t0;
+
+        t0 = ccount();
+        for (unsigned i = 0; i < BENCH_ITERS; i++) nistp_sqr_mont_12(out12, am12, P384_P, scratch);
+        g_results[R_P384_SQR_CYCLES] = ccount() - t0;
+    }
+
+    if (!(f256 + f384 + add_sub_fails + sqr_fails)) puts_("ALL PASS\n");
+    else { puts_("FAILURES: "); putu_((uint32_t)(f256 + f384 + add_sub_fails + sqr_fails)); putc_('\n'); }
     puts_("p256 cycles/1000: "); putu_(g_results[R_P256_CYCLES]); putc_('\n');
     puts_("p384 cycles/1000: "); putu_(g_results[R_P384_CYCLES]); putc_('\n');
 
