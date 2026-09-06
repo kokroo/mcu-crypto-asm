@@ -35,7 +35,7 @@ All microcontroller hardware platforms cluster into five distinct architectural 
 | **SHA-512 / SHA-384** | Ed25519, P-384, Hashes | **DONE**<br>(11.7kc/blk, ~97 cpb)| 3.5×–5.5× | 1.8×–2.5× | 2.0×–3.0× | 2.0×–3.0× | **Production** (T1 Done) |
 | **Keccak / SHAKE** | ML-KEM, ML-DSA, Hashes | **DONE**<br>(15.6k cycles / 24-rnd) | 3.0×–5.0× | 1.8×–2.5× | 2.0×–3.5× | 2.0×–3.2× | **Production** (T1 Done) |
 | **Bitsliced AES** | Constant-Time AES | **DONE**<br>(Fixsliced AES-128/256) | 3.0×–5.0× | 2.0×–3.5× | 1.5× *(10× Zk)* | 2.0×–3.5× | **Production** (T1 Done) |
-| **GHASH (GCM)** | AES-GCM Authentication | 2.5×–4.0× | 3.0×–5.0× | 1.8×–2.5× | 1.8× *(8× Zbkc)*| 2.0×–3.0× | **P2 (Medium)** |
+| **GHASH (GCM)** | AES-GCM Authentication | **DONE**<br>(820c/blk, ~51 cpb) | 3.0×–5.0× | 1.8×–2.5× | 1.8× *(8× Zbkc)*| 2.0×–3.0× | **Production** (T1 Done) |
 
 ---
 
@@ -120,6 +120,11 @@ All microcontroller hardware platforms cluster into five distinct architectural 
     1. *Cache Timing Immunity*: Hardware engines or T-table software leak cache lines on MCUs with data caches. Bitslicing has zero data-dependent memory lookups.
     2. *Hardware Limitations*: Many hardware ECB accelerators only support AES-128 (no AES-192 or AES-256).
     3. *Zero Peripheral Contention / Re-entrancy*: Hardware engines require RTOS mutexes, peripheral power clocks, and DMA setup; software assembly is purely re-entrant and faster for payloads under 64–128 bytes.
+
+### 3.8. GHASH (GCM Authenticator)
+- **OpenSSL / CRYPTOGAMS `ghash-armv4.pl`** (Andy Polyakov) (Apache-2.0 / Cryptogams):
+  - *Targets*: Target 1 (ARMv7E-M / ARMv8-M Mainline), Target 3 (ARMv7-M).
+  - *Technique*: 4-bit windowed polynomial multiplication in $\text{GF}(2^{128})$ with a 256-byte precomputed table per hash key $H$. Fuses 128-bit right shifts with XORs into a 32-instruction unrolled inner loop, processing 16-byte blocks in ~820 cycles (~51 cycles/byte) on Cortex-M33.
 
 ---
 
@@ -249,7 +254,12 @@ All microcontroller hardware platforms cluster into five distinct architectural 
 - [x] **Constant-Time Bitsliced & Fixsliced AES-128, AES-192, AES-256**:
   - [x] Implement Adomnicăi-Peyrin 2-block parallel **Fixsliced AES** on Target 1 (`asm/cortex_m_aes_encrypt.S`, `asm/cortex_m_aes_keyschedule.S`, ~1,950 cycles/block AES-128, ~2,910 cycles/block AES-256).
   - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on AES-128 and AES-256 NIST SP 800-38A KATs).
-  - [ ] Implement constant-time Boyar-Peralta S-box (113–115 gates) for memory-constrained Target 2 cores.
-  - [ ] Implement **first-order masked bitsliced AES** (Schwabe-Stoffelen) for power-analysis / DPA resistance on secure embedded tokens.
-  - [ ] Support AES-XTS (256-bit and 512-bit key material) for encrypted firmware partitions and external flash.
-  - [ ] Add Target 4 (RISC-V `Zkne`/`Zknd` scalar crypto instructions) backend.
+- [x] **GHASH (Galois/Counter Mode Authentication, NIST SP 800-38D)**:
+  - [x] Target 1 assembly implementation using 4-bit windowed GF(2^128) polynomial multiplier with 256-byte precomputed table via Andy Polyakov / OpenSSL `ghash-armv4.pl` (`asm/cortex_m_ghash.S`).
+  - [x] Implements streaming multi-block `gcm_ghash_4bit` and single-block `gcm_gmult_4bit` with native little-endian table layout.
+  - [x] Safe, zero-dependency `no_std` Rust API (`src/ghash.rs`) with `Ghash`, `Htable`, `compress_blocks()`, `gmult()`, and bitwise portable fallback.
+  - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on Htable precomputation, single-block gmult [1,920 cycles], two-block streaming GHASH [1,920 cycles, 60 cpb], streaming unaligned chunks, and 1024-byte bulk throughput @ 823 µs / 52,672 cycles / ~51 cycles/byte).
+- [ ] Implement constant-time Boyar-Peralta S-box (113–115 gates) for memory-constrained Target 2 cores.
+- [ ] Implement **first-order masked bitsliced AES** (Schwabe-Stoffelen) for power-analysis / DPA resistance on secure embedded tokens.
+- [ ] Support AES-XTS (256-bit and 512-bit key material) for encrypted firmware partitions and external flash.
+- [ ] Add Target 4 (RISC-V `Zkne`/`Zknd` scalar crypto instructions) backend.

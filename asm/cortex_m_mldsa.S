@@ -587,6 +587,8 @@ inv_ntt_asm_smull_qinv:
 inv_ntt_asm_smull_q:
 .word 8380417
 
+.ltorg
+
 .section .rodata
 
 .type zetas_new332, %object
