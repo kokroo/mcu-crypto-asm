@@ -22,20 +22,20 @@ All microcontroller hardware platforms cluster into five distinct architectural 
 
 | Algorithm | Standard / Category | Target 1<br>(ARMv7E-M / ARMv8-M) | Target 2<br>(ARMv6-M) | Target 3<br>(ARMv7-M) | Target 4<br>(RISC-V RV32) | Target 5<br>(Xtensa LX6 / LX7) | Implementation Status / Priority |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **NIST P-256** | TLS 1.3, BLE, Matter | **DONE**<br>(406c mul, 61k inv) | **DONE**<br>(400ms ECDH @ 12MHz) | 1.8×–2.5× | 2.2×–3.5× | **DONE**<br>(1,274c mul, 2.19×) | **Production** (T1, T2, T5 Done) |
-| **NIST P-384** | CNSA Suite, TLS 1.3 | **DONE**<br>(1,366c mul, 3.3M comb) | 5.0×–8.0× | 2.0×–3.0× | 2.5×–4.0× | **DONE**<br>(2,886c mul, 2.96×) | **Production** (T1, T5 Done; T4 next) |
-| **Curve25519 / X25519** | WireGuard, SSH, TLS 1.3 | **DONE**<br>(~550k cycles, 8.6ms) | 5.0×–9.0× | 2.2×–3.0× | 2.5×–4.0× | 2.5×–3.5× | **Production** (T1 Done) |
-| **Ed25519** | SSH, Signal, Matter | **DONE**<br>(Point Ops / Scalarmul) | 4.5×–8.0× | 2.0×–2.8× | 2.2×–3.5× | 2.2×–3.2× | **Production** (T1 Done) |
-| **Poly1305** | WireGuard, TLS 1.3 | **DONE**<br>(~17 c/byte total) | 5.0×–8.0× | 2.5×–3.5× | 3.0×–4.5× | 3.0×–4.0× | **Production** (T1 Done) |
-| **ChaCha20** | WireGuard, TLS 1.3 | **DONE**<br>(~30 c/byte bare-metal) | 2.5×–4.0× | 1.5×–2.0× | 1.8×–2.5× | 1.8×–2.5× | **Production** (T1 Done) |
-| **RSA-2048 / 4096** | Secure Boot, PKI, TLS | **DONE**<br>(345k cycles RSA-2048) | 3.5×–6.0× | 2.0×–3.0× | 2.5×–3.5× | 2.5×–3.5× | **Production** (T1 Done) |
-| **secp256k1** | Bitcoin, Wallets | **DONE**<br>(~11.7k dbl, 101ms scalarmult) | 4.0×–7.0× | 2.0×–2.8× | 2.2×–3.2× | 2.2×–3.0× | **Production** (T1 Done) |
-| **ML-KEM (Kyber)** | Post-Quantum (FIPS 203) | **DONE**<br>(5.8kc NTT/InvNTT/Basemul) | 2.0×–3.0× | 1.8×–2.2× | 2.0×–3.5× | 2.0×–3.0× | **Production** (T1 Done) |
-| **ML-DSA (Dilithium)** | Post-Quantum (FIPS 204) | **DONE**<br>(11.7kc NTT/InvNTT, 3.9kc PW) | 2.0×–2.8× | 1.6×–2.0× | 2.0×–3.5× | 2.0×–3.0× | **Production** (T1 Done) |
-| **SHA-512 / SHA-384** | Ed25519, P-384, Hashes | **DONE**<br>(11.7kc/blk, ~97 cpb)| 3.5×–5.5× | 1.8×–2.5× | 2.0×–3.0× | 2.0×–3.0× | **Production** (T1 Done) |
-| **Keccak / SHAKE** | ML-KEM, ML-DSA, Hashes | **DONE**<br>(15.6k cycles / 24-rnd) | 3.0×–5.0× | 1.8×–2.5× | 2.0×–3.5× | 2.0×–3.2× | **Production** (T1 Done) |
-| **Bitsliced AES** | Constant-Time AES | **DONE**<br>(Fixsliced AES-128/256) | 3.0×–5.0× | 2.0×–3.5× | 1.5× *(10× Zk)* | 2.0×–3.5× | **Production** (T1 Done) |
-| **GHASH (GCM)** | AES-GCM Authentication | **DONE**<br>(820c/blk, ~51 cpb) | 3.0×–5.0× | 1.8×–2.5× | 1.8× *(8× Zbkc)*| 2.0×–3.0× | **Production** (T1 Done) |
+| **NIST P-256** | TLS 1.3, BLE, Matter | ✅ **DONE**<br>(406c mul, 61k inv) | ✅ **DONE**<br>(400ms ECDH @ 12MHz) | 1.8×–2.5× | 2.2×–3.5× | ✅ **DONE**<br>(1,274c mul, 2.19×) | ✅ **Production** (T1, T2, T5 Done) |
+| **NIST P-384** | CNSA Suite, TLS 1.3 | ✅ **DONE**<br>(1,366c mul, 3.3M comb) | 5.0×–8.0× | 2.0×–3.0× | 2.5×–4.0× | ✅ **DONE**<br>(2,886c mul, 2.96×) | ✅ **Production** (T1, T5 Done; T4 next) |
+| **Curve25519 / X25519** | WireGuard, SSH, TLS 1.3 | ✅ **DONE**<br>(~550k cycles, 8.6ms) | 5.0×–9.0× | 2.2×–3.0× | 2.5×–4.0× | 2.5×–3.5× | ✅ **Production** (T1 Done) |
+| **Ed25519** | SSH, Signal, Matter | ✅ **DONE**<br>(Point Ops / Scalarmul) | 4.5×–8.0× | 2.0×–2.8× | 2.2×–3.5× | 2.2×–3.2× | ✅ **Production** (T1 Done) |
+| **Poly1305** | WireGuard, TLS 1.3 | ✅ **DONE**<br>(~17 c/byte total) | 5.0×–8.0× | 2.5×–3.5× | 3.0×–4.5× | 3.0×–4.0× | ✅ **Production** (T1 Done) |
+| **ChaCha20** | WireGuard, TLS 1.3 | ✅ **DONE**<br>(~30 c/byte bare-metal) | 2.5×–4.0× | 1.5×–2.0× | 1.8×–2.5× | 1.8×–2.5× | ✅ **Production** (T1 Done) |
+| **RSA-2048 / 4096** | Secure Boot, PKI, TLS | ✅ **DONE**<br>(345k cycles RSA-2048) | 3.5×–6.0× | 2.0×–3.0× | 2.5×–3.5× | 2.5×–3.5× | ✅ **Production** (T1 Done) |
+| **secp256k1** | Bitcoin, Wallets | ✅ **DONE**<br>(~11.7k dbl, 101ms scalarmult) | 4.0×–7.0× | 2.0×–2.8× | 2.2×–3.2× | 2.2×–3.0× | ✅ **Production** (T1 Done) |
+| **ML-KEM (Kyber)** | Post-Quantum (FIPS 203) | ✅ **DONE**<br>(5.8kc NTT/InvNTT/Basemul) | 2.0×–3.0× | 1.8×–2.2× | 2.0×–3.5× | 2.0×–3.0× | ✅ **Production** (T1 Done) |
+| **ML-DSA (Dilithium)** | Post-Quantum (FIPS 204) | ✅ **DONE**<br>(11.7kc NTT/InvNTT, 3.9kc PW) | 2.0×–2.8× | 1.6×–2.0× | 2.0×–3.5× | 2.0×–3.0× | ✅ **Production** (T1 Done) |
+| **SHA-512 / SHA-384** | Ed25519, P-384, Hashes | ✅ **DONE**<br>(11.7kc/blk, ~97 cpb)| 3.5×–5.5× | 1.8×–2.5× | 2.0×–3.0× | 2.0×–3.0× | ✅ **Production** (T1 Done) |
+| **Keccak / SHAKE** | ML-KEM, ML-DSA, Hashes | ✅ **DONE**<br>(15.6k cycles / 24-rnd) | 3.0×–5.0× | 1.8×–2.5× | 2.0×–3.5× | 2.0×–3.2× | ✅ **Production** (T1 Done) |
+| **Bitsliced AES** | Constant-Time AES | ✅ **DONE**<br>(Fixsliced AES-128/256) | 3.0×–5.0× | 2.0×–3.5× | 1.5× *(10× Zk)* | 2.0×–3.5× | ✅ **Production** (T1 Done) |
+| **GHASH (GCM)** | AES-GCM Authentication | ✅ **DONE**<br>(820c/blk, ~51 cpb) | 3.0×–5.0× | 1.8×–2.5× | 1.8× *(8× Zbkc)*| 2.0×–3.0× | ✅ **Production** (T1 Done) |
 
 ---
 
@@ -131,9 +131,9 @@ All microcontroller hardware platforms cluster into five distinct architectural 
 ## 4. Actionable TODO Tracker
 
 ### Phase 1: Port Current NIST P-256 & P-384 to Additional ISAs
-- [x] **Target 1: ARMv7E-M / ARMv8-M Mainline (Cortex-M4 / Cortex-M33) P-256**: Hand-written UMAAL assembly, batch affine table, Bernstein-Yang `mod_n_inv`.
-- [x] **Target 1: ARMv7E-M / ARMv8-M Mainline (Cortex-M4 / Cortex-M33) P-384**: Hand-written 12-limb unrolled UMAAL multiplication, comb scalar mul.
-- [x] **Embassy `P256Ops` Driver**: Fully integrated and tested on hardware with zero secret branches.
+- [x] ✅ **Target 1: ARMv7E-M / ARMv8-M Mainline (Cortex-M4 / Cortex-M33) P-256**: Hand-written UMAAL assembly, batch affine table, Bernstein-Yang `mod_n_inv`.
+- [x] ✅ **Target 1: ARMv7E-M / ARMv8-M Mainline (Cortex-M4 / Cortex-M33) P-384**: Hand-written 12-limb unrolled UMAAL multiplication, comb scalar mul.
+- [x] ✅ **Embassy `P256Ops` Driver**: Fully integrated and tested on hardware with zero secret branches.
   - **Live Hardware Verification (Target 1: Cortex-M33 @ 64 MHz, RAM-only execution)**:
     | Benchmark Operation | `driver_mcu_crypto_asm` | `driver_p256_cm4` (Emil) | Speedup / Advantage |
     | :--- | :---: | :---: | :--- |
@@ -146,20 +146,20 @@ All microcontroller hardware platforms cluster into five distinct architectural 
     | **`lincomb`** (verify) | 19,385 µs | 16,375 µs | Emil faster by ~3.0 ms (joint sliding window) |
     | **`TLS 1.3 ECDHE`** | 19,382 µs | 18,732 µs | Essentially neck-and-neck |
 
-- [x] **Target 2: ARMv6-M (Cortex-M0 / Cortex-M0+) P-256 Backend**:
-  - [x] Adapt and vendor 16-bit Thumb-1 assembly from `Emill/P256-cortex-ecdh` (`asm/cortex_m0_p256.S`).
-  - [x] Implement constant-time Thumb-1 field arithmetic (`emill_cm0_p256_mul_mont`, `sqr_mont`, `add_mod`, `sub_mod`).
-  - [x] Hook into `mcu-crypto-asm` build system with `cfg(nistp_asm_cm0)` on `thumbv6m-none-eabi` / `thumbv8m.base`.
-  - [x] Hardware verification on physical Target 2 (`nucleo-stm32c031c6` Cortex-M0+ @ 48 MHz) via Teleprobe (100% PASS on field arithmetic KATs + ECDH keygen & shared secret).
-- [x] **Target 5: Xtensa LX7 P-256 & P-384 Backend**:
-  - [x] Implement hand-written unrolled assembly multiplier (`nistp_mul_mont_8`, `nistp_mul_mont_12`) utilizing `SALTU` branchless carry propagation.
-  - [x] Implement dedicated Solinas Montgomery squaring (`nistp_sqr_mont_8`, `nistp_sqr_mont_12`) eliminating off-diagonal products.
-  - [x] Implement branchless constant-time modular addition and subtraction (`nistp_add_mod_*`, `nistp_sub_mod_*`).
-  - [x] Support both Windowed ABI (`asm/xtensa_lx7.S`) and Call0 ABI (`asm/xtensa_lx7_call0.S`).
-  - [x] Implement interleaved simultaneous double-scalar multiplication (`PointJacobian::lincomb` / Shamir's Trick) halving point doublings from 512 to 256 for P-256 and 768 to 384 for P-384.
-  - [x] Fast Jacobian projective ECDSA verification ($r \cdot Z^2 \equiv X \pmod p$) eliminating modular field inversion $\pmod p$.
-  - [x] Fully integrated into `mcu-crypto-asm` backend dispatch and Embassy `P256Ops` driver.
-  - [x] Hardware verification on physical Target 5 (Xtensa LX7 @ 240 MHz) via J-Link JTAG / OpenOCD (100% bit-exact across all 128 KAT vectors, 0 failures):
+- [x] ✅ **Target 2: ARMv6-M (Cortex-M0 / Cortex-M0+) P-256 Backend**:
+  - [x] ✅ Adapt and vendor 16-bit Thumb-1 assembly from `Emill/P256-cortex-ecdh` (`asm/cortex_m0_p256.S`).
+  - [x] ✅ Implement constant-time Thumb-1 field arithmetic (`emill_cm0_p256_mul_mont`, `sqr_mont`, `add_mod`, `sub_mod`).
+  - [x] ✅ Hook into `mcu-crypto-asm` build system with `cfg(nistp_asm_cm0)` on `thumbv6m-none-eabi` / `thumbv8m.base`.
+  - [x] ✅ Hardware verification on physical Target 2 (`nucleo-stm32c031c6` Cortex-M0+ @ 48 MHz) via Teleprobe (100% PASS on field arithmetic KATs + ECDH keygen & shared secret).
+- [x] ✅ **Target 5: Xtensa LX7 P-256 & P-384 Backend**:
+  - [x] ✅ Implement hand-written unrolled assembly multiplier (`nistp_mul_mont_8`, `nistp_mul_mont_12`) utilizing `SALTU` branchless carry propagation.
+  - [x] ✅ Implement dedicated Solinas Montgomery squaring (`nistp_sqr_mont_8`, `nistp_sqr_mont_12`) eliminating off-diagonal products.
+  - [x] ✅ Implement branchless constant-time modular addition and subtraction (`nistp_add_mod_*`, `nistp_sub_mod_*`).
+  - [x] ✅ Support both Windowed ABI (`asm/xtensa_lx7.S`) and Call0 ABI (`asm/xtensa_lx7_call0.S`).
+  - [x] ✅ Implement interleaved simultaneous double-scalar multiplication (`PointJacobian::lincomb` / Shamir's Trick) halving point doublings from 512 to 256 for P-256 and 768 to 384 for P-384.
+  - [x] ✅ Fast Jacobian projective ECDSA verification ($r \cdot Z^2 \equiv X \pmod p$) eliminating modular field inversion $\pmod p$.
+  - [x] ✅ Fully integrated into `mcu-crypto-asm` backend dispatch and Embassy `P256Ops` driver.
+  - [x] ✅ Hardware verification on physical Target 5 (Xtensa LX7 @ 240 MHz) via J-Link JTAG / OpenOCD (100% bit-exact across all 128 KAT vectors, 0 failures):
     | Operation | Routine | Physical Target 5 @ 240 MHz | Fiat-Crypto (RustCrypto) | Speedup / Status |
     | :--- | :--- | :---: | :---: | :--- |
     | **P-256 Mul** | `nistp_mul_mont_8` | **1,274 cycles** (5.3 µs) | 2,795 cycles (11.6 µs) | 🏆 **2.19× faster** |
@@ -177,11 +177,11 @@ All microcontroller hardware platforms cluster into five distinct architectural 
 ---
 
 ### Phase 2: Modern Elliptic Curves (Curve25519 / X25519 & Ed25519)
-- [x] **Target 1: ARMv7E-M / ARMv8-M Mainline X25519 & Ed25519 Backend**:
-  - [x] Integrate `cortex_m_fe25519.S`, `cortex_m_curve25519.S`, and `cortex_m_ed25519.S` from [`embassy-rs/cortex25519`](https://github.com/embassy-rs/cortex25519).
-  - [x] Target cycle goal: **550,720 cycles on Target 1** (8.6 ms @ 64 MHz on Cortex-M33).
-  - [x] Support X25519 ECDH key agreement (RFC 7748) and Ed25519 Edwards point arithmetic.
-  - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on RFC 7748 and Wycheproof test vectors).
+- [x] ✅ **Target 1: ARMv7E-M / ARMv8-M Mainline X25519 & Ed25519 Backend**:
+  - [x] ✅ Integrate `cortex_m_fe25519.S`, `cortex_m_curve25519.S`, and `cortex_m_ed25519.S` from [`embassy-rs/cortex25519`](https://github.com/embassy-rs/cortex25519).
+  - [x] ✅ Target cycle goal: **550,720 cycles on Target 1** (8.6 ms @ 64 MHz on Cortex-M33).
+  - [x] ✅ Support X25519 ECDH key agreement (RFC 7748) and Ed25519 Edwards point arithmetic.
+  - [x] ✅ Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on RFC 7748 and Wycheproof test vectors).
 - [ ] **Target 5: Xtensa LX6 / LX7 X25519 Backend**:
   - [ ] Integrate MAC16-optimized assembly from [`aCinal/esp-x25519`](https://github.com/aCinal/esp-x25519) (17 15-bit limbs, 40-bit accumulator registers `acclo`/`acchi`, hardware `loop`).
   - [ ] Provide constant-time, zero-table X25519 in bare-metal Rust without external C dependencies.
@@ -191,74 +191,74 @@ All microcontroller hardware platforms cluster into five distinct architectural 
 ---
 
 ### Phase 2.5: secp256k1 (Bitcoin / Koblitz Curve)
-- [x] **Target 1: ARMv7E-M / ARMv8-M Mainline secp256k1 Backend**:
-  - [x] Integrate UMAAL multi-precision multiplication and squaring via `asm/cortex_m_bignum.S`.
-  - [x] Fast pseudo-Mersenne Solinas reduction modulo $p = 2^{256} - 2^{32} - 977$.
-  - [x] Complete Renes–Costello–Batina addition formulas for $a = 0$ (Algorithm 1) with zero exception branches.
-  - [x] Constant-time Montgomery ladder scalar multiplication over all 256 bits.
-  - [x] SEC1 compressed (33B) and uncompressed (65B) point serialization/deserialization.
-  - [x] ECDH key agreement and public key derivation.
-  - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on point doubling @ 183 µs / 11,712 cycles, RFC 6979 Section A.2.5 keygen @ 101 ms, SEC1 33B/65B roundtrip, and ECDH shared secret agreement @ 101 ms).
+- [x] ✅ **Target 1: ARMv7E-M / ARMv8-M Mainline secp256k1 Backend**:
+  - [x] ✅ Integrate UMAAL multi-precision multiplication and squaring via `asm/cortex_m_bignum.S`.
+  - [x] ✅ Fast pseudo-Mersenne Solinas reduction modulo $p = 2^{256} - 2^{32} - 977$.
+  - [x] ✅ Complete Renes–Costello–Batina addition formulas for $a = 0$ (Algorithm 1) with zero exception branches.
+  - [x] ✅ Constant-time Montgomery ladder scalar multiplication over all 256 bits.
+  - [x] ✅ SEC1 compressed (33B) and uncompressed (65B) point serialization/deserialization.
+  - [x] ✅ ECDH key agreement and public key derivation.
+  - [x] ✅ Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on point doubling @ 183 µs / 11,712 cycles, RFC 6979 Section A.2.5 keygen @ 101 ms, SEC1 33B/65B roundtrip, and ECDH shared secret agreement @ 101 ms).
 - [ ] **Target 2: ARMv6-M (Cortex-M0 / Cortex-M0+) secp256k1**:
   - [ ] Adapt 16-bit Thumb-1 routines from `third_party/micro-ecc` (`asm_arm_m0.inc`).
 
 ---
 
 ### Phase 3: High-Speed Symmetric AEAD (Poly1305 & ChaCha20)
-- [x] **Poly1305 One-Time Authenticator (RFC 8439)**:
-  - [x] Implement Target 1 assembly inner loop using `UMLAL` (`asm/cortex_m_poly1305.S`).
-  - [x] High-speed constant-time multi-precision evaluation (~17 cycles/byte total bare-metal throughput).
-  - [x] Implement constant-time clamping and final reduction modulo $2^{130}-5$.
-  - [x] Host and target KAT test vectors from RFC 8439.
-  - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on RFC 8439 test vector and 1024-byte benchmark).
-- [x] **ChaCha20 Stream Cipher**:
-  - [x] Implement ARM assembly block function holding all 8 active round state words in registers without stack spills (`asm/cortex_m_chacha20.S`).
-  - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on RFC 8439 Section 2.3.2 block function, Section 2.4.2 encryption, and 1024-byte benchmark @ ~30 c/byte).
+- [x] ✅ **Poly1305 One-Time Authenticator (RFC 8439)**:
+  - [x] ✅ Implement Target 1 assembly inner loop using `UMLAL` (`asm/cortex_m_poly1305.S`).
+  - [x] ✅ High-speed constant-time multi-precision evaluation (~17 cycles/byte total bare-metal throughput).
+  - [x] ✅ Implement constant-time clamping and final reduction modulo $2^{130}-5$.
+  - [x] ✅ Host and target KAT test vectors from RFC 8439.
+  - [x] ✅ Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on RFC 8439 test vector and 1024-byte benchmark).
+- [x] ✅ **ChaCha20 Stream Cipher**:
+  - [x] ✅ Implement ARM assembly block function holding all 8 active round state words in registers without stack spills (`asm/cortex_m_chacha20.S`).
+  - [x] ✅ Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on RFC 8439 Section 2.3.2 block function, Section 2.4.2 encryption, and 1024-byte benchmark @ ~30 c/byte).
 
 ---
 
 ### Phase 4: Big-Integer Modular Exponentiation & RSA
-- [x] **Integrate `Emill/rsa-armv7` Bignum Engine**:
-  - [x] Vendor `asm/cortex_m_bignum.S` Montgomery multiplication, squaring, reduction routines.
-  - [x] Create Rust `no_std` wrapper (`src/rsa.rs`) for big-integer modular exponentiation ($a^b \pmod n$).
-  - [x] Support RSA-1024, RSA-2048, and RSA-4096 public operations (verification) with arbitrary exponents.
-  - [x] Constant-time Montgomery modular arithmetic.
-  - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on RSA-1024 [1.7 ms] and RSA-2048 [5.4 ms] known-answer tests).
+- [x] ✅ **Integrate `Emill/rsa-armv7` Bignum Engine**:
+  - [x] ✅ Vendor `asm/cortex_m_bignum.S` Montgomery multiplication, squaring, reduction routines.
+  - [x] ✅ Create Rust `no_std` wrapper (`src/rsa.rs`) for big-integer modular exponentiation ($a^b \pmod n$).
+  - [x] ✅ Support RSA-1024, RSA-2048, and RSA-4096 public operations (verification) with arbitrary exponents.
+  - [x] ✅ Constant-time Montgomery modular arithmetic.
+  - [x] ✅ Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on RSA-1024 [1.7 ms] and RSA-2048 [5.4 ms] known-answer tests).
 
 ---
 
 ### Phase 5: Post-Quantum Cryptography (NIST FIPS 203 & 204)
-- [x] **ML-KEM (Kyber-512 / 768 / 1024) Target 1 NTT Acceleration**:
-  - [x] Adapt PQM4's hand-written SIMD NTT butterflies (`SMLABB`/`PKHTB`, Plantard arithmetic, `fastntt.S`, `fastinvntt.S`, `fastbasemul.S`, `reduce.S`, `fastaddsub.S`).
-  - [x] Fast Barrett and Plantard reduction modulo $q = 3329$ (`asm_barrett_reduce`, `plant_red`).
-  - [x] Implement safe `no_std` Rust API with `Polynomial` (`[i16; 256]`): `ntt()`, `invntt()`, `basemul()`, `basemul_acc()`, `mul_ring()`, `add()`, `sub()`, `reduce()`, and 12-bit serialization (`from_bytes`/`to_bytes`).
-  - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on zero poly, vector addition [1,920c], vector subtraction [1,920c], Barrett reduction [1,920c], forward NTT [5,824c], inverse NTT [5,824c], NTT basemul [5,824c], full ring multiplication [25,344c] verified bit-exact against schoolbook math, basemul accumulation, and 12-bit serialization).
-- [x] **ML-DSA (Dilithium-2 / 3 / 5) Target 1 NTT Acceleration**:
-  - [x] Adapt PQM4's SIMD NTT for modulus $q = 8380417$ (`ntt.S`, `pointwise_mont.s`, `vector.s`, `macros.i`).
-  - [x] Fast Montgomery reduction and conditional modular addition modulo $q = 8380417$ (`asm_reduce32`, `asm_caddq`).
-  - [x] Implement safe `no_std` Rust API with `Polynomial` (`[i32; 256]`): `ntt()`, `invntt_tomont()`, `pointwise_mont()`, `pointwise_acc_mont()`, `mul_ring()`, `reduce32()`, `caddq()`, `add()`, `sub()`.
-  - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on zero poly, vector addition [1,920c], vector subtraction [1,920c], reduce32 [1,920c], caddq [0, Q-1] range, forward NTT [11,712c], inverse NTT [11,712c], pointwise Montgomery multiplication [3,904c], full ring multiplication [46,848c] verified bit-exact against schoolbook math, and pointwise accumulation).
+- [x] ✅ **ML-KEM (Kyber-512 / 768 / 1024) Target 1 NTT Acceleration**:
+  - [x] ✅ Adapt PQM4's hand-written SIMD NTT butterflies (`SMLABB`/`PKHTB`, Plantard arithmetic, `fastntt.S`, `fastinvntt.S`, `fastbasemul.S`, `reduce.S`, `fastaddsub.S`).
+  - [x] ✅ Fast Barrett and Plantard reduction modulo $q = 3329$ (`asm_barrett_reduce`, `plant_red`).
+  - [x] ✅ Implement safe `no_std` Rust API with `Polynomial` (`[i16; 256]`): `ntt()`, `invntt()`, `basemul()`, `basemul_acc()`, `mul_ring()`, `add()`, `sub()`, `reduce()`, and 12-bit serialization (`from_bytes`/`to_bytes`).
+  - [x] ✅ Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on zero poly, vector addition [1,920c], vector subtraction [1,920c], Barrett reduction [1,920c], forward NTT [5,824c], inverse NTT [5,824c], NTT basemul [5,824c], full ring multiplication [25,344c] verified bit-exact against schoolbook math, basemul accumulation, and 12-bit serialization).
+- [x] ✅ **ML-DSA (Dilithium-2 / 3 / 5) Target 1 NTT Acceleration**:
+  - [x] ✅ Adapt PQM4's SIMD NTT for modulus $q = 8380417$ (`ntt.S`, `pointwise_mont.s`, `vector.s`, `macros.i`).
+  - [x] ✅ Fast Montgomery reduction and conditional modular addition modulo $q = 8380417$ (`asm_reduce32`, `asm_caddq`).
+  - [x] ✅ Implement safe `no_std` Rust API with `Polynomial` (`[i32; 256]`): `ntt()`, `invntt_tomont()`, `pointwise_mont()`, `pointwise_acc_mont()`, `mul_ring()`, `reduce32()`, `caddq()`, `add()`, `sub()`.
+  - [x] ✅ Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on zero poly, vector addition [1,920c], vector subtraction [1,920c], reduce32 [1,920c], caddq [0, Q-1] range, forward NTT [11,712c], inverse NTT [11,712c], pointwise Montgomery multiplication [3,904c], full ring multiplication [46,848c] verified bit-exact against schoolbook math, and pointwise accumulation).
 
 ---
 
 ### Phase 6: Hashes & Symmetric Primitives
-- [x] **SHA-512 / SHA-384 Assembly**:
-  - [x] Target 1 assembly implementation pairing 32-bit registers for 64-bit words via Andy Polyakov / OpenSSL `sha512-armv4.pl` (`asm/cortex_m_sha512.S`).
-  - [x] Eliminates compiler register spills, speeding up Ed25519, P-384 certificate parsing, and FIPS 180-4 hashing.
-  - [x] Safe, zero-dependency `no_std` Rust API (`src/sha512.rs`) with `Sha512`, `Sha384`, `compress_blocks()`, and portable fallback.
-  - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on raw 128-byte block compress [11,712 cycles, 91 cpb], NIST empty string, NIST 'abc', NIST 112-byte multi-block vectors, streaming incremental updates, and 1024-byte bulk throughput @ ~97 cycles/byte).
-- [x] **Keccak-f[1600] / SHAKE-128 / SHAKE-256**:
-  - [x] Integrate 32-bit interleaved bit-sliced ARM assembly (`asm/cortex_m_keccak.S`, `src/keccak.rs`).
-  - [x] Full FIPS 202 sponge implementation (SHA3-256, SHA3-512, SHAKE128, SHAKE256).
-  - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on 24-round permutation @ 15,616 cycles, SHA3-256/512, and SHAKE-128/256 KATs).
-- [x] **Constant-Time Bitsliced & Fixsliced AES-128, AES-192, AES-256**:
-  - [x] Implement Adomnicăi-Peyrin 2-block parallel **Fixsliced AES** on Target 1 (`asm/cortex_m_aes_encrypt.S`, `asm/cortex_m_aes_keyschedule.S`, ~1,950 cycles/block AES-128, ~2,910 cycles/block AES-256).
-  - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on AES-128 and AES-256 NIST SP 800-38A KATs).
-- [x] **GHASH (Galois/Counter Mode Authentication, NIST SP 800-38D)**:
-  - [x] Target 1 assembly implementation using 4-bit windowed GF(2^128) polynomial multiplier with 256-byte precomputed table via Andy Polyakov / OpenSSL `ghash-armv4.pl` (`asm/cortex_m_ghash.S`).
-  - [x] Implements streaming multi-block `gcm_ghash_4bit` and single-block `gcm_gmult_4bit` with native little-endian table layout.
-  - [x] Safe, zero-dependency `no_std` Rust API (`src/ghash.rs`) with `Ghash`, `Htable`, `compress_blocks()`, `gmult()`, and bitwise portable fallback.
-  - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on Htable precomputation, single-block gmult [1,920 cycles], two-block streaming GHASH [1,920 cycles, 60 cpb], streaming unaligned chunks, and 1024-byte bulk throughput @ 823 µs / 52,672 cycles / ~51 cycles/byte).
+- [x] ✅ **SHA-512 / SHA-384 Assembly**:
+  - [x] ✅ Target 1 assembly implementation pairing 32-bit registers for 64-bit words via Andy Polyakov / OpenSSL `sha512-armv4.pl` (`asm/cortex_m_sha512.S`).
+  - [x] ✅ Eliminates compiler register spills, speeding up Ed25519, P-384 certificate parsing, and FIPS 180-4 hashing.
+  - [x] ✅ Safe, zero-dependency `no_std` Rust API (`src/sha512.rs`) with `Sha512`, `Sha384`, `compress_blocks()`, and portable fallback.
+  - [x] ✅ Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on raw 128-byte block compress [11,712 cycles, 91 cpb], NIST empty string, NIST 'abc', NIST 112-byte multi-block vectors, streaming incremental updates, and 1024-byte bulk throughput @ ~97 cycles/byte).
+- [x] ✅ **Keccak-f[1600] / SHAKE-128 / SHAKE-256**:
+  - [x] ✅ Integrate 32-bit interleaved bit-sliced ARM assembly (`asm/cortex_m_keccak.S`, `src/keccak.rs`).
+  - [x] ✅ Full FIPS 202 sponge implementation (SHA3-256, SHA3-512, SHAKE128, SHAKE256).
+  - [x] ✅ Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on 24-round permutation @ 15,616 cycles, SHA3-256/512, and SHAKE-128/256 KATs).
+- [x] ✅ **Constant-Time Bitsliced & Fixsliced AES-128, AES-192, AES-256**:
+  - [x] ✅ Implement Adomnicăi-Peyrin 2-block parallel **Fixsliced AES** on Target 1 (`asm/cortex_m_aes_encrypt.S`, `asm/cortex_m_aes_keyschedule.S`, ~1,950 cycles/block AES-128, ~2,910 cycles/block AES-256).
+  - [x] ✅ Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on AES-128 and AES-256 NIST SP 800-38A KATs).
+- [x] ✅ **GHASH (Galois/Counter Mode Authentication, NIST SP 800-38D)**:
+  - [x] ✅ Target 1 assembly implementation using 4-bit windowed GF(2^128) polynomial multiplier with 256-byte precomputed table via Andy Polyakov / OpenSSL `ghash-armv4.pl` (`asm/cortex_m_ghash.S`).
+  - [x] ✅ Implements streaming multi-block `gcm_ghash_4bit` and single-block `gcm_gmult_4bit` with native little-endian table layout.
+  - [x] ✅ Safe, zero-dependency `no_std` Rust API (`src/ghash.rs`) with `Ghash`, `Htable`, `compress_blocks()`, `gmult()`, and bitwise portable fallback.
+  - [x] ✅ Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on Htable precomputation, single-block gmult [1,920 cycles], two-block streaming GHASH [1,920 cycles, 60 cpb], streaming unaligned chunks, and 1024-byte bulk throughput @ 823 µs / 52,672 cycles / ~51 cycles/byte).
 - [ ] Implement constant-time Boyar-Peralta S-box (113–115 gates) for memory-constrained Target 2 cores.
 - [ ] Implement **first-order masked bitsliced AES** (Schwabe-Stoffelen) for power-analysis / DPA resistance on secure embedded tokens.
 - [ ] Support AES-XTS (256-bit and 512-bit key material) for encrypted firmware partitions and external flash.
