@@ -3,7 +3,7 @@
 //! Accelerated on Target 1 (ARM Cortex-M4/M7/M33) and Target 3 (Cortex-M3)
 //! using hand-written 32-bit register-allocating assembly.
 
-#[cfg(nistp_asm_cm4)]
+#[cfg(cortex_m_thumb2)]
 mod asm {
     use core::arch::global_asm;
 
@@ -25,13 +25,13 @@ fn u8to32(p: &[u8]) -> u32 {
     (p[0] as u32) | ((p[1] as u32) << 8) | ((p[2] as u32) << 16) | ((p[3] as u32) << 24)
 }
 
-#[cfg(not(nistp_asm_cm4))]
+#[cfg(not(cortex_m_thumb2))]
 #[inline(always)]
 fn rotl32(v: u32, n: u32) -> u32 {
     v.rotate_left(n)
 }
 
-#[cfg(not(nistp_asm_cm4))]
+#[cfg(not(cortex_m_thumb2))]
 #[inline(always)]
 fn quarter_round(x: &mut [u32; 16], a: usize, b: usize, c: usize, d: usize) {
     x[a] = x[a].wrapping_add(x[b]);
@@ -52,12 +52,12 @@ fn quarter_round(x: &mut [u32; 16], a: usize, b: usize, c: usize, d: usize) {
 }
 
 pub fn chacha20_block(out: &mut [u8; 64], state: &[u32; 16]) {
-    #[cfg(nistp_asm_cm4)]
+    #[cfg(cortex_m_thumb2)]
     unsafe {
         asm::chacha20_block_cortex_m(out.as_mut_ptr() as *mut u32, state.as_ptr());
     }
 
-    #[cfg(not(nistp_asm_cm4))]
+    #[cfg(not(cortex_m_thumb2))]
     {
         let mut x = *state;
         for _ in 0..10 {

@@ -29,11 +29,17 @@ fn main() {
     println!("cargo:rustc-check-cfg=cfg(nistp_asm_cm4)");
     println!("cargo:rustc-check-cfg=cfg(nistp_asm_cm0)");
     println!("cargo:rustc-check-cfg=cfg(nistp_asm_xtensa)");
+    println!("cargo:rustc-check-cfg=cfg(cortex_m_thumb2)");
 
     if std::env::var("CARGO_FEATURE_FORCE_PORTABLE").is_ok() {
         return;
     }
     let target = std::env::var("TARGET").unwrap_or_default();
+
+    // --- Cortex-M3 / M4 / M7 / M33: Standard Thumb-2 (AES, ChaCha20, Keccak, Poly1305) ---
+    if target.starts_with("thumbv7em") || target.starts_with("thumbv8m.main") || target.starts_with("thumbv7m") {
+        println!("cargo:rustc-cfg=cortex_m_thumb2");
+    }
 
     // --- Cortex-M4 / M7 / M33: UMAAL, constant-latency multiplier ---
     if target.starts_with("thumbv7em") || target.starts_with("thumbv8m.main") {
@@ -45,13 +51,14 @@ fn main() {
         println!("cargo:rustc-cfg=nistp_asm_cm0");
     }
 
-    // Cortex-M3 is ARMv7-M and does have UMAAL, but its multiplier is
-    // variable-latency, so this code would not be constant time there.
+    // Cortex-M3 is ARMv7-M (Thumb-2 without DSP/UMAAL extension).
+    // AES, ChaCha20, Keccak, and Poly1305 use Thumb-2 assembly.
+    // Modular bignum ECC/RSA use portable backend.
     if target.starts_with("thumbv7m") {
         println!(
-            "cargo:warning=mcu-crypto-asm: {target} is Cortex-M3 — UMAAL exists but the \
-             multiplier is variable-latency, so the assembly would not be constant \
-             time. Using the portable backend."
+            "cargo:warning=mcu-crypto-asm: {target} is Cortex-M3 (ARMv7-M) — using Thumb-2 \
+             assembly for AES, ChaCha20, Keccak, and Poly1305. Modular bignum algorithms \
+             use portable backend."
         );
     }
 

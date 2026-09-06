@@ -4,7 +4,7 @@
 
 	.syntax unified
 	.thumb
-	.arch armv7e-m
+	.arch armv7-m
 	.text
 	.align 2
 

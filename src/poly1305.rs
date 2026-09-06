@@ -3,7 +3,7 @@
 //! Accelerated on Target 1 (ARM Cortex-M4/M7/M33) using hand-written `UMAAL`
 //! assembly instructions, processing each 16-byte block in ~2.8 cycles/byte.
 
-#[cfg(nistp_asm_cm4)]
+#[cfg(cortex_m_thumb2)]
 mod asm {
     use core::arch::global_asm;
 
@@ -64,7 +64,7 @@ impl Poly1305 {
         self.h[3] += (u8to32(&block[9..13]) >> 6) & 0x3ffffff;
         self.h[4] += (u8to32(&block[12..16]) >> 8) | hibit;
 
-        #[cfg(nistp_asm_cm4)]
+        #[cfg(cortex_m_thumb2)]
         unsafe {
             asm::poly1305_mul_reduce_umaal(
                 self.h.as_mut_ptr(),
@@ -73,7 +73,7 @@ impl Poly1305 {
             );
         }
 
-        #[cfg(not(nistp_asm_cm4))]
+        #[cfg(not(cortex_m_thumb2))]
         {
             let d0 = (self.h[0] as u64) * (self.r[0] as u64)
                 + (self.h[1] as u64) * (self.s[3] as u64)

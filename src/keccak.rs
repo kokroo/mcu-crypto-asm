@@ -3,7 +3,7 @@
 //! Accelerated on Target 1 (ARM Cortex-M4/M7/M33) and Target 3 (Cortex-M3)
 //! using 32-bit bit-interleaved assembly from Adomnicăi / XKCP.
 
-#[cfg(nistp_asm_cm4)]
+#[cfg(cortex_m_thumb2)]
 mod asm {
     use core::arch::global_asm;
 
@@ -19,9 +19,9 @@ mod asm {
 }
 
 pub struct KeccakState {
-    #[cfg(nistp_asm_cm4)]
+    #[cfg(cortex_m_thumb2)]
     state: [u32; 50],
-    #[cfg(not(nistp_asm_cm4))]
+    #[cfg(not(cortex_m_thumb2))]
     state: [u64; 25],
 }
 
@@ -33,7 +33,7 @@ impl Default for KeccakState {
 
 impl KeccakState {
     pub fn new() -> Self {
-        #[cfg(nistp_asm_cm4)]
+        #[cfg(cortex_m_thumb2)]
         {
             let mut s = KeccakState { state: [0u32; 50] };
             unsafe {
@@ -42,31 +42,31 @@ impl KeccakState {
             s
         }
 
-        #[cfg(not(nistp_asm_cm4))]
+        #[cfg(not(cortex_m_thumb2))]
         {
             KeccakState { state: [0u64; 25] }
         }
     }
 
     pub fn permute_24(&mut self) {
-        #[cfg(nistp_asm_cm4)]
+        #[cfg(cortex_m_thumb2)]
         unsafe {
             asm::KeccakP1600_Permute_24rounds(self.state.as_mut_ptr());
         }
 
-        #[cfg(not(nistp_asm_cm4))]
+        #[cfg(not(cortex_m_thumb2))]
         {
             portable::keccak_f1600(&mut self.state);
         }
     }
 
     pub fn permute_12(&mut self) {
-        #[cfg(nistp_asm_cm4)]
+        #[cfg(cortex_m_thumb2)]
         unsafe {
             asm::KeccakP1600_Permute_12rounds(self.state.as_mut_ptr());
         }
 
-        #[cfg(not(nistp_asm_cm4))]
+        #[cfg(not(cortex_m_thumb2))]
         {
             portable::keccak_p1600_12(&mut self.state);
         }
@@ -77,12 +77,12 @@ impl KeccakState {
             return;
         }
 
-        #[cfg(nistp_asm_cm4)]
+        #[cfg(cortex_m_thumb2)]
         unsafe {
             asm::KeccakP1600_AddBytes(self.state.as_mut_ptr(), data.as_ptr(), offset, data.len());
         }
 
-        #[cfg(not(nistp_asm_cm4))]
+        #[cfg(not(cortex_m_thumb2))]
         {
             for (i, &b) in data.iter().enumerate() {
                 let pos = offset + i;
@@ -98,12 +98,12 @@ impl KeccakState {
             return;
         }
 
-        #[cfg(nistp_asm_cm4)]
+        #[cfg(cortex_m_thumb2)]
         unsafe {
             asm::KeccakP1600_ExtractBytes(self.state.as_ptr(), out.as_mut_ptr(), offset, out.len());
         }
 
-        #[cfg(not(nistp_asm_cm4))]
+        #[cfg(not(cortex_m_thumb2))]
         {
             for (i, b) in out.iter_mut().enumerate() {
                 let pos = offset + i;
