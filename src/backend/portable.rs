@@ -220,7 +220,7 @@ fn cond_sub_p_n<const N: usize>(t: &[u32; N], hi: u32, p: &[u32], out: &mut [u32
 /// Constant-time modular division by 2 for odd modulus `p`: `out = a / 2 mod p`.
 pub fn div2_n<const N: usize>(a: &[u32; N], p: &[u32], out: &mut [u32; N]) {
     debug_assert_eq!(p.len(), N);
-    let mask = core::hint::black_box(((a[0] & 1) as u32).wrapping_neg());
+    let mask = core::hint::black_box((a[0] & 1).wrapping_neg());
     let mut carry = 0u64;
     let mut sum = [0u32; N];
     for i in 0..N {

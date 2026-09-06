@@ -544,9 +544,20 @@ impl<const N: usize> Point<N> {
                 } else {
                     let mut z_inv = [0u32; 8];
                     unsafe {
-                        crate::backend::cortex_m4::p256::emill_p256_modinv_p(z_inv.as_mut_ptr(), z_mont.as_ptr());
-                        crate::backend::cortex_m4::p256::emill_p256_mul_mont(aff_mont_x.as_mut_ptr(), self.x.as_mont_limbs().as_ptr(), z_inv.as_ptr());
-                        crate::backend::cortex_m4::p256::emill_p256_mul_mont(aff_mont_y.as_mut_ptr(), self.y.as_mont_limbs().as_ptr(), z_inv.as_ptr());
+                        crate::backend::cortex_m4::p256::emill_p256_modinv_p(
+                            z_inv.as_mut_ptr(),
+                            z_mont.as_ptr(),
+                        );
+                        crate::backend::cortex_m4::p256::emill_p256_mul_mont(
+                            aff_mont_x.as_mut_ptr(),
+                            self.x.as_mont_limbs().as_ptr(),
+                            z_inv.as_ptr(),
+                        );
+                        crate::backend::cortex_m4::p256::emill_p256_mul_mont(
+                            aff_mont_y.as_mut_ptr(),
+                            self.y.as_mont_limbs().as_ptr(),
+                            z_inv.as_ptr(),
+                        );
                     }
                 }
                 let mut x = [0u32; 8];
