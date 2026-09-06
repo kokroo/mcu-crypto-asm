@@ -390,15 +390,12 @@ pub fn mod_n_inv(out: &mut [u32; 8], in_: &[u32; 8]) {
     ];
 
     let mut delta = 1i32;
-    for i in 0..24 {
-        let cur = i % 2;
-        let next = (i + 1) % 2;
+    for _ in 0..12 {
         let mut matrix = [0u32; 4];
-
-        let negate_f = state[cur].fg[0].flip_sign as u32;
-        let negate_g = state[cur].fg[1].flip_sign as u32;
-        let f0 = (state[cur].fg[0].signed_value[0] ^ negate_f).wrapping_sub(negate_f);
-        let g0 = (state[cur].fg[1].signed_value[0] ^ negate_g).wrapping_sub(negate_g);
+        let negate_f = state[0].fg[0].flip_sign as u32;
+        let negate_g = state[0].fg[1].flip_sign as u32;
+        let f0 = (state[0].fg[0].signed_value[0] ^ negate_f).wrapping_sub(negate_f);
+        let g0 = (state[0].fg[1].signed_value[0] ^ negate_g).wrapping_sub(negate_g);
 
         delta = unsafe { P256_divsteps2_31(delta, f0, g0, matrix.as_mut_ptr()) };
 
@@ -406,26 +403,61 @@ pub fn mod_n_inv(out: &mut [u32; 8], in_: &[u32; 8]) {
             P256_matrix_mul_fg_9(
                 matrix[0],
                 matrix[1],
-                state[cur].fg.as_ptr(),
-                &mut state[next].fg[0],
+                state[0].fg.as_ptr(),
+                &mut state[1].fg[0],
             );
             P256_matrix_mul_fg_9(
                 matrix[2],
                 matrix[3],
-                state[cur].fg.as_ptr(),
-                &mut state[next].fg[1],
+                state[0].fg.as_ptr(),
+                &mut state[1].fg[1],
             );
             P256_matrix_mul_mod_n(
                 matrix[0],
                 matrix[1],
-                state[cur].xy.as_ptr(),
-                &mut state[next].xy[0],
+                state[0].xy.as_ptr(),
+                &mut state[1].xy[0],
             );
             P256_matrix_mul_mod_n(
                 matrix[2],
                 matrix[3],
-                state[cur].xy.as_ptr(),
-                &mut state[next].xy[1],
+                state[0].xy.as_ptr(),
+                &mut state[1].xy[1],
+            );
+        }
+
+        let mut matrix = [0u32; 4];
+        let negate_f = state[1].fg[0].flip_sign as u32;
+        let negate_g = state[1].fg[1].flip_sign as u32;
+        let f0 = (state[1].fg[0].signed_value[0] ^ negate_f).wrapping_sub(negate_f);
+        let g0 = (state[1].fg[1].signed_value[0] ^ negate_g).wrapping_sub(negate_g);
+
+        delta = unsafe { P256_divsteps2_31(delta, f0, g0, matrix.as_mut_ptr()) };
+
+        unsafe {
+            P256_matrix_mul_fg_9(
+                matrix[0],
+                matrix[1],
+                state[1].fg.as_ptr(),
+                &mut state[0].fg[0],
+            );
+            P256_matrix_mul_fg_9(
+                matrix[2],
+                matrix[3],
+                state[1].fg.as_ptr(),
+                &mut state[0].fg[1],
+            );
+            P256_matrix_mul_mod_n(
+                matrix[0],
+                matrix[1],
+                state[1].xy.as_ptr(),
+                &mut state[0].xy[0],
+            );
+            P256_matrix_mul_mod_n(
+                matrix[2],
+                matrix[3],
+                state[1].xy.as_ptr(),
+                &mut state[0].xy[1],
             );
         }
     }
