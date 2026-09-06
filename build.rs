@@ -26,6 +26,7 @@ fn main() {
     println!("cargo:rerun-if-changed=asm/cortex_m_chacha20.S");
     println!("cargo:rerun-if-changed=asm/cortex_m_keccak.S");
     println!("cargo:rerun-if-changed=asm/cortex_m_mlkem.S");
+    println!("cargo:rerun-if-changed=asm/cortex_m_mldsa.S");
     println!("cargo:rerun-if-changed=asm/xtensa_lx7.S");
     println!("cargo:rustc-check-cfg=cfg(nistp_asm_cm4)");
     println!("cargo:rustc-check-cfg=cfg(nistp_asm_cm0)");

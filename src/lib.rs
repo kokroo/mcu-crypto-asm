@@ -50,6 +50,8 @@ pub mod rsa;
 pub mod secp256k1;
 pub mod mlkem;
 pub use mlkem as kyber;
+pub mod mldsa;
+pub use mldsa as dilithium;
 
 pub mod ecdh;
 pub mod ecdsa;

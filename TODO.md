@@ -31,7 +31,7 @@ All microcontroller hardware platforms cluster into five distinct architectural 
 | **RSA-2048 / 4096** | Secure Boot, PKI, TLS | **DONE**<br>(345k cycles RSA-2048) | 3.5×–6.0× | 2.0×–3.0× | 2.5×–3.5× | 2.5×–3.5× | **Production** (T1 Done) |
 | **secp256k1** | Bitcoin, Wallets | **DONE**<br>(~11.7k dbl, 101ms scalarmult) | 4.0×–7.0× | 2.0×–2.8× | 2.2×–3.2× | 2.2×–3.0× | **Production** (T1 Done) |
 | **ML-KEM (Kyber)** | Post-Quantum (FIPS 203) | **DONE**<br>(5.8kc NTT/InvNTT/Basemul) | 2.0×–3.0× | 1.8×–2.2× | 2.0×–3.5× | 2.0×–3.0× | **Production** (T1 Done) |
-| **ML-DSA (Dilithium)** | Post-Quantum (FIPS 204) | 3.0×–5.0×<br>(SIMD butterfly) | 2.0×–2.8× | 1.6×–2.0× | 2.0×–3.5× | 2.0×–3.0× | **P2 (Medium)** |
+| **ML-DSA (Dilithium)** | Post-Quantum (FIPS 204) | **DONE**<br>(11.7kc NTT/InvNTT, 3.9kc PW) | 2.0×–2.8× | 1.6×–2.0× | 2.0×–3.5× | 2.0×–3.0× | **Production** (T1 Done) |
 | **SHA-512 / SHA-384** | Ed25519, P-384, Hashes | 2.2×–3.5×<br>(LDRD/STRD paired)| 3.5×–5.5× | 1.8×–2.5× | 2.0×–3.0× | 2.0×–3.0× | **P1 (High)** |
 | **Keccak / SHAKE** | ML-KEM, ML-DSA, Hashes | **DONE**<br>(15.6k cycles / 24-rnd) | 3.0×–5.0× | 1.8×–2.5× | 2.0×–3.5× | 2.0×–3.2× | **Production** (T1 Done) |
 | **Bitsliced AES** | Constant-Time AES | **DONE**<br>(Fixsliced AES-128/256) | 3.0×–5.0× | 2.0×–3.5× | 1.5× *(10× Zk)* | 2.0×–3.5× | **Production** (T1 Done) |
@@ -228,9 +228,11 @@ All microcontroller hardware platforms cluster into five distinct architectural 
   - [x] Fast Barrett and Plantard reduction modulo $q = 3329$ (`asm_barrett_reduce`, `plant_red`).
   - [x] Implement safe `no_std` Rust API with `Polynomial` (`[i16; 256]`): `ntt()`, `invntt()`, `basemul()`, `basemul_acc()`, `mul_ring()`, `add()`, `sub()`, `reduce()`, and 12-bit serialization (`from_bytes`/`to_bytes`).
   - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on zero poly, vector addition [1,920c], vector subtraction [1,920c], Barrett reduction [1,920c], forward NTT [5,824c], inverse NTT [5,824c], NTT basemul [5,824c], full ring multiplication [25,344c] verified bit-exact against schoolbook math, basemul accumulation, and 12-bit serialization).
-- [ ] **ML-DSA (Dilithium-2 / 3 / 5) Target 1 NTT Acceleration**:
-  - [ ] Adapt PQM4's SIMD NTT for modulus $q = 8380417$.
-  - [ ] Fast polynomial matrix-vector multiplication.
+- [x] **ML-DSA (Dilithium-2 / 3 / 5) Target 1 NTT Acceleration**:
+  - [x] Adapt PQM4's SIMD NTT for modulus $q = 8380417$ (`ntt.S`, `pointwise_mont.s`, `vector.s`, `macros.i`).
+  - [x] Fast Montgomery reduction and conditional modular addition modulo $q = 8380417$ (`asm_reduce32`, `asm_caddq`).
+  - [x] Implement safe `no_std` Rust API with `Polynomial` (`[i32; 256]`): `ntt()`, `invntt_tomont()`, `pointwise_mont()`, `pointwise_acc_mont()`, `mul_ring()`, `reduce32()`, `caddq()`, `add()`, `sub()`.
+  - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on zero poly, vector addition [1,920c], vector subtraction [1,920c], reduce32 [1,920c], caddq [0, Q-1] range, forward NTT [11,712c], inverse NTT [11,712c], pointwise Montgomery multiplication [3,904c], full ring multiplication [46,848c] verified bit-exact against schoolbook math, and pointwise accumulation).
 
 ---
 
