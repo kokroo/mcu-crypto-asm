@@ -38,6 +38,7 @@
 #[cfg(feature = "embassy-driver")]
 pub mod embassy;
 
+pub mod aes;
 pub mod backend;
 pub mod comb_tables;
 pub mod curve25519;
