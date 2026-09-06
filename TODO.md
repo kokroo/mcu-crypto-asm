@@ -22,7 +22,7 @@ All microcontroller hardware platforms cluster into five distinct architectural 
 
 | Algorithm | Standard / Category | Target 1<br>(ARMv7E-M / ARMv8-M) | Target 2<br>(ARMv6-M) | Target 3<br>(ARMv7-M) | Target 4<br>(RISC-V RV32) | Target 5<br>(Xtensa LX6 / LX7) | Implementation Status / Priority |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **NIST P-256** | TLS 1.3, BLE, Matter | **DONE**<br>(406c mul, 61k inv) | **DONE**<br>(400ms ECDH @ 48MHz) | 1.8×–2.5× | 2.2×–3.5× | **DONE**<br>(1,274c mul, 2.19×) | **Production** (T1, T2, T5 Done) |
+| **NIST P-256** | TLS 1.3, BLE, Matter | **DONE**<br>(406c mul, 61k inv) | **DONE**<br>(400ms ECDH @ 12MHz) | 1.8×–2.5× | 2.2×–3.5× | **DONE**<br>(1,274c mul, 2.19×) | **Production** (T1, T2, T5 Done) |
 | **NIST P-384** | CNSA Suite, TLS 1.3 | **DONE**<br>(1,366c mul, 3.3M comb) | 5.0×–8.0× | 2.0×–3.0× | 2.5×–4.0× | **DONE**<br>(2,886c mul, 2.96×) | **Production** (T1, T5 Done; T4 next) |
 | **Curve25519 / X25519** | WireGuard, SSH, TLS 1.3 | **DONE**<br>(~550k cycles, 8.6ms) | 5.0×–9.0× | 2.2×–3.0× | 2.5×–4.0× | 2.5×–3.5× | **Production** (T1 Done) |
 | **Ed25519** | SSH, Signal, Matter | **DONE**<br>(Point Ops / Scalarmul) | 4.5×–8.0× | 2.0×–2.8× | 2.2×–3.5× | 2.2×–3.2× | **Production** (T1 Done) |
