@@ -1885,7 +1885,8 @@ P256_negate_mod_p_if:
  adr r3,P256_p
  b P256_negate_mod_m_if
  .size P256_negate_mod_p_if, .-P256_negate_mod_p_if
- .align 2
+	.ltorg
+	.align 2
 
 @ AAPCS wrappers for Rust calling convention
 	.global emill_p256_mul_mont

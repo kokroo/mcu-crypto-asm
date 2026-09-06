@@ -40,6 +40,7 @@ pub mod embassy;
 
 pub mod backend;
 pub mod comb_tables;
+pub mod curve25519;
 pub mod params;
 
 pub mod ecdh;
