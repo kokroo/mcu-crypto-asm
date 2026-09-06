@@ -22,7 +22,7 @@ All microcontroller hardware platforms cluster into five distinct architectural 
 
 | Algorithm | Standard / Category | Target 1<br>(ARMv7E-M / ARMv8-M) | Target 2<br>(ARMv6-M) | Target 3<br>(ARMv7-M) | Target 4<br>(RISC-V RV32) | Target 5<br>(Xtensa LX6 / LX7) | Implementation Status / Priority |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **NIST P-256** | TLS 1.3, BLE, Matter | **DONE**<br>(406c mul, 61k inv) | 4.0×–7.0× | 1.8×–2.5× | 2.2×–3.5× | **DONE**<br>(1,274c mul, 2.19×) | **Production** (T1, T5 Done; T2 next) |
+| **NIST P-256** | TLS 1.3, BLE, Matter | **DONE**<br>(406c mul, 61k inv) | **DONE**<br>(400ms ECDH @ 48MHz) | 1.8×–2.5× | 2.2×–3.5× | **DONE**<br>(1,274c mul, 2.19×) | **Production** (T1, T2, T5 Done) |
 | **NIST P-384** | CNSA Suite, TLS 1.3 | **DONE**<br>(1,366c mul, 3.3M comb) | 5.0×–8.0× | 2.0×–3.0× | 2.5×–4.0× | **DONE**<br>(2,886c mul, 2.96×) | **Production** (T1, T5 Done; T4 next) |
 | **Curve25519 / X25519** | WireGuard, SSH, TLS 1.3 | 3.5×–5.0×<br>(~650k cycles) | 5.0×–9.0× | 2.2×–3.0× | 2.5×–4.0× | 2.5×–3.5× | **P0 (Highest)** |
 | **Ed25519** | SSH, Signal, Matter | 3.0×–4.5× | 4.5×–8.0× | 2.0×–2.8× | 2.2×–3.5× | 2.2×–3.2× | **P0 (Highest)** |
@@ -141,11 +141,11 @@ All microcontroller hardware platforms cluster into five distinct architectural 
     | **`lincomb`** (verify) | 19,385 µs | 16,375 µs | Emil faster by ~3.0 ms (joint sliding window) |
     | **`TLS 1.3 ECDHE`** | 19,382 µs | 18,732 µs | Essentially neck-and-neck |
 
-- [ ] **Target 2: ARMv6-M (Cortex-M0 / Cortex-M0+) P-256 Backend**:
-  - [ ] Vendor or adapt `P256-cortex-m0-ecdh-gcc.s` from `Emill/P256-cortex-ecdh`.
-  - [ ] Implement constant-time 16-bit Thumb-1 field arithmetic (`mul`, `sqr`, `add`, `sub`).
-  - [ ] Hook into `mcu-crypto-asm` build system with `cfg(target_arch = "arm")` + `cfg(not(target_feature = "dsp"))`.
-  - [ ] Benchmark on Target 2 silicon via `probe-rs`.
+- [x] **Target 2: ARMv6-M (Cortex-M0 / Cortex-M0+) P-256 Backend**:
+  - [x] Adapt and vendor 16-bit Thumb-1 assembly from `Emill/P256-cortex-ecdh` (`asm/cortex_m0_p256.S`).
+  - [x] Implement constant-time Thumb-1 field arithmetic (`emill_cm0_p256_mul_mont`, `sqr_mont`, `add_mod`, `sub_mod`).
+  - [x] Hook into `mcu-crypto-asm` build system with `cfg(nistp_asm_cm0)` on `thumbv6m-none-eabi` / `thumbv8m.base`.
+  - [x] Hardware verification on physical Target 2 (`nucleo-stm32c031c6` Cortex-M0+ @ 48 MHz) via Teleprobe (100% PASS on field arithmetic KATs + ECDH keygen & shared secret).
 - [x] **Target 5: Xtensa LX7 P-256 & P-384 Backend**:
   - [x] Implement hand-written unrolled assembly multiplier (`nistp_mul_mont_8`, `nistp_mul_mont_12`) utilizing `SALTU` branchless carry propagation.
   - [x] Implement dedicated Solinas Montgomery squaring (`nistp_sqr_mont_8`, `nistp_sqr_mont_12`) eliminating off-diagonal products.
