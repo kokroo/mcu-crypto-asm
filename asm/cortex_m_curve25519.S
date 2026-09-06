@@ -142,9 +142,8 @@ curve25519_scalarmult:
 	// 64 + 1*45 + 2*46 + 1*173 + 2*115 = 604 cycles
 	
 	//multiplies (r0-r7) with 121666, adds *sp and puts the result on the top of the stack (replacing old content)
-	ldr lr,=121666
-	//mov lr,#56130
-	//add lr,lr,#65536
+	movw lr, #0xdb42
+	movt lr, #0x0001
 	ldr r12,[sp,#28]
 	mov r11,#0
 	umaal r12,r11,lr,r7

@@ -43,6 +43,7 @@ pub mod backend;
 pub mod chacha20;
 pub mod comb_tables;
 pub mod curve25519;
+pub mod keccak;
 pub mod params;
 pub mod poly1305;
 pub mod rsa;

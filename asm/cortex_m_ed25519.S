@@ -189,6 +189,7 @@ ed25519_add_impl:
 	pop {pc}
 
 	.size ed25519_add_impl, .-ed25519_add_impl
+	.ltorg
 
 
 // in: *r0 = result, *r1 = scalar, *r2 = point
@@ -585,6 +586,7 @@ fail:
 	pop {r4-r11, pc}
 
 	.size ed25519_decompress, .-ed25519_decompress
+	.ltorg
 
 
 // in: *r0 = point
