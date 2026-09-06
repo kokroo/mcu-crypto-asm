@@ -29,7 +29,7 @@ All microcontroller hardware platforms cluster into five distinct architectural 
 | **Poly1305** | WireGuard, TLS 1.3 | **DONE**<br>(~17 c/byte total) | 5.0×–8.0× | 2.5×–3.5× | 3.0×–4.5× | 3.0×–4.0× | **Production** (T1 Done) |
 | **ChaCha20** | WireGuard, TLS 1.3 | **DONE**<br>(~30 c/byte bare-metal) | 2.5×–4.0× | 1.5×–2.0× | 1.8×–2.5× | 1.8×–2.5× | **Production** (T1 Done) |
 | **RSA-2048 / 4096** | Secure Boot, PKI, TLS | **DONE**<br>(345k cycles RSA-2048) | 3.5×–6.0× | 2.0×–3.0× | 2.5×–3.5× | 2.5×–3.5× | **Production** (T1 Done) |
-| **secp256k1** | Bitcoin, Wallets | 3.0×–4.5×<br>(GLV endomorphism)| 4.0×–7.0× | 2.0×–2.8× | 2.2×–3.2× | 2.2×–3.0× | **P1 (High)** |
+| **secp256k1** | Bitcoin, Wallets | **DONE**<br>(~11.7k dbl, 101ms scalarmult) | 4.0×–7.0× | 2.0×–2.8× | 2.2×–3.2× | 2.2×–3.0× | **Production** (T1 Done) |
 | **ML-KEM (Kyber)** | Post-Quantum (FIPS 203) | 3.5×–6.0×<br>(SIMD butterfly) | 2.0×–3.0× | 1.8×–2.2× | 2.0×–3.5× | 2.0×–3.0× | **P1 (PQC Top)** |
 | **ML-DSA (Dilithium)** | Post-Quantum (FIPS 204) | 3.0×–5.0×<br>(SIMD butterfly) | 2.0×–2.8× | 1.6×–2.0× | 2.0×–3.5× | 2.0×–3.0× | **P2 (Medium)** |
 | **SHA-512 / SHA-384** | Ed25519, P-384, Hashes | 2.2×–3.5×<br>(LDRD/STRD paired)| 3.5×–5.5× | 1.8×–2.5× | 2.0×–3.0× | 2.0×–3.0× | **P1 (High)** |
@@ -182,6 +182,20 @@ All microcontroller hardware platforms cluster into five distinct architectural 
   - [ ] Provide constant-time, zero-table X25519 in bare-metal Rust without external C dependencies.
 - [ ] **Target 2: ARMv6-M (Cortex-M0 / Cortex-M0+) X25519**:
   - [ ] Implement Haase-Labrique multi-precision Karatsuba algorithm adapted for Thumb-1.
+
+---
+
+### Phase 2.5: secp256k1 (Bitcoin / Koblitz Curve)
+- [x] **Target 1: ARMv7E-M / ARMv8-M Mainline secp256k1 Backend**:
+  - [x] Integrate UMAAL multi-precision multiplication and squaring via `asm/cortex_m_bignum.S`.
+  - [x] Fast pseudo-Mersenne Solinas reduction modulo $p = 2^{256} - 2^{32} - 977$.
+  - [x] Complete Renes–Costello–Batina addition formulas for $a = 0$ (Algorithm 1) with zero exception branches.
+  - [x] Constant-time Montgomery ladder scalar multiplication over all 256 bits.
+  - [x] SEC1 compressed (33B) and uncompressed (65B) point serialization/deserialization.
+  - [x] ECDH key agreement and public key derivation.
+  - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on point doubling @ 183 µs / 11,712 cycles, RFC 6979 Section A.2.5 keygen @ 101 ms, SEC1 33B/65B roundtrip, and ECDH shared secret agreement @ 101 ms).
+- [ ] **Target 2: ARMv6-M (Cortex-M0 / Cortex-M0+) secp256k1**:
+  - [ ] Adapt 16-bit Thumb-1 routines from `third_party/micro-ecc` (`asm_arm_m0.inc`).
 
 ---
 

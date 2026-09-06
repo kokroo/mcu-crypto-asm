@@ -47,6 +47,7 @@ pub mod keccak;
 pub mod params;
 pub mod poly1305;
 pub mod rsa;
+pub mod secp256k1;
 
 pub mod ecdh;
 pub mod ecdsa;
