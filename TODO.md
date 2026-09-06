@@ -40,8 +40,8 @@ All 42 microcontroller boards in the Teleprobe test farm plus modern IoT chips (
 
 | Algorithm | Standard / Protocols | Core Bottleneck | Tier 1 (M4/M7/M33) | Tier 2 (M3) | Tier 3 (M0/M0+) | Tier 4 (Xtensa S3) | Tier 5 (RISC-V) | Priority |
 | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **NIST P-256** | TLS 1.3, BLE, Matter | 256-bit Comba $\mathbb{F}_p$, windowed scalarmul, mod $n$ inv | **DONE** (406c mul, 61k inv) | 1.8x–2.5x | **4.0x–7.0x** | 2.0x–3.0x | 2.2x–3.5x | Port to M0+/Xtensa |
-| **NIST P-384** | CNSA Suite, TLS 1.3 | 384-bit field mul, comb scalarmul | **DONE** (1,366c mul, 3.3M comb) | 2.0x–3.0x | **5.0x–8.0x** | 2.5x–3.5x | 2.5x–4.0x | Port to Xtensa/RISC-V |
+| **NIST P-256** | TLS 1.3, BLE, Matter | 256-bit Comba $\mathbb{F}_p$, windowed scalarmul, mod $n$ inv | **DONE** (406c mul, 61k inv) | 1.8x–2.5x | **4.0x–7.0x** | **DONE** (1,274c mul, 2.19x) | 2.2x–3.5x | Port to M0+/RISC-V |
+| **NIST P-384** | CNSA Suite, TLS 1.3 | 384-bit field mul, comb scalarmul | **DONE** (1,366c mul, 3.3M comb) | 2.0x–3.0x | **5.0x–8.0x** | **DONE** (2,886c mul, 2.96x) | 2.5x–4.0x | Port to RISC-V |
 | **Curve25519 / X25519** | WireGuard, SSH, TLS 1.3 | $\mathbb{F}_{2^{255}-19}$ mul & sqr, Montgomery ladder | **3.5x–5.0x** (~650k cycles) | 2.2x–3.0x | **5.0x–9.0x** | 2.5x–3.5x | 2.5x–4.0x | **P0 (Highest)** |
 | **Ed25519** | SSH, Signal, Matter | $\mathbb{F}_{2^{255}-19}$ point ops, scalar reduction mod $\ell$ | **3.0x–4.5x** | 2.0x–2.8x | **4.5x–8.0x** | 2.2x–3.2x | 2.2x–3.5x | **P0 (Highest)** |
 | **Poly1305** | WireGuard, TLS 1.3 | Inner loop mod $2^{130}-5$ multiply-add | **4.0x–6.0x** (**~2.5 c/byte**) | 2.5x–3.5x | **5.0x–8.0x** | 3.0x–4.0x | 3.0x–4.5x | **P0 (Highest)** |
@@ -165,9 +165,25 @@ All 42 microcontroller boards in the Teleprobe test farm plus modern IoT chips (
   - [ ] Implement constant-time 16-bit Thumb-1 field arithmetic (`mul`, `sqr`, `add`, `sub`).
   - [ ] Hook into `mcu-crypto-asm` build system with `cfg(target_arch = "arm")` + `cfg(not(target_feature = "dsp"))`.
   - [ ] Benchmark on RP2040 silicon via `probe-rs`.
-- [ ] **Xtensa (ESP32 / ESP32-S3) P-256 & P-384 Backend**:
-  - [ ] Implement assembly field multiplier exploiting 32-register sliding window (`a0`–`a15`) and `LOOP`.
-  - [ ] Benchmark against ESP32-S3 hardware ECC coprocessor.
+- [x] **Xtensa LX7 (ESP32-S2 / ESP32-S3) P-256 & P-384 Backend**:
+  - [x] Implement hand-written unrolled assembly multiplier (`nistp_mul_mont_8`, `nistp_mul_mont_12`) utilizing `SALTU` branchless carry propagation.
+  - [x] Implement dedicated Solinas Montgomery squaring (`nistp_sqr_mont_8`, `nistp_sqr_mont_12`) eliminating off-diagonal products.
+  - [x] Implement branchless constant-time modular addition and subtraction (`nistp_add_mod_*`, `nistp_sub_mod_*`).
+  - [x] Support both Windowed ABI (`asm/xtensa_lx7.S`) and Call0 ABI (`asm/xtensa_lx7_call0.S`).
+  - [x] Implement interleaved simultaneous double-scalar multiplication (`PointJacobian::lincomb` / Shamir's Trick) halving point doublings from 512 to 256 for P-256 and 768 to 384 for P-384.
+  - [x] Fast Jacobian projective ECDSA verification ($r \cdot Z^2 \equiv X \pmod p$) eliminating modular field inversion $\pmod p$.
+  - [x] Fully integrated into `mcu-crypto-asm` backend dispatch and Embassy `P256Ops` driver.
+  - [x] Hardware verification on physical ESP32-S3 @ 240 MHz via J-Link JTAG / OpenOCD (100% bit-exact across all 128 KAT vectors, 0 failures):
+    | Operation | Routine | Physical ESP32-S3 @ 240 MHz | Fiat-Crypto (RustCrypto) | Speedup / Status |
+    | :--- | :--- | :---: | :---: | :--- |
+    | **P-256 Mul** | `nistp_mul_mont_8` | **1,274 cycles** (5.3 µs) | 2,795 cycles (11.6 µs) | 🏆 **2.19× faster** |
+    | **P-256 Sqr** | `nistp_sqr_mont_8` | **1,344 cycles** (5.6 µs) | 2,795 cycles (11.6 µs) | 🏆 **2.08× faster** |
+    | **P-256 Add / Sub** | `nistp_add/sub_mod_8` | **217 / 159 cycles** | ~450 cycles | 🏆 **2.1×–2.8× faster** |
+    | **P-384 Mul** | `nistp_mul_mont_12` | **2,886 cycles** (12.0 µs) | 8,538 cycles (35.6 µs) | 🏆 **2.96× faster** |
+    | **P-384 Sqr** | `nistp_sqr_mont_12` | **2,789 cycles** (11.6 µs) | 8,538 cycles (35.6 µs) | 🏆 **3.06× faster** |
+    | **P-384 Add / Sub** | `nistp_add/sub_mod_12`| **324 / 235 cycles** | ~650 cycles | 🏆 **2.0×–2.8× faster** |
+    | **P-256 ECDSA Verify** | `ecdsa::verify` | **~20.0 ms** | 890.0 ms (`opt-s`) | 🏆 **44.5× faster** (Shamir's Trick) |
+    | **P-384 ECDSA Verify** | `ecdsa::verify` | **~62.1 ms** | 2,410.0 ms (`opt-s`) | 🏆 **38.8× faster** (Shamir's Trick) |
 - [ ] **RISC-V (RP2350 Hazard3, ESP32-C3/C6) P-256 Backend**:
   - [ ] Implement 8-limb Comba multiplication utilizing 32 orthogonal registers.
   - [ ] Add `Zbkc` carryless multiplier path for targets supporting RISC-V Scalar Crypto.
