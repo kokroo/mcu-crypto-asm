@@ -1,6 +1,7 @@
 //! Ed25519 signature algorithm and Edwards curve point operations (RFC 8032).
 
 use core::ops::{Add, Index, IndexMut, Mul, Neg, Sub};
+#[allow(unused_imports)]
 use super::portable::Fe51;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]

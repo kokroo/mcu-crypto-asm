@@ -734,8 +734,8 @@ pub fn scalarmult_variable_base_jacobian(
     }
 
     let mut scalar_bytes = [0u8; 32];
-    for (i, c) in scalar_bytes.rchunks_exact_mut(4).enumerate() {
-        c.copy_from_slice(&scalar[i].to_be_bytes());
+    for (i, limb) in scalar.iter().enumerate() {
+        scalar_bytes[i * 4..(i + 1) * 4].copy_from_slice(&limb.to_le_bytes());
     }
     let mut s = [0i8; 257];
     slide_257(&mut s, &scalar_bytes);
@@ -848,11 +848,11 @@ pub fn lincomb_jacobian(
 ) {
     let mut k1_bytes = [0u8; 32];
     let mut k2_bytes = [0u8; 32];
-    for (i, c) in k1_bytes.rchunks_exact_mut(4).enumerate() {
-        c.copy_from_slice(&k1[i].to_be_bytes());
+    for (i, limb) in k1.iter().enumerate() {
+        k1_bytes[i * 4..(i + 1) * 4].copy_from_slice(&limb.to_le_bytes());
     }
-    for (i, c) in k2_bytes.rchunks_exact_mut(4).enumerate() {
-        c.copy_from_slice(&k2[i].to_be_bytes());
+    for (i, limb) in k2.iter().enumerate() {
+        k2_bytes[i * 4..(i + 1) * 4].copy_from_slice(&limb.to_le_bytes());
     }
 
     let mut s1 = [0i8; 257];
