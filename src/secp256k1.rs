@@ -214,7 +214,7 @@ impl FieldElement {
 
         #[cfg(not(nistp_asm_cm4))]
         {
-            comba_mul_8(&self.0, &self.0, &mut prod);
+            comba_sqr_8(&self.0, &mut prod);
         }
 
         let mut out = [0u32; 8];
@@ -392,17 +392,72 @@ pub fn secp256k1_reduce(product: &[u32; 16], out: &mut [u32; 8]) {
 #[allow(dead_code)]
 #[inline(always)]
 fn comba_mul_8(a: &[u32; 8], b: &[u32; 8], out: &mut [u32; 16]) {
-    let mut c: u128 = 0;
+    let mut acc: u64 = 0;
+    let mut r2: u32 = 0;
     for i in 0..15 {
         let start = if i > 7 { i - 7 } else { 0 };
         let end = if i < 7 { i } else { 7 };
         for j in start..=end {
-            c += (a[j] as u128) * (b[i - j] as u128);
+            let p = (a[j] as u64) * (b[i - j] as u64);
+            let (new_acc, carry) = acc.overflowing_add(p);
+            acc = new_acc;
+            if carry {
+                r2 += 1;
+            }
         }
-        out[i] = c as u32;
-        c >>= 32;
+        out[i] = acc as u32;
+        acc = (acc >> 32) | ((r2 as u64) << 32);
+        r2 = 0;
     }
-    out[15] = c as u32;
+    out[15] = acc as u32;
+}
+
+#[allow(dead_code)]
+#[inline(always)]
+fn comba_sqr_8(a: &[u32; 8], out: &mut [u32; 16]) {
+    let mut acc: u64 = 0;
+    let mut r2: u32 = 0;
+    for i in 0..15 {
+        let start = if i > 7 { i - 7 } else { 0 };
+        let end = if i < 7 { i } else { 7 };
+        let mut off_diag: u64 = 0;
+        let mut off_r2: u32 = 0;
+        for j in start..=end {
+            let k = i - j;
+            if j < k {
+                let p = (a[j] as u64) * (a[k] as u64);
+                let (new_od, carry) = off_diag.overflowing_add(p);
+                off_diag = new_od;
+                if carry {
+                    off_r2 += 1;
+                }
+            }
+        }
+        off_r2 = (off_r2 << 1) | ((off_diag >> 63) as u32);
+        off_diag <<= 1;
+
+        let (new_acc, c1) = acc.overflowing_add(off_diag);
+        acc = new_acc;
+        if c1 {
+            r2 += 1;
+        }
+        r2 += off_r2;
+
+        if i % 2 == 0 {
+            let mid = i / 2;
+            let diag = (a[mid] as u64) * (a[mid] as u64);
+            let (new_acc, c2) = acc.overflowing_add(diag);
+            acc = new_acc;
+            if c2 {
+                r2 += 1;
+            }
+        }
+
+        out[i] = acc as u32;
+        acc = (acc >> 32) | ((r2 as u64) << 32);
+        r2 = 0;
+    }
+    out[15] = acc as u32;
 }
 
 #[inline(always)]
