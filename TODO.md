@@ -33,7 +33,7 @@ All microcontroller hardware platforms cluster into five distinct architectural 
 | **ML-KEM (Kyber)** | Post-Quantum (FIPS 203) | 3.5×–6.0×<br>(SIMD butterfly) | 2.0×–3.0× | 1.8×–2.2× | 2.0×–3.5× | 2.0×–3.0× | **P1 (PQC Top)** |
 | **ML-DSA (Dilithium)** | Post-Quantum (FIPS 204) | 3.0×–5.0×<br>(SIMD butterfly) | 2.0×–2.8× | 1.6×–2.0× | 2.0×–3.5× | 2.0×–3.0× | **P2 (Medium)** |
 | **SHA-512 / SHA-384** | Ed25519, P-384, Hashes | 2.2×–3.5×<br>(LDRD/STRD paired)| 3.5×–5.5× | 1.8×–2.5× | 2.0×–3.0× | 2.0×–3.0× | **P1 (High)** |
-| **Keccak / SHAKE** | ML-KEM, ML-DSA, Hashes | 2.5×–4.0×<br>(32-bit interleaved)| 3.0×–5.0× | 1.8×–2.5× | 2.0×–3.5× | 2.0×–3.2× | **P1 (PQC Core)** |
+| **Keccak / SHAKE** | ML-KEM, ML-DSA, Hashes | **DONE**<br>(15.6k cycles / 24-rnd) | 3.0×–5.0× | 1.8×–2.5× | 2.0×–3.5× | 2.0×–3.2× | **Production** (T1 Done) |
 | **Bitsliced AES** | Constant-Time AES | **DONE**<br>(Fixsliced AES-128/256) | 3.0×–5.0× | 2.0×–3.5× | 1.5× *(10× Zk)* | 2.0×–3.5× | **Production** (T1 Done) |
 | **GHASH (GCM)** | AES-GCM Authentication | 2.5×–4.0× | 3.0×–5.0× | 1.8×–2.5× | 1.8× *(8× Zbkc)*| 2.0×–3.0× | **P2 (Medium)** |
 
@@ -223,9 +223,10 @@ All microcontroller hardware platforms cluster into five distinct architectural 
 - [ ] **SHA-512 / SHA-384 Assembly**:
   - [ ] Target 1 assembly implementation pairing 32-bit registers for 64-bit words via `LDRD`/`STRD`.
   - [ ] Eliminates compiler register spills, speeding up Ed25519 and P-384 certificate parsing.
-- [ ] **Keccak-f[1600] / SHAKE-128 / SHAKE-256**:
-  - [ ] Integrate 32-bit interleaved bit-sliced ARM assembly (from XKCP).
-  - [ ] Critical performance driver for ML-KEM and ML-DSA hash operations.
+- [x] **Keccak-f[1600] / SHAKE-128 / SHAKE-256**:
+  - [x] Integrate 32-bit interleaved bit-sliced ARM assembly (`asm/cortex_m_keccak.S`, `src/keccak.rs`).
+  - [x] Full FIPS 202 sponge implementation (SHA3-256, SHA3-512, SHAKE128, SHAKE256).
+  - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on 24-round permutation @ 15,616 cycles, SHA3-256/512, and SHAKE-128/256 KATs).
 - [x] **Constant-Time Bitsliced & Fixsliced AES-128, AES-192, AES-256**:
   - [x] Implement Adomnicăi-Peyrin 2-block parallel **Fixsliced AES** on Target 1 (`asm/cortex_m_aes_encrypt.S`, `asm/cortex_m_aes_keyschedule.S`, ~1,950 cycles/block AES-128, ~2,910 cycles/block AES-256).
   - [x] Hardware verification on physical Target 1 (`nucleo-stm32h563zi` Cortex-M33 @ 64 MHz) via Teleprobe (100% PASS on AES-128 and AES-256 NIST SP 800-38A KATs).
