@@ -213,10 +213,18 @@ fn affine_to_jacobian(p: &P256AffinePoint) -> Option<[[u32; 8]; 3]> {
         let mut py_mont = [0u32; 8];
         crate::backend::cortex_m4::p256::P256_to_montgomery(px_mont.as_mut_ptr(), px.as_ptr());
         crate::backend::cortex_m4::p256::P256_to_montgomery(py_mont.as_mut_ptr(), py.as_ptr());
-        if crate::backend::cortex_m4::p256::P256_point_is_on_curve(px_mont.as_ptr(), py_mont.as_ptr()) == 0 {
+        if crate::backend::cortex_m4::p256::P256_point_is_on_curve(
+            px_mont.as_ptr(),
+            py_mont.as_ptr(),
+        ) == 0
+        {
             return None;
         }
-        Some([px_mont, py_mont, crate::backend::cortex_m4::p256::ONE_MONTGOMERY])
+        Some([
+            px_mont,
+            py_mont,
+            crate::backend::cortex_m4::p256::ONE_MONTGOMERY,
+        ])
     }
 }
 
@@ -307,8 +315,14 @@ impl drv::P256ScalarMul for McuCryptoAsmDriver {
             let mut x = [0u32; 8];
             let mut y = [0u32; 8];
             unsafe {
-                crate::backend::cortex_m4::p256::P256_from_montgomery(x.as_mut_ptr(), aff_mont_x.as_ptr());
-                crate::backend::cortex_m4::p256::P256_from_montgomery(y.as_mut_ptr(), aff_mont_y.as_ptr());
+                crate::backend::cortex_m4::p256::P256_from_montgomery(
+                    x.as_mut_ptr(),
+                    aff_mont_x.as_ptr(),
+                );
+                crate::backend::cortex_m4::p256::P256_from_montgomery(
+                    y.as_mut_ptr(),
+                    aff_mont_y.as_ptr(),
+                );
             }
             P256AffinePoint {
                 x: limbs_to_be_256(&x),
@@ -465,11 +479,19 @@ impl drv::P256Lincomb for McuCryptoAsmDriver {
         }
         if k1_zero {
             let r = <Self as P256ScalarMul>::mul_affine(k2, p2);
-            return if r == P256AffinePoint::default() { None } else { Some(r) };
+            return if r == P256AffinePoint::default() {
+                None
+            } else {
+                Some(r)
+            };
         }
         if k2_zero {
             let r = <Self as P256ScalarMul>::mul_affine(k1, p1);
-            return if r == P256AffinePoint::default() { None } else { Some(r) };
+            return if r == P256AffinePoint::default() {
+                None
+            } else {
+                Some(r)
+            };
         }
 
         #[cfg(nistp_asm_cm4)]

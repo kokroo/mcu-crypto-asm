@@ -655,10 +655,7 @@ pub fn jacobian_to_homogeneous(
 /// Batch convert 7 Jacobian points to affine coordinates in Montgomery form.
 /// `points_j` has 7 Jacobian points [3P, 5P, 7P, 9P, 11P, 13P, 15P].
 /// `out_aff` has 7 affine points [[x, y]; 7].
-pub fn batch_jacobian_to_affine_7(
-    out_aff: &mut [[[u32; 8]; 2]; 7],
-    points_j: &[[[u32; 8]; 3]; 7],
-) {
+pub fn batch_jacobian_to_affine_7(out_aff: &mut [[[u32; 8]; 2]; 7], points_j: &[[[u32; 8]; 3]; 7]) {
     let mut c = [[0u32; 8]; 7];
     c[0] = points_j[0][2];
     for i in 1..7 {
@@ -679,16 +676,8 @@ pub fn batch_jacobian_to_affine_7(
     for i in (1..7).rev() {
         let mut z_inv = [0u32; 8];
         unsafe {
-            emill_p256_mul_mont(
-                z_inv.as_mut_ptr(),
-                inv.as_ptr(),
-                c[i - 1].as_ptr(),
-            );
-            emill_p256_mul_mont(
-                inv.as_mut_ptr(),
-                inv.as_ptr(),
-                points_j[i][2].as_ptr(),
-            );
+            emill_p256_mul_mont(z_inv.as_mut_ptr(), inv.as_ptr(), c[i - 1].as_ptr());
+            emill_p256_mul_mont(inv.as_mut_ptr(), inv.as_ptr(), points_j[i][2].as_ptr());
 
             let mut z_inv2 = [0u32; 8];
             let mut z_inv3 = [0u32; 8];
@@ -792,11 +781,7 @@ pub fn scalarmult_variable_base_jacobian(
     let mut current_point = table_j[init_idx];
     if s[max_i] < 0 {
         unsafe {
-            P256_negate_mod_p_if(
-                current_point[1].as_mut_ptr(),
-                current_point[1].as_ptr(),
-                1,
-            );
+            P256_negate_mod_p_if(current_point[1].as_mut_ptr(), current_point[1].as_ptr(), 1);
         }
     }
 
