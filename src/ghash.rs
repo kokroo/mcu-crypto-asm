@@ -198,54 +198,155 @@ impl Ghash {
     }
 }
 
-// --- Portable Fallback ---
+// --- Target 2 / Portable Constant-Time 32-bit GHASH Multiplier (Thomas Pornin / BearSSL) ---
 
-pub fn portable_gmult_bitwise(xi: &mut [u8; 16], h_bytes: &[u8; 16]) {
-    let mut x_hi = u64::from_be_bytes(xi[0..8].try_into().unwrap());
-    let mut x_lo = u64::from_be_bytes(xi[8..16].try_into().unwrap());
-    let mut v_hi = u64::from_be_bytes(h_bytes[0..8].try_into().unwrap());
-    let mut v_lo = u64::from_be_bytes(h_bytes[8..16].try_into().unwrap());
+#[inline(always)]
+fn bmul32(x: u32, y: u32) -> u32 {
+    let x0 = x & 0x11111111;
+    let x1 = x & 0x22222222;
+    let x2 = x & 0x44444444;
+    let x3 = x & 0x88888888;
+    let y0 = y & 0x11111111;
+    let y1 = y & 0x22222222;
+    let y2 = y & 0x44444444;
+    let y3 = y & 0x88888888;
 
-    let mut z_hi = 0u64;
-    let mut z_lo = 0u64;
-    const R: u64 = 0xe100000000000000;
+    let z0 = (x0.wrapping_mul(y0)) ^ (x1.wrapping_mul(y3)) ^ (x2.wrapping_mul(y2)) ^ (x3.wrapping_mul(y1));
+    let z1 = (x0.wrapping_mul(y1)) ^ (x1.wrapping_mul(y0)) ^ (x2.wrapping_mul(y3)) ^ (x3.wrapping_mul(y2));
+    let z2 = (x0.wrapping_mul(y2)) ^ (x1.wrapping_mul(y1)) ^ (x2.wrapping_mul(y0)) ^ (x3.wrapping_mul(y3));
+    let z3 = (x0.wrapping_mul(y3)) ^ (x1.wrapping_mul(y2)) ^ (x2.wrapping_mul(y1)) ^ (x3.wrapping_mul(y0));
 
-    for _ in 0..64 {
-        if (x_hi & 0x8000000000000000) != 0 {
-            z_hi ^= v_hi;
-            z_lo ^= v_lo;
+    (z0 & 0x11111111) | (z1 & 0x22222222) | (z2 & 0x44444444) | (z3 & 0x88888888)
+}
+
+#[inline(always)]
+fn rev32(mut x: u32) -> u32 {
+    x = ((x & 0x55555555) << 1) | ((x >> 1) & 0x55555555);
+    x = ((x & 0x33333333) << 2) | ((x >> 2) & 0x33333333);
+    x = ((x & 0x0F0F0F0F) << 4) | ((x >> 4) & 0x0F0F0F0F);
+    x = ((x & 0x00FF00FF) << 8) | ((x >> 8) & 0x00FF00FF);
+    (x << 16) | (x >> 16)
+}
+
+pub fn ghash_ctmul32(y: &mut [u8; 16], h: &[u8; 16], data: &[u8]) {
+    let mut yw = [
+        u32::from_be_bytes(y[12..16].try_into().unwrap()),
+        u32::from_be_bytes(y[8..12].try_into().unwrap()),
+        u32::from_be_bytes(y[4..8].try_into().unwrap()),
+        u32::from_be_bytes(y[0..4].try_into().unwrap()),
+    ];
+
+    let hw = [
+        u32::from_be_bytes(h[12..16].try_into().unwrap()),
+        u32::from_be_bytes(h[8..12].try_into().unwrap()),
+        u32::from_be_bytes(h[4..8].try_into().unwrap()),
+        u32::from_be_bytes(h[0..4].try_into().unwrap()),
+    ];
+
+    let hwr = [rev32(hw[0]), rev32(hw[1]), rev32(hw[2]), rev32(hw[3])];
+
+    let mut b = [0u32; 18];
+    b[0] = hw[0];
+    b[1] = hw[1];
+    b[2] = hw[2];
+    b[3] = hw[3];
+    b[4] = b[0] ^ b[1];
+    b[5] = b[2] ^ b[3];
+    b[6] = b[0] ^ b[2];
+    b[7] = b[1] ^ b[3];
+    b[8] = b[6] ^ b[7];
+
+    b[9] = hwr[0];
+    b[10] = hwr[1];
+    b[11] = hwr[2];
+    b[12] = hwr[3];
+    b[13] = b[9] ^ b[10];
+    b[14] = b[11] ^ b[12];
+    b[15] = b[9] ^ b[11];
+    b[16] = b[10] ^ b[12];
+    b[17] = b[15] ^ b[16];
+
+    for chunk in data.chunks_exact(16) {
+        yw[3] ^= u32::from_be_bytes(chunk[0..4].try_into().unwrap());
+        yw[2] ^= u32::from_be_bytes(chunk[4..8].try_into().unwrap());
+        yw[1] ^= u32::from_be_bytes(chunk[8..12].try_into().unwrap());
+        yw[0] ^= u32::from_be_bytes(chunk[12..16].try_into().unwrap());
+
+        let mut a = [0u32; 18];
+        a[0] = yw[0];
+        a[1] = yw[1];
+        a[2] = yw[2];
+        a[3] = yw[3];
+        a[4] = a[0] ^ a[1];
+        a[5] = a[2] ^ a[3];
+        a[6] = a[0] ^ a[2];
+        a[7] = a[1] ^ a[3];
+        a[8] = a[6] ^ a[7];
+
+        a[9] = rev32(yw[0]);
+        a[10] = rev32(yw[1]);
+        a[11] = rev32(yw[2]);
+        a[12] = rev32(yw[3]);
+        a[13] = a[9] ^ a[10];
+        a[14] = a[11] ^ a[12];
+        a[15] = a[9] ^ a[11];
+        a[16] = a[10] ^ a[12];
+        a[17] = a[15] ^ a[16];
+
+        let mut c = [0u32; 18];
+        for i in 0..18 {
+            c[i] = bmul32(a[i], b[i]);
         }
-        x_hi <<= 1;
-        let t = if (v_lo & 1) != 0 { R } else { 0 };
-        v_lo = ((v_hi & 1) << 63) | (v_lo >> 1);
-        v_hi = (v_hi >> 1) ^ t;
-    }
-    for _ in 0..64 {
-        if (x_lo & 0x8000000000000000) != 0 {
-            z_hi ^= v_hi;
-            z_lo ^= v_lo;
+
+        c[4] ^= c[0] ^ c[1];
+        c[5] ^= c[2] ^ c[3];
+        c[8] ^= c[6] ^ c[7];
+
+        c[13] ^= c[9] ^ c[10];
+        c[14] ^= c[11] ^ c[12];
+        c[17] ^= c[15] ^ c[16];
+
+        let d0 = c[0];
+        let d1 = c[4] ^ (rev32(c[9]) >> 1);
+        let d2 = c[1] ^ c[0] ^ c[2] ^ c[6] ^ (rev32(c[13]) >> 1);
+        let d3 = c[4] ^ c[5] ^ c[8] ^ (rev32(c[10] ^ c[9] ^ c[11] ^ c[15]) >> 1);
+        let d4 = c[2] ^ c[1] ^ c[3] ^ c[7] ^ (rev32(c[13] ^ c[14] ^ c[17]) >> 1);
+        let d5 = c[5] ^ (rev32(c[11] ^ c[10] ^ c[12] ^ c[16]) >> 1);
+        let d6 = c[3] ^ (rev32(c[14]) >> 1);
+        let d7 = rev32(c[12]) >> 1;
+
+        let mut zw = [0u32; 8];
+        zw[0] = d0 << 1;
+        zw[1] = (d1 << 1) | (d0 >> 31);
+        zw[2] = (d2 << 1) | (d1 >> 31);
+        zw[3] = (d3 << 1) | (d2 >> 31);
+        zw[4] = (d4 << 1) | (d3 >> 31);
+        zw[5] = (d5 << 1) | (d4 >> 31);
+        zw[6] = (d6 << 1) | (d5 >> 31);
+        zw[7] = (d7 << 1) | (d6 >> 31);
+
+        for i in 0..4 {
+            let lw = zw[i];
+            zw[i + 4] ^= lw ^ (lw >> 1) ^ (lw >> 2) ^ (lw >> 7);
+            zw[i + 3] ^= (lw << 31) ^ (lw << 30) ^ (lw << 25);
         }
-        x_lo <<= 1;
-        let t = if (v_lo & 1) != 0 { R } else { 0 };
-        v_lo = ((v_hi & 1) << 63) | (v_lo >> 1);
-        v_hi = (v_hi >> 1) ^ t;
+
+        yw.copy_from_slice(&zw[4..8]);
     }
 
-    xi[0..8].copy_from_slice(&z_hi.to_be_bytes());
-    xi[8..16].copy_from_slice(&z_lo.to_be_bytes());
+    y[0..4].copy_from_slice(&yw[3].to_be_bytes());
+    y[4..8].copy_from_slice(&yw[2].to_be_bytes());
+    y[8..12].copy_from_slice(&yw[1].to_be_bytes());
+    y[12..16].copy_from_slice(&yw[0].to_be_bytes());
 }
 
 pub fn portable_compress_blocks(state: &mut [u8; 16], htable: &Htable, data: &[u8]) {
-    for chunk in data.chunks_exact(GHASH_BLOCK_SIZE) {
-        for i in 0..16 {
-            state[i] ^= chunk[i];
-        }
-        portable_gmult_bitwise(state, &htable.h_bytes);
-    }
+    ghash_ctmul32(state, &htable.h_bytes, data);
 }
 
 pub fn portable_gmult(xi: &mut [u8; 16], htable: &Htable) {
-    portable_gmult_bitwise(xi, &htable.h_bytes);
+    let dummy = [0u8; 16];
+    ghash_ctmul32(xi, &htable.h_bytes, &dummy);
 }
 
 #[cfg(test)]
