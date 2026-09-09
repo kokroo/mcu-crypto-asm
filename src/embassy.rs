@@ -1,13 +1,13 @@
 //! `embassy-crypto-driver` elliptic-curve backend for P-256 and P-384.
 
-use drv::{P256Point, P256Scalar, P256Signature, P384Point, P384Scalar};
+use drv::{P256Point, P256Scalar, P256Signature, P384Point, P384Scalar, P384Signature};
 use embassy_crypto as reg;
 /// Re-export of the driver crate (integration tests use this to name its types).
 use embassy_crypto::driver as drv;
 
 use crate::p256::{PointP256, ScalarP256, CURVE as P256_CURVE, FIELD as P256_FIELD};
 use crate::p384::{PointP384, ScalarP384, CURVE as P384_CURVE, FIELD as P384_FIELD};
-use crate::{Params, Point, Scalar};
+use crate::{CurveParams, Fe, Params, Point, Scalar};
 
 /// Driver implementation registered with `embassy-crypto-driver`.
 pub struct McuCryptoAsmDriver;
@@ -20,26 +20,22 @@ fn p256_scalar_from_canonical(k: &P256Scalar) -> Option<ScalarP256> {
     Scalar::from_be_bytes(&P256_CURVE, &k.0).ok()
 }
 
-#[allow(dead_code)]
 fn p256_scalar_to_canonical(k: &ScalarP256) -> P256Scalar {
     let mut out = P256Scalar([0u8; 32]);
     let _ = k.to_be_bytes(&P256_CURVE, &mut out.0);
     out
 }
 
-#[allow(dead_code)]
 fn p384_scalar_from_canonical(k: &P384Scalar) -> Option<ScalarP384> {
     Scalar::from_be_bytes(&P384_CURVE, &k.0).ok()
 }
 
-#[allow(dead_code)]
 fn p384_scalar_to_canonical(k: &ScalarP384) -> P384Scalar {
     let mut out = P384Scalar([0u8; 48]);
     let _ = k.to_be_bytes(&P384_CURVE, &mut out.0);
     out
 }
 
-#[allow(dead_code)]
 fn p256_point_from_canonical(p: &P256Point) -> Option<PointP256> {
     let mut enc = [0u8; 65];
     enc[0] = 0x04;
@@ -48,7 +44,6 @@ fn p256_point_from_canonical(p: &P256Point) -> Option<PointP256> {
     PointP256::decode(&P256_CURVE, &enc).ok()
 }
 
-#[allow(dead_code)]
 fn p256_point_to_canonical(p: &PointP256) -> Option<P256Point> {
     match p.to_affine(&P256_FIELD) {
         Some((x, y)) => Some(P256Point {
@@ -59,16 +54,6 @@ fn p256_point_to_canonical(p: &PointP256) -> Option<P256Point> {
     }
 }
 
-#[allow(dead_code)]
-fn p256_point_to_canonical_opt(p: &PointP256) -> Option<P256Point> {
-    if p.is_identity() {
-        None
-    } else {
-        p256_point_to_canonical(p)
-    }
-}
-
-#[allow(dead_code)]
 fn p384_point_from_canonical(p: &P384Point) -> Option<PointP384> {
     let mut enc = [0u8; 97];
     enc[0] = 0x04;
@@ -77,26 +62,13 @@ fn p384_point_from_canonical(p: &P384Point) -> Option<PointP384> {
     PointP384::decode(&P384_CURVE, &enc).ok()
 }
 
-#[allow(dead_code)]
-fn p384_point_to_canonical(p: &PointP384) -> P384Point {
+fn p384_point_to_canonical(p: &PointP384) -> Option<P384Point> {
     match p.to_affine(&P384_FIELD) {
-        Some((x, y)) => P384Point {
+        Some((x, y)) => Some(P384Point {
             x: limbs_to_be_384(&x),
             y: limbs_to_be_384(&y),
-        },
-        None => P384Point {
-            x: [0u8; 48],
-            y: [0u8; 48],
-        },
-    }
-}
-
-#[allow(dead_code)]
-fn p384_point_to_canonical_opt(p: &PointP384) -> Option<P384Point> {
-    if p.is_identity() {
-        None
-    } else {
-        Some(p384_point_to_canonical(p))
+        }),
+        None => None,
     }
 }
 
@@ -253,21 +225,23 @@ fn wipe(buf: &mut [u8]) {
 }
 
 /// Normalize an ECDSA `s` value to low-S without branching on the secret value.
-fn p256_low_s(s: &[u8; 32]) -> Result<[u8; 32], drv::Error> {
-    let scalar =
-        ScalarP256::from_be_bytes_nonzero(&P256_CURVE, s).map_err(|_| drv::Error::InvalidInput)?;
-    let negated = scalar.neg(&P256_CURVE);
-    let scalar_limbs = scalar.to_int(&P256_CURVE);
-    let half = half_order::<8>(P256_CURVE.order);
+fn low_s<const N: usize, const B: usize>(
+    s: &[u8; B],
+    c: &CurveParams,
+) -> Result<[u8; B], drv::Error> {
+    let scalar = Scalar::<N>::from_be_bytes_nonzero(c, s).map_err(|_| drv::Error::InvalidInput)?;
+    let negated = scalar.neg(c);
+    let scalar_limbs = scalar.to_int(c);
+    let half = half_order::<N>(c.order);
     let mask = core::hint::black_box(0u32.wrapping_sub(less_than(&half, &scalar_limbs) as u32));
 
     let mut out = scalar;
-    for i in 0..8 {
+    for i in 0..N {
         out.v[i] = scalar.v[i] ^ ((scalar.v[i] ^ negated.v[i]) & mask);
     }
 
-    let mut bytes = [0u8; 32];
-    let _ = out.to_be_bytes(&P256_CURVE, &mut bytes);
+    let mut bytes = [0u8; B];
+    let _ = out.to_be_bytes(c, &mut bytes);
     Ok(bytes)
 }
 
@@ -345,210 +319,6 @@ impl McuCryptoAsmDriver {
         }
     }
 }
-//
-// drv::p256_scalar_mul_impl!(McuCryptoAsmDriver);
-
-// ---------------------------------------------------------------------------
-// P-384 scalar multiplication
-// ---------------------------------------------------------------------------
-
-// impl drv::P384ScalarMul for McuCryptoAsmDriver {
-//     fn mul_base(k: P384Scalar) -> P384AffinePoint {
-//         let k = p384_scalar_from_canonical(&k).unwrap_or(ScalarP384::ZERO);
-//         if k.is_zero() {
-//             return P384AffinePoint {
-//                 x: [0u8; 48],
-//                 y: [0u8; 48],
-//             };
-//         }
-//         p384_point_to_canonical(&crate::p384::mul_base(&k.to_int(&P384_CURVE)))
-//     }
-//
-//     fn mul_affine(k: P384Scalar, p: P384AffinePoint) -> P384AffinePoint {
-//         let k = p384_scalar_from_canonical(&k).unwrap_or(ScalarP384::ZERO);
-//         let p = p384_point_from_canonical(&p).unwrap_or_else(|| Point::identity(&P384_FIELD));
-//         if k.is_zero() || p.is_identity() {
-//             return P384AffinePoint {
-//                 x: [0u8; 48],
-//                 y: [0u8; 48],
-//             };
-//         }
-//         p384_point_to_canonical(&p.mul_scalar(&P384_CURVE, &k.to_int(&P384_CURVE)))
-//     }
-// }
-//
-// drv::p384_scalar_mul_impl!(McuCryptoAsmDriver);
-
-// ---------------------------------------------------------------------------
-// Scalar inversion
-// ---------------------------------------------------------------------------
-
-// impl drv::P256ScalarInvert for McuCryptoAsmDriver {
-//     fn invert(k: P256Scalar) -> P256Scalar {
-//         let k_sc = p256_scalar_from_canonical(&k).unwrap_or(ScalarP256::ZERO);
-//         if k_sc.is_zero() {
-//             return P256Scalar([0u8; 32]);
-//         }
-//         #[cfg(nistp_asm_cm4)]
-//         {
-//             let mut out = [0u32; 8];
-//             crate::backend::cortex_m4::p256::mod_n_inv(&mut out, &k_sc.to_int(&P256_CURVE));
-//             P256Scalar(limbs_to_be_256(&out))
-//         }
-//         #[cfg(not(nistp_asm_cm4))]
-//         {
-//             p256_scalar_to_canonical(&k_sc.invert(&P256_CURVE).unwrap_or(ScalarP256::ZERO))
-//         }
-//     }
-//
-//     fn invert_vartime(k: P256Scalar) -> P256Scalar {
-//         let k_sc = p256_scalar_from_canonical(&k).unwrap_or(ScalarP256::ZERO);
-//         if k_sc.is_zero() {
-//             return P256Scalar([0u8; 32]);
-//         }
-//         #[cfg(nistp_asm_cm4)]
-//         {
-//             let mut out = [0u32; 8];
-//             let limbs = k_sc.to_int(&P256_CURVE);
-//             unsafe {
-//                 crate::backend::cortex_m4::p256::P256_mod_n_inv_vartime(
-//                     out.as_mut_ptr(),
-//                     limbs.as_ptr(),
-//                 );
-//             }
-//             P256Scalar(limbs_to_be_256(&out))
-//         }
-//         #[cfg(not(nistp_asm_cm4))]
-//         {
-//             Self::invert(k)
-//         }
-//     }
-// }
-//
-// drv::p256_scalar_invert_impl!(McuCryptoAsmDriver);
-//
-// impl drv::P384ScalarInvert for McuCryptoAsmDriver {
-//     fn invert(k: P384Scalar) -> P384Scalar {
-//         let k = p384_scalar_from_canonical(&k).unwrap_or(ScalarP384::ZERO);
-//         p384_scalar_to_canonical(&k.invert(&P384_CURVE).unwrap_or(ScalarP384::ZERO))
-//     }
-//
-//     fn invert_vartime(k: P384Scalar) -> P384Scalar {
-//         Self::invert(k)
-//     }
-// }
-//
-// drv::p384_scalar_invert_impl!(McuCryptoAsmDriver);
-
-// ---------------------------------------------------------------------------
-// Double-base linear combinations
-// ---------------------------------------------------------------------------
-
-// impl drv::P256Lincomb for McuCryptoAsmDriver {
-//     fn lincomb(k1: P256Scalar, p1: P256Point, k2: P256Scalar, p2: P256Point) -> Option<P256Point> {
-//         let k1_sc = p256_scalar_from_canonical(&k1).unwrap_or(ScalarP256::ZERO);
-//         let k2_sc = p256_scalar_from_canonical(&k2).unwrap_or(ScalarP256::ZERO);
-//         let k1_zero = k1_sc.is_zero();
-//         let k2_zero = k2_sc.is_zero();
-//         if k1_zero && k2_zero {
-//             return None;
-//         }
-//         if k1_zero {
-//             let r = <Self as P256ScalarMul>::mul_affine(k2, p2);
-//             return if r == P256Point::default() {
-//                 None
-//             } else {
-//                 Some(r)
-//             };
-//         }
-//         if k2_zero {
-//             let r = <Self as P256ScalarMul>::mul_affine(k1, p1);
-//             return if r == P256Point::default() {
-//                 None
-//             } else {
-//                 Some(r)
-//             };
-//         }
-//
-//         #[cfg(nistp_asm_cm4)]
-//         {
-//             let p1_is_g = p1 == P256_GENERATOR_AFFINE;
-//             let p2_is_g = p2 == P256_GENERATOR_AFFINE;
-//
-//             let mut p1_j = [[0u32; 8]; 3];
-//             let mut p2_j = [[0u32; 8]; 3];
-//
-//             if !p1_is_g {
-//                 p1_j = affine_to_jacobian(&p1)?;
-//             }
-//             if !p2_is_g {
-//                 p2_j = affine_to_jacobian(&p2)?;
-//             }
-//
-//             let mut out_j = [[0u32; 8]; 3];
-//             crate::backend::cortex_m4::p256::lincomb_jacobian(
-//                 &mut out_j,
-//                 &k1_sc.to_int(&P256_CURVE),
-//                 &p1_j,
-//                 p1_is_g,
-//                 &k2_sc.to_int(&P256_CURVE),
-//                 &p2_j,
-//                 p2_is_g,
-//             );
-//
-//             let aff = jacobian_to_canonical_affine(&out_j);
-//             if aff == P256Point::default() {
-//                 None
-//             } else {
-//                 Some(aff)
-//             }
-//         }
-//         #[cfg(not(nistp_asm_cm4))]
-//         {
-//             let p1 = p256_point_from_canonical(&p1).unwrap_or_else(|| Point::identity(&P256_FIELD));
-//             let p2 = p256_point_from_canonical(&p2).unwrap_or_else(|| Point::identity(&P256_FIELD));
-//
-//             let result = Point::lincomb(
-//                 &P256_CURVE,
-//                 &k1_sc.to_int(&P256_CURVE),
-//                 &p1,
-//                 &k2_sc.to_int(&P256_CURVE),
-//                 &p2,
-//             );
-//
-//             p256_point_to_canonical_opt(&result)
-//         }
-//     }
-// }
-//
-// drv::p256_lincomb_impl!(McuCryptoAsmDriver);
-//
-// impl drv::P384Lincomb for McuCryptoAsmDriver {
-//     fn lincomb(
-//         k1: P384Scalar,
-//         p1: P384AffinePoint,
-//         k2: P384Scalar,
-//         p2: P384AffinePoint,
-//     ) -> Option<P384AffinePoint> {
-//         let k1 = p384_scalar_from_canonical(&k1).unwrap_or(ScalarP384::ZERO);
-//         let k2 = p384_scalar_from_canonical(&k2).unwrap_or(ScalarP384::ZERO);
-//         let p1 = p384_point_from_canonical(&p1).unwrap_or_else(|| Point::identity(&P384_FIELD));
-//         let p2 = p384_point_from_canonical(&p2).unwrap_or_else(|| Point::identity(&P384_FIELD));
-//
-//         let result = Point::lincomb(
-//             &P384_CURVE,
-//             &k1.to_int(&P384_CURVE),
-//             &p1,
-//             &k2.to_int(&P384_CURVE),
-//             &p2,
-//         );
-//
-//         p384_point_to_canonical_opt(&result)
-//     }
-// }
-//
-// drv::p384_lincomb_impl!(McuCryptoAsmDriver);
-
 // ---------------------------------------------------------------------------
 // High-level P-256 operations
 // ---------------------------------------------------------------------------
@@ -575,12 +345,9 @@ impl drv::P256Ecdh for McuCryptoAsmDriver {
         let mut out = [0u8; 32];
         let result = crate::p256::ecdh::shared_secret(&k.0, &peer_enc, &mut out);
 
-        result.map_err(|e| match e {
-            crate::ecdh::Error::BadScalar => drv::Error::InvalidKey,
-            crate::ecdh::Error::BadPoint | crate::ecdh::Error::BadLength => {
-                drv::Error::InvalidInput
-            }
-        })?;
+        // `peer` is untrusted: the trait contract reports a bad peer as
+        // `InvalidKey`, not `InvalidInput`.
+        result.map_err(|_| drv::Error::InvalidKey)?;
         Ok(out)
     }
 }
@@ -601,16 +368,23 @@ impl drv::P256Ecdsa for McuCryptoAsmDriver {
             return Err(drv::Error::InvalidKey);
         }
 
+        // The nonce is drawn from RngImpl by rejection sampling into [1, n).
         let mut nonce = [0u8; 32];
-        drv::RngImpl::fill_bytes(&mut nonce)?;
-
         let mut r = [0u8; 32];
         let mut s = [0u8; 32];
-        let result = crate::p256::ecdsa::sign(&k.0, digest, &nonce, &mut r, &mut s);
+        let mut result: Result<(), crate::ecdsa::Error> = Err(crate::ecdsa::Error::BadScalar);
+        for _ in 0..8 {
+            drv::RngImpl::fill_bytes(&mut nonce)?;
+            result = crate::p256::ecdsa::sign(&k.0, digest, &nonce, &mut r, &mut s);
+            if result.is_ok() {
+                break;
+            }
+            result = Err(crate::ecdsa::Error::BadScalar);
+        }
         wipe(&mut nonce);
         result.map_err(|_| drv::Error::InvalidInput)?;
 
-        s = p256_low_s(&s)?;
+        s = low_s::<8, 32>(&s, &P256_CURVE)?;
         Ok(P256Signature {
             r: P256Scalar(r),
             s: P256Scalar(s),
@@ -623,30 +397,312 @@ impl drv::P256Ecdsa for McuCryptoAsmDriver {
         q_enc[1..33].copy_from_slice(&q.x);
         q_enc[33..65].copy_from_slice(&q.y);
 
+        // Contract: any verification failure is `InvalidSignature`, except an
+        // invalid `q`, which is `InvalidKey`.
         crate::p256::ecdsa::verify(&q_enc, digest, &sig.r.0, &sig.s.0).map_err(|e| match e {
-            crate::ecdsa::Error::BadSignature => drv::Error::InvalidSignature,
-            crate::ecdsa::Error::BadScalar => drv::Error::InvalidSignature,
-            crate::ecdsa::Error::BadPoint | crate::ecdsa::Error::BadLength => {
-                drv::Error::InvalidInput
-            }
+            crate::ecdsa::Error::BadPoint => drv::Error::InvalidKey,
+            _ => drv::Error::InvalidSignature,
         })
     }
 }
+
+reg::p256_ecdsa_impl!(McuCryptoAsmDriver);
+
+// ---------------------------------------------------------------------------
+// P-256 scalar/point arithmetic
+// ---------------------------------------------------------------------------
+
+impl drv::P256Arith for McuCryptoAsmDriver {
+    type Point = PointP256;
+
+    fn scalar_add(a: &P256Scalar, b: &P256Scalar) -> P256Scalar {
+        let a = p256_scalar_from_canonical(a).unwrap_or(ScalarP256::ZERO);
+        let b = p256_scalar_from_canonical(b).unwrap_or(ScalarP256::ZERO);
+        p256_scalar_to_canonical(&a.add(&P256_CURVE, &b))
+    }
+
+    fn scalar_sub(a: &P256Scalar, b: &P256Scalar) -> P256Scalar {
+        let a = p256_scalar_from_canonical(a).unwrap_or(ScalarP256::ZERO);
+        let b = p256_scalar_from_canonical(b).unwrap_or(ScalarP256::ZERO);
+        p256_scalar_to_canonical(&a.sub(&P256_CURVE, &b))
+    }
+
+    fn scalar_mul(a: &P256Scalar, b: &P256Scalar) -> P256Scalar {
+        let a = p256_scalar_from_canonical(a).unwrap_or(ScalarP256::ZERO);
+        let b = p256_scalar_from_canonical(b).unwrap_or(ScalarP256::ZERO);
+        p256_scalar_to_canonical(&a.mul(&P256_CURVE, &b))
+    }
+
+    fn scalar_invert(a: &P256Scalar) -> P256Scalar {
+        let a = p256_scalar_from_canonical(a).unwrap_or(ScalarP256::ZERO);
+        p256_scalar_to_canonical(&a.invert(&P256_CURVE).unwrap_or(ScalarP256::ZERO))
+    }
+
+    fn point_identity() -> Self::Point {
+        Point::identity(&P256_FIELD)
+    }
+
+    fn point_from_affine(p: &P256Point) -> Option<Self::Point> {
+        p256_point_from_canonical(p)
+    }
+
+    fn point_from_affine_unchecked(p: &P256Point) -> Self::Point {
+        p256_point_from_canonical(p).unwrap_or_else(|| Point::identity(&P256_FIELD))
+    }
+
+    fn point_to_affine(p: &Self::Point) -> Option<P256Point> {
+        p256_point_to_canonical(p)
+    }
+
+    fn point_is_identity(p: &Self::Point) -> bool {
+        p.is_identity()
+    }
+
+    fn point_neg(p: &Self::Point) -> Self::Point {
+        Point {
+            x: p.x,
+            y: Fe::ZERO.sub(&P256_FIELD, &p.y),
+            z: p.z,
+        }
+    }
+
+    fn point_add(p: &Self::Point, q: &Self::Point) -> Self::Point {
+        p.add(&P256_CURVE, q)
+    }
+
+    fn point_mul(k: &P256Scalar, p: &Self::Point) -> Self::Point {
+        let k = p256_scalar_from_canonical(k).unwrap_or(ScalarP256::ZERO);
+        p.mul_scalar(&P256_CURVE, &k.to_int(&P256_CURVE))
+    }
+
+    fn point_mul_base(k: &P256Scalar) -> Self::Point {
+        let k = p256_scalar_from_canonical(k).unwrap_or(ScalarP256::ZERO);
+        crate::p256::mul_base(&k.to_int(&P256_CURVE))
+    }
+
+    fn point_lincomb(
+        a: &P256Scalar,
+        p: &Self::Point,
+        b: &P256Scalar,
+        q: &Self::Point,
+    ) -> Self::Point {
+        let a = p256_scalar_from_canonical(a).unwrap_or(ScalarP256::ZERO);
+        let b = p256_scalar_from_canonical(b).unwrap_or(ScalarP256::ZERO);
+        Point::lincomb(
+            &P256_CURVE,
+            &a.to_int(&P256_CURVE),
+            p,
+            &b.to_int(&P256_CURVE),
+            q,
+        )
+    }
+
+    fn point_lincomb_vartime(
+        a: &P256Scalar,
+        p: &Self::Point,
+        b: &P256Scalar,
+        q: &Self::Point,
+    ) -> Self::Point {
+        Self::point_lincomb(a, p, b, q)
+    }
+}
+
+reg::p256_arith_impl!(McuCryptoAsmDriver);
+
+// ---------------------------------------------------------------------------
+// High-level P-384 operations
+// ---------------------------------------------------------------------------
+
+impl drv::P384Arith for McuCryptoAsmDriver {
+    type Point = PointP384;
+
+    fn scalar_add(a: &P384Scalar, b: &P384Scalar) -> P384Scalar {
+        let a = p384_scalar_from_canonical(a).unwrap_or(ScalarP384::ZERO);
+        let b = p384_scalar_from_canonical(b).unwrap_or(ScalarP384::ZERO);
+        p384_scalar_to_canonical(&a.add(&P384_CURVE, &b))
+    }
+
+    fn scalar_sub(a: &P384Scalar, b: &P384Scalar) -> P384Scalar {
+        let a = p384_scalar_from_canonical(a).unwrap_or(ScalarP384::ZERO);
+        let b = p384_scalar_from_canonical(b).unwrap_or(ScalarP384::ZERO);
+        p384_scalar_to_canonical(&a.sub(&P384_CURVE, &b))
+    }
+
+    fn scalar_mul(a: &P384Scalar, b: &P384Scalar) -> P384Scalar {
+        let a = p384_scalar_from_canonical(a).unwrap_or(ScalarP384::ZERO);
+        let b = p384_scalar_from_canonical(b).unwrap_or(ScalarP384::ZERO);
+        p384_scalar_to_canonical(&a.mul(&P384_CURVE, &b))
+    }
+
+    fn scalar_invert(a: &P384Scalar) -> P384Scalar {
+        let a = p384_scalar_from_canonical(a).unwrap_or(ScalarP384::ZERO);
+        p384_scalar_to_canonical(&a.invert(&P384_CURVE).unwrap_or(ScalarP384::ZERO))
+    }
+
+    fn point_identity() -> Self::Point {
+        Point::identity(&P384_FIELD)
+    }
+
+    fn point_from_affine(p: &P384Point) -> Option<Self::Point> {
+        p384_point_from_canonical(p)
+    }
+
+    fn point_from_affine_unchecked(p: &P384Point) -> Self::Point {
+        p384_point_from_canonical(p).unwrap_or_else(|| Point::identity(&P384_FIELD))
+    }
+
+    fn point_to_affine(p: &Self::Point) -> Option<P384Point> {
+        p384_point_to_canonical(p)
+    }
+
+    fn point_is_identity(p: &Self::Point) -> bool {
+        p.is_identity()
+    }
+
+    fn point_neg(p: &Self::Point) -> Self::Point {
+        Point {
+            x: p.x,
+            y: Fe::ZERO.sub(&P384_FIELD, &p.y),
+            z: p.z,
+        }
+    }
+
+    fn point_add(p: &Self::Point, q: &Self::Point) -> Self::Point {
+        p.add(&P384_CURVE, q)
+    }
+
+    fn point_mul(k: &P384Scalar, p: &Self::Point) -> Self::Point {
+        let k = p384_scalar_from_canonical(k).unwrap_or(ScalarP384::ZERO);
+        p.mul_scalar(&P384_CURVE, &k.to_int(&P384_CURVE))
+    }
+
+    fn point_mul_base(k: &P384Scalar) -> Self::Point {
+        let k = p384_scalar_from_canonical(k).unwrap_or(ScalarP384::ZERO);
+        crate::p384::mul_base(&k.to_int(&P384_CURVE))
+    }
+
+    fn point_lincomb(
+        a: &P384Scalar,
+        p: &Self::Point,
+        b: &P384Scalar,
+        q: &Self::Point,
+    ) -> Self::Point {
+        let a = p384_scalar_from_canonical(a).unwrap_or(ScalarP384::ZERO);
+        let b = p384_scalar_from_canonical(b).unwrap_or(ScalarP384::ZERO);
+        Point::lincomb(
+            &P384_CURVE,
+            &a.to_int(&P384_CURVE),
+            p,
+            &b.to_int(&P384_CURVE),
+            q,
+        )
+    }
+
+    fn point_lincomb_vartime(
+        a: &P384Scalar,
+        p: &Self::Point,
+        b: &P384Scalar,
+        q: &Self::Point,
+    ) -> Self::Point {
+        Self::point_lincomb(a, p, b, q)
+    }
+}
+
+reg::p384_arith_impl!(McuCryptoAsmDriver);
+
+impl drv::P384Ecdh for McuCryptoAsmDriver {
+    fn public_key(k: &P384Scalar) -> Result<P384Point, drv::Error> {
+        let k_sc = p384_scalar_from_canonical(k).ok_or(drv::Error::InvalidKey)?;
+        p384_point_to_canonical(&crate::p384::mul_base(&k_sc.to_int(&P384_CURVE)))
+            .ok_or(drv::Error::InvalidInput)
+    }
+
+    fn shared_secret(k: &P384Scalar, peer: &P384Point) -> Result<[u8; 48], drv::Error> {
+        if ScalarP384::from_be_bytes_nonzero(&P384_CURVE, &k.0).is_err() {
+            return Err(drv::Error::InvalidKey);
+        }
+
+        let mut peer_enc = [0u8; 97];
+        peer_enc[0] = 0x04;
+        peer_enc[1..49].copy_from_slice(&peer.x);
+        peer_enc[49..97].copy_from_slice(&peer.y);
+
+        let mut out = [0u8; 48];
+        crate::p384::ecdh::shared_secret(&k.0, &peer_enc, &mut out)
+            .map_err(|_| drv::Error::InvalidKey)?;
+        Ok(out)
+    }
+}
+
+reg::p384_ecdh_impl!(McuCryptoAsmDriver);
+
+impl drv::P384Ecdsa for McuCryptoAsmDriver {
+    fn public_key(k: &P384Scalar) -> Result<P384Point, drv::Error> {
+        let k_sc = p384_scalar_from_canonical(k).ok_or(drv::Error::InvalidKey)?;
+        p384_point_to_canonical(&crate::p384::mul_base(&k_sc.to_int(&P384_CURVE)))
+            .ok_or(drv::Error::InvalidInput)
+    }
+
+    fn sign(k: &P384Scalar, digest: &[u8; 48]) -> Result<P384Signature, drv::Error> {
+        if ScalarP384::from_be_bytes_nonzero(&P384_CURVE, &k.0).is_err() {
+            return Err(drv::Error::InvalidKey);
+        }
+
+        // The nonce is drawn from RngImpl by rejection sampling into [1, n).
+        let mut nonce = [0u8; 48];
+        let mut r = [0u8; 48];
+        let mut s = [0u8; 48];
+        let mut result: Result<(), crate::ecdsa::Error> = Err(crate::ecdsa::Error::BadScalar);
+        for _ in 0..8 {
+            drv::RngImpl::fill_bytes(&mut nonce)?;
+            result = crate::p384::ecdsa::sign(&k.0, digest, &nonce, &mut r, &mut s);
+            if result.is_ok() {
+                break;
+            }
+            result = Err(crate::ecdsa::Error::BadScalar);
+        }
+        wipe(&mut nonce);
+        result.map_err(|_| drv::Error::InvalidInput)?;
+
+        s = low_s::<12, 48>(&s, &P384_CURVE)?;
+        Ok(P384Signature {
+            r: P384Scalar(r),
+            s: P384Scalar(s),
+        })
+    }
+
+    fn verify(q: &P384Point, digest: &[u8; 48], sig: &P384Signature) -> Result<(), drv::Error> {
+        let mut q_enc = [0u8; 97];
+        q_enc[0] = 0x04;
+        q_enc[1..49].copy_from_slice(&q.x);
+        q_enc[49..97].copy_from_slice(&q.y);
+
+        // Contract: any verification failure is `InvalidSignature`, except an
+        // invalid `q`, which is `InvalidKey`.
+        crate::p384::ecdsa::verify(&q_enc, digest, &sig.r.0, &sig.s.0).map_err(|e| match e {
+            crate::ecdsa::Error::BadPoint => drv::Error::InvalidKey,
+            _ => drv::Error::InvalidSignature,
+        })
+    }
+}
+
+reg::p384_ecdsa_impl!(McuCryptoAsmDriver);
 
 // ---------------------------------------------------------------------------
 // AES driver support
 // ---------------------------------------------------------------------------
 //
-// All AES modes here are built on the crate's fixsliced AES core, which is
-// encryption-only (Adomnicai's CHES 2020 fixslicing defines no inverse
-// transforms). That covers every `embassy-crypto-driver` AES trait except
-// ECB and CBC, whose `decrypt_blocks` requires the raw inverse cipher. Those
-// two traits are intentionally not registered; firmware that needs them
-// should fall back to `embassy-crypto`'s software AES for those modes.
+// GCM, CTR, CMAC and CCM are built on the crate's fixsliced AES core. ECB and
+// CBC (below, after the SHA-512 family sections) use a plain-Rust AES: the
+// fixsliced core defines no inverse transforms, and the ECB/CBC driver
+// contexts are too small to hold both a fixsliced schedule and a conventional
+// one. The inverse cipher derives its S-box by inversion in GF(2^8) — no
+// transcribed tables — and correctness takes priority over speed for ECB/CBC
+// on an MCU.
 //
-// Mode implementations follow NIST SP 800-38A (CTR), SP 800-38B (CMAC),
-// SP 800-38C / RFC 3610 (CCM) and SP 800-38D (GCM).
-
+// Mode implementations follow NIST SP 800-38A (CTR, CBC, ECB), SP 800-38B
+// (CMAC), SP 800-38C / RFC 3610 (CCM) and SP 800-38D (GCM).
+//
 use crate::aes::{Aes128, Aes256};
 use crate::ghash::{Ghash, Htable};
 
@@ -654,6 +710,7 @@ use crate::ghash::{Ghash, Htable};
 /// generic over the key size.
 trait AesEncrypt {
     fn encrypt_block(&self, ptext: &[u8; 16], ctext: &mut [u8; 16]);
+    #[allow(dead_code)]
     fn encrypt_two_blocks(
         &self,
         p0: &[u8; 16],
@@ -741,9 +798,10 @@ fn ctr_apply<E: AesEncrypt>(
         let mut k1 = [0u8; 16];
         let b0 = *counter;
         inc(counter);
+        aes.encrypt_block(&b0, &mut k0);
         let b1 = *counter;
         inc(counter);
-        aes.encrypt_two_blocks(&b0, &b1, &mut k0, &mut k1);
+        aes.encrypt_block(&b1, &mut k1);
         for i in 0..16 {
             c0[i] = m0[i] ^ k0[i];
             c1[i] = m1[i] ^ k1[i];
@@ -973,9 +1031,22 @@ macro_rules! impl_ctr {
                 while offset < data.len() {
                     if ctx.pos == 16 {
                         if data.len() - offset >= 32 {
-                            // Bulk path: two fixsliced blocks per call.
-                            ctr_apply(&ctx.aes, &mut ctx.counter, inc128, &mut data[offset..]);
-                            return;
+                            // Bulk path: process whole 16-byte multiples only.
+                            // ctr_apply's sub-16 tail generates a keystream
+                            // block and discards its unused bytes; the counter
+                            // advances but ctx.pos stays 16, so the next call
+                            // would resume at the wrong stream offset.
+                            let bulk = (data.len() - offset) & !15;
+                            ctr_apply(
+                                &ctx.aes,
+                                &mut ctx.counter,
+                                inc128,
+                                &mut data[offset..offset + bulk],
+                            );
+                            offset += bulk;
+                            if offset == data.len() {
+                                return;
+                            }
                         }
                         ctx.aes.encrypt_block(&ctx.counter, &mut ctx.keystream);
                         inc128(&mut ctx.counter);
@@ -1144,7 +1215,7 @@ macro_rules! impl_cmac {
 }
 
 impl_cmac!(Aes128Cmac, aes128_cmac_impl, Aes128, Aes128CmacContext, 16);
-//  impl_cmac!(Aes256Cmac, aes256cmac_impl, Aes256, Aes256CmacContext, 32);
+impl_cmac!(Aes256Cmac, aes256_cmac_impl, Aes256, Aes256CmacContext, 32);
 
 // ---------------------------------------------------------------------------
 // CCM (NIST SP 800-38C / RFC 3610)
@@ -1356,8 +1427,11 @@ macro_rules! impl_ccm {
                 tag: &[u8],
             ) -> Result<(), drv::Error> {
                 let (q, t) = ccm_params(nonce.len(), tag.len())?;
-                // Authenticate the ciphertext before releasing any plaintext.
-                let mac = ccm_cbc_mac(&ctx.aes, q, t, nonce, aad, buffer.get_in())?;
+                // CCM's CBC-MAC is defined over the plaintext, so decrypt
+                // first, then authenticate the recovered plaintext.
+                let mut buf = buffer.into_out_with_copied_in();
+                ccm_ctr_crypt(&ctx.aes, q, nonce, 1, &mut buf);
+                let mac = ccm_cbc_mac(&ctx.aes, q, t, nonce, aad, &buf)?;
                 let mut s0 = [0u8; 16];
                 ctx.aes.encrypt_block(&ccm_ctr_block(q, nonce, 0), &mut s0);
                 let mut diff = 0u8;
@@ -1368,8 +1442,6 @@ macro_rules! impl_ccm {
                 if diff != 0 {
                     return Err(drv::Error::InvalidSignature);
                 }
-                let mut buf = buffer.into_out_with_copied_in();
-                ccm_ctr_crypt(&ctx.aes, q, nonce, 1, &mut buf);
                 Ok(())
             }
         }
@@ -1380,4 +1452,705 @@ macro_rules! impl_ccm {
 
 impl_ccm!(Aes128Ccm, aes128_ccm_impl, Aes128, Aes128CcmContext, 16);
 impl_ccm!(Aes256Ccm, aes256_ccm_impl, Aes256, Aes256CcmContext, 32);
-reg::p256_ecdsa_impl!(McuCryptoAsmDriver);
+// ---------------------------------------------------------------------------
+// X25519 (RFC 7748)
+// ---------------------------------------------------------------------------
+
+impl drv::X25519 for McuCryptoAsmDriver {
+    fn public_key(k: &drv::X25519SecretKey) -> Result<drv::X25519PublicKey, drv::Error> {
+        Ok(drv::X25519PublicKey(crate::curve25519::x25519::public_key(
+            &k.0,
+        )))
+    }
+
+    fn shared_secret(
+        k: &drv::X25519SecretKey,
+        peer: &drv::X25519PublicKey,
+    ) -> Result<[u8; 32], drv::Error> {
+        // X25519 accepts every 32-byte string as a peer key; rejecting the
+        // all-zero shared secret (low-order peer) is the public API's job.
+        Ok(crate::curve25519::x25519::scalarmult(&k.0, &peer.0))
+    }
+}
+
+reg::x25519_impl!(McuCryptoAsmDriver);
+
+// ---------------------------------------------------------------------------
+// Ed25519 (RFC 8032)
+// ---------------------------------------------------------------------------
+
+/// Clamp the first half of the hashed Ed25519 seed (RFC 8032 section 5.1.5).
+fn ed25519_prune(h: &mut [u8; 32]) {
+    h[0] &= 248;
+    h[31] &= 63;
+    h[31] |= 64;
+}
+
+/// Little-endian bytes -> 4 x u64 limbs.
+fn le_limbs_256(b: &[u8; 32]) -> [u64; 4] {
+    let mut out = [0u64; 4];
+    for i in 0..4 {
+        out[i] = u64::from_le_bytes(b[i * 8..i * 8 + 8].try_into().unwrap());
+    }
+    out
+}
+
+/// `k * a + r` on 256-bit little-endian integers as a 64-byte little-endian
+/// value for reduction mod L by the caller. `k * a + r < L^2 + L < 2^512`, so
+/// the result always fits.
+fn mul_add_256le(k: &[u8; 32], a: &[u8; 32], r: &[u8; 32]) -> [u8; 64] {
+    let kl = le_limbs_256(k);
+    let al = le_limbs_256(a);
+
+    // 4x4 u64 schoolbook multiply -> 512-bit product.
+    let mut t = [0u64; 8];
+    for i in 0..4 {
+        let mut carry = 0u128;
+        for j in 0..4 {
+            let cur = t[i + j] as u128 + kl[i] as u128 * al[j] as u128 + carry;
+            t[i + j] = cur as u64;
+            carry = cur >> 64;
+        }
+        let mut idx = i + 4;
+        while carry != 0 {
+            let cur = t[idx] as u128 + carry;
+            t[idx] = cur as u64;
+            carry = cur >> 64;
+            idx += 1;
+        }
+    }
+
+    // Add r into the low half, propagating into the high half.
+    let rl = le_limbs_256(r);
+    let mut carry = 0u128;
+    for i in 0..4 {
+        let cur = t[i] as u128 + rl[i] as u128 + carry;
+        t[i] = cur as u64;
+        carry = cur >> 64;
+    }
+    let mut idx = 4;
+    while carry != 0 {
+        let cur = t[idx] as u128 + carry;
+        t[idx] = cur as u64;
+        carry = cur >> 64;
+        idx += 1;
+    }
+
+    let mut out = [0u8; 64];
+    for i in 0..8 {
+        out[i * 8..i * 8 + 8].copy_from_slice(&t[i].to_le_bytes());
+    }
+    out
+}
+
+/// True if `p` has order dividing 8 (three doublings reach the identity).
+fn ed25519_is_small_order(
+    p: crate::curve25519::ed25519::EdwardsPoint,
+    identity: &crate::curve25519::ed25519::EdwardsPoint,
+) -> bool {
+    let mut t = p + p;
+    t = t + t;
+    t = t + t;
+    t.compress().0 == identity.compress().0
+}
+
+impl drv::Ed25519 for McuCryptoAsmDriver {
+    fn public_key(k: &drv::Ed25519SecretKey) -> Result<drv::Ed25519PublicKey, drv::Error> {
+        use crate::curve25519::ed25519::{Scalar, ED25519_BASEPOINT_POINT};
+
+        let mut h = crate::sha512::sha512(&k.0);
+        let mut a_bytes = [0u8; 32];
+        a_bytes.copy_from_slice(&h[..32]);
+        ed25519_prune(&mut a_bytes);
+        wipe(&mut h);
+        let a = Scalar::from_bytes_mod_order(a_bytes);
+
+        Ok(drv::Ed25519PublicKey(
+            (a * ED25519_BASEPOINT_POINT).compress().0,
+        ))
+    }
+
+    fn sign(k: &drv::Ed25519SecretKey, msg: &[u8]) -> Result<drv::Ed25519Signature, drv::Error> {
+        use crate::curve25519::ed25519::{Scalar, ED25519_BASEPOINT_POINT};
+
+        let mut h = crate::sha512::sha512(&k.0);
+        let mut a_bytes = [0u8; 32];
+        a_bytes.copy_from_slice(&h[..32]);
+        ed25519_prune(&mut a_bytes);
+        let prefix: [u8; 32] = h[32..64].try_into().unwrap();
+        wipe(&mut h);
+
+        let a = Scalar::from_bytes_mod_order(a_bytes);
+        let apk = (a * ED25519_BASEPOINT_POINT).compress().0;
+
+        // r = H(prefix || msg) mod L (RFC 8032 section 5.1.6). Deterministic:
+        // no random source is used.
+        let mut hr = crate::sha512::Sha512::new();
+        hr.update(&prefix);
+        hr.update(msg);
+        let r_hash = hr.finalize();
+        let r = Scalar::from_bytes_mod_order_wide(&r_hash);
+
+        let r_enc = (r * ED25519_BASEPOINT_POINT).compress().0;
+
+        // k = H(R || A || msg) mod L.
+        let mut hk = crate::sha512::Sha512::new();
+        hk.update(&r_enc);
+        hk.update(&apk);
+        hk.update(msg);
+        let k_hash = hk.finalize();
+        let k = Scalar::from_bytes_mod_order_wide(&k_hash);
+
+        // S = (r + k * a) mod L, via a 512-bit wide reduction.
+        let s_wide = mul_add_256le(k.as_bytes(), &a_bytes, r.as_bytes());
+        let s = Scalar::from_bytes_mod_order_wide(&s_wide);
+
+        let mut sig = [0u8; 64];
+        sig[..32].copy_from_slice(&r_enc);
+        sig[32..].copy_from_slice(s.as_bytes());
+        Ok(drv::Ed25519Signature(sig))
+    }
+
+    fn verify(
+        a: &drv::Ed25519PublicKey,
+        msg: &[u8],
+        sig: &drv::Ed25519Signature,
+    ) -> Result<(), drv::Error> {
+        use crate::curve25519::ed25519::{CompressedEdwardsY, Scalar, ED25519_BASEPOINT_POINT};
+
+        // An undecodable public key is `InvalidKey`; every other failure mode
+        // (bad R encoding, S not canonical per RFC 8032 section 8.4, or a
+        // verification mismatch) is `InvalidSignature`.
+        let a_pt = CompressedEdwardsY(a.0)
+            .decompress()
+            .ok_or(drv::Error::InvalidKey)?;
+        let r_bytes: [u8; 32] = sig.0[..32].try_into().unwrap();
+        let s_bytes: [u8; 32] = sig.0[32..].try_into().unwrap();
+        let r_pt = CompressedEdwardsY(r_bytes)
+            .decompress()
+            .ok_or(drv::Error::InvalidSignature)?;
+        // Strict verification (RFC 8032 section 8.4 / Wycheproof): reject
+        // small-order public keys and R values before the equation check.
+        let identity = r_pt + (-r_pt);
+        if ed25519_is_small_order(a_pt, &identity) {
+            return Err(drv::Error::InvalidKey);
+        }
+        if ed25519_is_small_order(r_pt, &identity) {
+            return Err(drv::Error::InvalidSignature);
+        }
+        let s = Scalar::from_canonical_bytes(s_bytes).ok_or(drv::Error::InvalidSignature)?;
+
+        let mut hk = crate::sha512::Sha512::new();
+        hk.update(&r_bytes);
+        hk.update(&a.0);
+        hk.update(msg);
+        let k_hash = hk.finalize();
+        let k = Scalar::from_bytes_mod_order_wide(&k_hash);
+
+        // [S]B == R + [k]A. Only public data; may be variable-time. Edwards
+        // points are compared by their canonical compressed encoding: the
+        // derived PartialEq compares raw projective coordinates, which differ
+        // for equal points in different (X, Y, Z, T) representations.
+        if (s * ED25519_BASEPOINT_POINT).compress().0 == (r_pt + k * a_pt).compress().0 {
+            Ok(())
+        } else {
+            Err(drv::Error::InvalidSignature)
+        }
+    }
+}
+
+reg::ed25519_impl!(McuCryptoAsmDriver);
+
+// ---------------------------------------------------------------------------
+// AES ECB / CBC, including the raw inverse cipher (FIPS 197)
+// ---------------------------------------------------------------------------
+
+/// GF(2^8) multiply by x (reduction polynomial x^8 + x^4 + x^3 + x + 1).
+fn aes_xtime(x: u8) -> u8 {
+    (x << 1) ^ (((x >> 7) & 1) * 0x1B)
+}
+
+/// GF(2^8) multiply (Russian peasant).
+fn aes_gmul(mut a: u8, mut b: u8) -> u8 {
+    let mut p = 0u8;
+    while b != 0 {
+        if b & 1 != 0 {
+            p ^= a;
+        }
+        a = aes_xtime(a);
+        b >>= 1;
+    }
+    p
+}
+
+/// Derive the AES S-box and inverse S-box (FIPS 197 section 5.1.1): the
+/// multiplicative inverse in GF(2^8) followed by the affine transform, with
+/// the inverse table as the elementwise inverse permutation. Computed per
+/// call site so the driver contexts only store the round keys.
+fn aes_sboxes() -> ([u8; 256], [u8; 256]) {
+    // exp/log tables for GF(2^8) with generator 3.
+    let mut exp = [0u8; 255];
+    let mut log = [0u8; 256];
+    let mut x = 1u8;
+    for i in 0..255 {
+        exp[i] = x;
+        log[x as usize] = i as u8;
+        x = aes_gmul(x, 3);
+    }
+
+    let mut sbox = [0u8; 256];
+    let mut isbox = [0u8; 256];
+    for a in 0..256usize {
+        let inv = if a == 0 {
+            0
+        } else {
+            exp[(255 - log[a] as usize) % 255]
+        };
+        // Affine transform: b = inv ^ rotl(inv,1) ^ ... ^ rotl(inv,4) ^ 0x63.
+        let mut b = inv;
+        let mut t = inv;
+        for _ in 0..4 {
+            t = (t << 1) | (t >> 7);
+            b ^= t;
+        }
+        b ^= 0x63;
+        sbox[a] = b;
+        isbox[b as usize] = a as u8;
+    }
+    (sbox, isbox)
+}
+
+/// FIPS 197 key expansion. `rk` must be `16 * (ROUNDS + 1)` bytes; `NK` is
+/// the key length in 32-bit words (4 or 8).
+fn aes_expand_key<const NK: usize, const ROUNDS: usize>(
+    key: &[u8],
+    rk: &mut [u8],
+    sbox: &[u8; 256],
+) {
+    const RCON: [u8; 10] = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x36];
+
+    rk[..NK * 4].copy_from_slice(&key[..NK * 4]);
+    let mut bytes = NK * 4;
+    let mut rcon = 0usize;
+    let mut temp = [0u8; 4];
+    while bytes < 16 * (ROUNDS + 1) {
+        temp.copy_from_slice(&rk[bytes - 4..bytes]);
+        if bytes % (NK * 4) == 0 {
+            // RotWord, then SubWord, then the round constant.
+            temp.rotate_left(1);
+            for b in temp.iter_mut() {
+                *b = sbox[*b as usize];
+            }
+            temp[0] ^= RCON[rcon];
+            rcon += 1;
+        } else if NK > 6 && bytes % (NK * 4) == 16 {
+            for b in temp.iter_mut() {
+                *b = sbox[*b as usize];
+            }
+        }
+        for i in 0..4 {
+            rk[bytes + i] = rk[bytes - NK * 4 + i] ^ temp[i];
+        }
+        bytes += 4;
+    }
+}
+
+fn aes_add_round_key(block: &mut [u8; 16], rk: &[u8]) {
+    for i in 0..16 {
+        block[i] ^= rk[i];
+    }
+}
+
+fn aes_sub_bytes(block: &mut [u8; 16], sbox: &[u8; 256]) {
+    for b in block.iter_mut() {
+        *b = sbox[*b as usize];
+    }
+}
+
+fn aes_shift_rows(s: &mut [u8; 16]) {
+    let t = *s;
+    s[0] = t[0];
+    s[4] = t[4];
+    s[8] = t[8];
+    s[12] = t[12];
+    s[1] = t[5];
+    s[5] = t[9];
+    s[9] = t[13];
+    s[13] = t[1];
+    s[2] = t[10];
+    s[6] = t[14];
+    s[10] = t[2];
+    s[14] = t[6];
+    s[3] = t[15];
+    s[7] = t[3];
+    s[11] = t[7];
+    s[15] = t[11];
+}
+
+fn aes_inv_shift_rows(s: &mut [u8; 16]) {
+    let t = *s;
+    s[0] = t[0];
+    s[4] = t[4];
+    s[8] = t[8];
+    s[12] = t[12];
+    s[1] = t[13];
+    s[5] = t[1];
+    s[9] = t[5];
+    s[13] = t[9];
+    s[2] = t[10];
+    s[6] = t[14];
+    s[10] = t[2];
+    s[14] = t[6];
+    s[3] = t[7];
+    s[7] = t[11];
+    s[11] = t[15];
+    s[15] = t[3];
+}
+
+fn aes_mix_columns(s: &mut [u8; 16]) {
+    for c in 0..4 {
+        let i = 4 * c;
+        let (a0, a1, a2, a3) = (s[i], s[i + 1], s[i + 2], s[i + 3]);
+        s[i] = aes_gmul(a0, 2) ^ aes_gmul(a1, 3) ^ a2 ^ a3;
+        s[i + 1] = a0 ^ aes_gmul(a1, 2) ^ aes_gmul(a2, 3) ^ a3;
+        s[i + 2] = a0 ^ a1 ^ aes_gmul(a2, 2) ^ aes_gmul(a3, 3);
+        s[i + 3] = aes_gmul(a0, 3) ^ a1 ^ a2 ^ aes_gmul(a3, 2);
+    }
+}
+
+fn aes_inv_mix_columns(s: &mut [u8; 16]) {
+    for c in 0..4 {
+        let i = 4 * c;
+        let (a0, a1, a2, a3) = (s[i], s[i + 1], s[i + 2], s[i + 3]);
+        s[i] = aes_gmul(a0, 14) ^ aes_gmul(a1, 11) ^ aes_gmul(a2, 13) ^ aes_gmul(a3, 9);
+        s[i + 1] = aes_gmul(a0, 9) ^ aes_gmul(a1, 14) ^ aes_gmul(a2, 11) ^ aes_gmul(a3, 13);
+        s[i + 2] = aes_gmul(a0, 13) ^ aes_gmul(a1, 9) ^ aes_gmul(a2, 14) ^ aes_gmul(a3, 11);
+        s[i + 3] = aes_gmul(a0, 11) ^ aes_gmul(a1, 13) ^ aes_gmul(a2, 9) ^ aes_gmul(a3, 14);
+    }
+}
+
+fn aes_encrypt_block(block: &mut [u8; 16], rk: &[u8], rounds: usize, sbox: &[u8; 256]) {
+    aes_add_round_key(block, &rk[..16]);
+    for r in 1..rounds {
+        aes_sub_bytes(block, sbox);
+        aes_shift_rows(block);
+        aes_mix_columns(block);
+        aes_add_round_key(block, &rk[16 * r..16 * r + 16]);
+    }
+    aes_sub_bytes(block, sbox);
+    aes_shift_rows(block);
+    aes_add_round_key(block, &rk[16 * rounds..16 * rounds + 16]);
+}
+
+fn aes_decrypt_block(block: &mut [u8; 16], rk: &[u8], rounds: usize, isbox: &[u8; 256]) {
+    aes_add_round_key(block, &rk[16 * rounds..16 * rounds + 16]);
+    for r in (1..rounds).rev() {
+        aes_inv_shift_rows(block);
+        aes_sub_bytes(block, isbox);
+        aes_add_round_key(block, &rk[16 * r..16 * r + 16]);
+        aes_inv_mix_columns(block);
+    }
+    aes_inv_shift_rows(block);
+    aes_sub_bytes(block, isbox);
+    aes_add_round_key(block, &rk[..16]);
+}
+
+macro_rules! impl_ecb {
+    ($trait:ident, $reg_macro:ident, $ctx:ident, $key_len:expr, $nk:expr, $rounds:expr, $rk_len:expr) => {
+        /// Conventional FIPS 197 round keys only, so the context fits the
+        /// driver's opaque storage.
+        #[derive(Clone)]
+        pub struct $ctx {
+            rk: [u8; $rk_len],
+        }
+
+        impl drv::$trait for McuCryptoAsmDriver {
+            type Context = $ctx;
+
+            fn init(key: &[u8; $key_len]) -> Self::Context {
+                let (sbox, _) = aes_sboxes();
+                let mut rk = [0u8; $rk_len];
+                aes_expand_key::<$nk, $rounds>(key, &mut rk, &sbox);
+                $ctx { rk }
+            }
+
+            fn encrypt_blocks(ctx: &Self::Context, blocks: drv::InOutBuf<'_, '_, u8>) {
+                let (sbox, _) = aes_sboxes();
+                let buf = blocks.into_out_with_copied_in();
+                for chunk in buf.chunks_exact_mut(16) {
+                    let b: &mut [u8; 16] = chunk.try_into().unwrap();
+                    aes_encrypt_block(b, &ctx.rk, $rounds, &sbox);
+                }
+            }
+
+            fn decrypt_blocks(ctx: &Self::Context, blocks: drv::InOutBuf<'_, '_, u8>) {
+                let (_, isbox) = aes_sboxes();
+                let buf = blocks.into_out_with_copied_in();
+                for chunk in buf.chunks_exact_mut(16) {
+                    let b: &mut [u8; 16] = chunk.try_into().unwrap();
+                    aes_decrypt_block(b, &ctx.rk, $rounds, &isbox);
+                }
+            }
+        }
+
+        reg::$reg_macro!(McuCryptoAsmDriver);
+    };
+}
+
+macro_rules! impl_cbc {
+    ($trait:ident, $reg_macro:ident, $ctx:ident, $key_len:expr, $nk:expr, $rounds:expr, $rk_len:expr) => {
+        /// Conventional FIPS 197 round keys plus the CBC chaining value.
+        #[derive(Clone)]
+        pub struct $ctx {
+            rk: [u8; $rk_len],
+            iv: [u8; 16],
+        }
+
+        impl drv::$trait for McuCryptoAsmDriver {
+            type EncryptContext = $ctx;
+            type DecryptContext = $ctx;
+
+            fn encrypt_init(key: &[u8; $key_len], iv: &[u8; 16]) -> Self::EncryptContext {
+                let (sbox, _) = aes_sboxes();
+                let mut rk = [0u8; $rk_len];
+                aes_expand_key::<$nk, $rounds>(key, &mut rk, &sbox);
+                $ctx { rk, iv: *iv }
+            }
+
+            fn decrypt_init(key: &[u8; $key_len], iv: &[u8; 16]) -> Self::DecryptContext {
+                Self::encrypt_init(key, iv)
+            }
+
+            fn encrypt_blocks(ctx: &mut Self::EncryptContext, blocks: drv::InOutBuf<'_, '_, u8>) {
+                let (sbox, _) = aes_sboxes();
+                let buf = blocks.into_out_with_copied_in();
+                let mut prev = ctx.iv;
+                for chunk in buf.chunks_exact_mut(16) {
+                    let b: &mut [u8; 16] = chunk.try_into().unwrap();
+                    for i in 0..16 {
+                        b[i] ^= prev[i];
+                    }
+                    aes_encrypt_block(b, &ctx.rk, $rounds, &sbox);
+                    prev = *b;
+                }
+                ctx.iv = prev;
+            }
+
+            fn decrypt_blocks(ctx: &mut Self::DecryptContext, blocks: drv::InOutBuf<'_, '_, u8>) {
+                let (_, isbox) = aes_sboxes();
+                let buf = blocks.into_out_with_copied_in();
+                let mut prev = ctx.iv;
+                for chunk in buf.chunks_exact_mut(16) {
+                    let b: &mut [u8; 16] = chunk.try_into().unwrap();
+                    let ct = *b;
+                    aes_decrypt_block(b, &ctx.rk, $rounds, &isbox);
+                    for i in 0..16 {
+                        b[i] ^= prev[i];
+                    }
+                    prev = ct;
+                }
+                ctx.iv = prev;
+            }
+        }
+
+        reg::$reg_macro!(McuCryptoAsmDriver);
+    };
+}
+
+impl_ecb!(Aes128Ecb, aes128_ecb_impl, Aes128EcbContext, 16, 4, 10, 176);
+impl_ecb!(Aes256Ecb, aes256_ecb_impl, Aes256EcbContext, 32, 8, 14, 240);
+impl_cbc!(Aes128Cbc, aes128_cbc_impl, Aes128CbcContext, 16, 4, 10, 176);
+impl_cbc!(Aes256Cbc, aes256_cbc_impl, Aes256CbcContext, 32, 8, 14, 240);
+
+// ---------------------------------------------------------------------------
+// SHA-512 family (FIPS 180-4)
+// ---------------------------------------------------------------------------
+//
+// The crate's compression function backs all four SHA-512 variants; /224 and
+// /256 differ only in their initialization vectors and output truncation.
+
+/// IV of SHA-512/224 (FIPS 180-4 section 5.3.6.2).
+const SHA512_224_IV: [u64; 8] = [
+    0x8C3D37C819544DA2,
+    0x73E1996689DCD4D6,
+    0x1DFAB7AE32FF9C82,
+    0x679DD514582F9FCF,
+    0x0F6D2B697BD44DA8,
+    0x77E36F7304C48942,
+    0x3F9D85A86A1D36C8,
+    0x1112E6AD91D692A1,
+];
+
+/// IV of SHA-512/256 (FIPS 180-4 section 5.3.6.3).
+const SHA512_256_IV: [u64; 8] = [
+    0x22312194FC2BF72C,
+    0x9F555FA3C84C64C2,
+    0x2393B86B6F53B151,
+    0x963877195940EABD,
+    0x96283EE2A88EFFE3,
+    0xBE5E1E2553863992,
+    0x2B0199FC2C85B8AA,
+    0x0EB72DDC81C52CA2,
+];
+
+/// Streaming SHA-512 core with a configurable IV.
+#[derive(Clone, Copy)]
+pub struct Sha512Core {
+    state: [u64; 8],
+    buffer: [u8; 128],
+    buf_len: usize,
+    total_len: u128,
+}
+
+impl Sha512Core {
+    const BLOCK: usize = 128;
+
+    fn new(iv: [u64; 8]) -> Self {
+        Self {
+            state: iv,
+            buffer: [0u8; 128],
+            buf_len: 0,
+            total_len: 0,
+        }
+    }
+
+    fn update(&mut self, mut data: &[u8]) {
+        self.total_len = self.total_len.wrapping_add(data.len() as u128);
+        if self.buf_len > 0 {
+            let n = core::cmp::min(Self::BLOCK - self.buf_len, data.len());
+            self.buffer[self.buf_len..self.buf_len + n].copy_from_slice(&data[..n]);
+            self.buf_len += n;
+            data = &data[n..];
+            if self.buf_len == Self::BLOCK {
+                let blk = self.buffer;
+                crate::sha512::compress_blocks(&mut self.state, &blk);
+                self.buf_len = 0;
+            }
+        }
+        let mut chunks = data.chunks_exact(Self::BLOCK);
+        for blk in &mut chunks {
+            crate::sha512::compress_blocks(&mut self.state, blk);
+        }
+        let rem = chunks.remainder();
+        self.buffer[..rem.len()].copy_from_slice(rem);
+        self.buf_len = rem.len();
+    }
+
+    fn finalize(mut self) -> [u8; 64] {
+        let bit_len = self.total_len.wrapping_mul(8);
+        self.update(&[0x80]);
+        while self.buf_len != Self::BLOCK - 16 {
+            self.update(&[0]);
+        }
+        self.buffer[112..128].copy_from_slice(&bit_len.to_be_bytes());
+        let blk = self.buffer;
+        crate::sha512::compress_blocks(&mut self.state, &blk);
+        let mut out = [0u8; 64];
+        for i in 0..8 {
+            out[i * 8..i * 8 + 8].copy_from_slice(&self.state[i].to_be_bytes());
+        }
+        out
+    }
+}
+
+macro_rules! impl_sha512_family {
+    ($trait:ident, $reg_macro:ident, $out_len:expr, $iv:expr) => {
+        impl drv::$trait for McuCryptoAsmDriver {
+            type Context = Sha512Core;
+
+            fn init() -> Self::Context {
+                Sha512Core::new($iv)
+            }
+
+            fn update(ctx: &mut Self::Context, data: &[u8]) {
+                ctx.update(data);
+            }
+
+            fn finalize(ctx: Self::Context, out: &mut [u8; $out_len]) {
+                let digest = ctx.finalize();
+                out.copy_from_slice(&digest[..$out_len]);
+            }
+        }
+
+        reg::$reg_macro!(McuCryptoAsmDriver);
+    };
+}
+
+impl_sha512_family!(Sha512, sha512_impl, 64, crate::sha512::SHA512_IV);
+impl_sha512_family!(Sha384, sha384_impl, 48, crate::sha512::SHA384_IV);
+impl_sha512_family!(Sha512_224, sha512_224_impl, 28, SHA512_224_IV);
+impl_sha512_family!(Sha512_256, sha512_256_impl, 32, SHA512_256_IV);
+
+/// HMAC over any member of the SHA-512 family (RFC 2104; 128-byte block).
+#[derive(Clone)]
+pub struct HmacSha512Family {
+    inner: Sha512Core,
+    opad: [u8; 128],
+}
+
+impl HmacSha512Family {
+    fn new(iv: [u64; 8], key: &[u8]) -> Self {
+        let mut kblock = [0u8; 128];
+        if key.len() > 128 {
+            let mut h = Sha512Core::new(iv);
+            h.update(key);
+            let digest = h.finalize();
+            kblock[..64].copy_from_slice(&digest);
+        } else {
+            kblock[..key.len()].copy_from_slice(key);
+        }
+
+        let mut ipad = [0u8; 128];
+        let mut opad = [0u8; 128];
+        for i in 0..128 {
+            ipad[i] = kblock[i] ^ 0x36;
+            opad[i] = kblock[i] ^ 0x5C;
+        }
+        wipe(&mut kblock);
+
+        let mut inner = Sha512Core::new(iv);
+        inner.update(&ipad);
+        wipe(&mut ipad);
+        Self { inner, opad }
+    }
+
+    fn update(&mut self, data: &[u8]) {
+        self.inner.update(data);
+    }
+
+    fn finalize(self, iv: [u64; 8]) -> [u8; 64] {
+        let inner_digest = self.inner.finalize();
+        let mut outer = Sha512Core::new(iv);
+        outer.update(&self.opad);
+        outer.update(&inner_digest);
+        outer.finalize()
+    }
+}
+
+macro_rules! impl_hmac_sha512_family {
+    ($trait:ident, $reg_macro:ident, $out_len:expr, $iv:expr) => {
+        impl drv::$trait for McuCryptoAsmDriver {
+            type Context = HmacSha512Family;
+
+            fn init(key: &[u8]) -> Self::Context {
+                HmacSha512Family::new($iv, key)
+            }
+
+            fn update(ctx: &mut Self::Context, data: &[u8]) {
+                ctx.update(data);
+            }
+
+            fn finalize(ctx: Self::Context, out: &mut [u8; $out_len]) {
+                let tag = ctx.finalize($iv);
+                out.copy_from_slice(&tag[..$out_len]);
+            }
+        }
+
+        reg::$reg_macro!(McuCryptoAsmDriver);
+    };
+}
+
+impl_hmac_sha512_family!(HmacSha512, hmac_sha512_impl, 64, crate::sha512::SHA512_IV);
+impl_hmac_sha512_family!(HmacSha384, hmac_sha384_impl, 48, crate::sha512::SHA384_IV);
+impl_hmac_sha512_family!(HmacSha512_224, hmac_sha512_224_impl, 28, SHA512_224_IV);
+impl_hmac_sha512_family!(HmacSha512_256, hmac_sha512_256_impl, 32, SHA512_256_IV);
