@@ -1,29 +1,9 @@
 //! `embassy-crypto-driver` elliptic-curve backend for P-256 and P-384.
-//!
-//! Implements all EC traits currently exposed by `embassy-crypto-driver`:
-//!
-//! - [`drv::P256ScalarMul`] / [`drv::P384ScalarMul`]
-//! - [`drv::P256ScalarInvert`] / [`drv::P384ScalarInvert`]
-//! - [`drv::P256Lincomb`] / [`drv::P384Lincomb`]
-//! - [`drv::P256Ec`]
-//!
-//! Canonical driver values are big-endian affine coordinates/scalars. They
-//! are converted once at this boundary; scalar multiplication and inversion
-//! use this crate's constant-time Montgomery/projective implementations.
-//!
-//! # Sentinel coordinates
-//!
-//! The scalar-multiplication and linear-combination traits have no `Result`
-//! return. As specified by the driver, an identity result is represented by
-//! the all-zero affine sentinel (which is not an on-curve point). [`None`]
-//! is used where the trait itself can report an identity result.
 
-use drv::{
-    CryptoError, P256AffinePoint, P256Scalar, P256Signature, P384AffinePoint, P384Scalar, Rng,
-};
+use drv::{P256Point, P256Scalar, P256Signature, P384Point, P384Scalar};
+use embassy_crypto as reg;
 /// Re-export of the driver crate (integration tests use this to name its types).
-pub use embassy_crypto_driver as drv;
-use embassy_crypto_driver::P256ScalarMul;
+use embassy_crypto::driver as drv;
 
 use crate::p256::{PointP256, ScalarP256, CURVE as P256_CURVE, FIELD as P256_FIELD};
 use crate::p384::{PointP384, ScalarP384, CURVE as P384_CURVE, FIELD as P384_FIELD};
@@ -47,10 +27,12 @@ fn p256_scalar_to_canonical(k: &ScalarP256) -> P256Scalar {
     out
 }
 
+#[allow(dead_code)]
 fn p384_scalar_from_canonical(k: &P384Scalar) -> Option<ScalarP384> {
     Scalar::from_be_bytes(&P384_CURVE, &k.0).ok()
 }
 
+#[allow(dead_code)]
 fn p384_scalar_to_canonical(k: &ScalarP384) -> P384Scalar {
     let mut out = P384Scalar([0u8; 48]);
     let _ = k.to_be_bytes(&P384_CURVE, &mut out.0);
@@ -58,7 +40,7 @@ fn p384_scalar_to_canonical(k: &ScalarP384) -> P384Scalar {
 }
 
 #[allow(dead_code)]
-fn p256_point_from_canonical(p: &P256AffinePoint) -> Option<PointP256> {
+fn p256_point_from_canonical(p: &P256Point) -> Option<PointP256> {
     let mut enc = [0u8; 65];
     enc[0] = 0x04;
     enc[1..33].copy_from_slice(&p.x);
@@ -67,26 +49,27 @@ fn p256_point_from_canonical(p: &P256AffinePoint) -> Option<PointP256> {
 }
 
 #[allow(dead_code)]
-fn p256_point_to_canonical(p: &PointP256) -> P256AffinePoint {
+fn p256_point_to_canonical(p: &PointP256) -> Option<P256Point> {
     match p.to_affine(&P256_FIELD) {
-        Some((x, y)) => P256AffinePoint {
+        Some((x, y)) => Some(P256Point {
             x: limbs_to_be_256(&x),
             y: limbs_to_be_256(&y),
-        },
-        None => P256AffinePoint::default(),
+        }),
+        None => None,
     }
 }
 
 #[allow(dead_code)]
-fn p256_point_to_canonical_opt(p: &PointP256) -> Option<P256AffinePoint> {
+fn p256_point_to_canonical_opt(p: &PointP256) -> Option<P256Point> {
     if p.is_identity() {
         None
     } else {
-        Some(p256_point_to_canonical(p))
+        p256_point_to_canonical(p)
     }
 }
 
-fn p384_point_from_canonical(p: &P384AffinePoint) -> Option<PointP384> {
+#[allow(dead_code)]
+fn p384_point_from_canonical(p: &P384Point) -> Option<PointP384> {
     let mut enc = [0u8; 97];
     enc[0] = 0x04;
     enc[1..49].copy_from_slice(&p.x);
@@ -94,20 +77,22 @@ fn p384_point_from_canonical(p: &P384AffinePoint) -> Option<PointP384> {
     PointP384::decode(&P384_CURVE, &enc).ok()
 }
 
-fn p384_point_to_canonical(p: &PointP384) -> P384AffinePoint {
+#[allow(dead_code)]
+fn p384_point_to_canonical(p: &PointP384) -> P384Point {
     match p.to_affine(&P384_FIELD) {
-        Some((x, y)) => P384AffinePoint {
+        Some((x, y)) => P384Point {
             x: limbs_to_be_384(&x),
             y: limbs_to_be_384(&y),
         },
-        None => P384AffinePoint {
+        None => P384Point {
             x: [0u8; 48],
             y: [0u8; 48],
         },
     }
 }
 
-fn p384_point_to_canonical_opt(p: &PointP384) -> Option<P384AffinePoint> {
+#[allow(dead_code)]
+fn p384_point_to_canonical_opt(p: &PointP384) -> Option<P384Point> {
     if p.is_identity() {
         None
     } else {
@@ -153,7 +138,8 @@ fn projective_eq<const N: usize>(a: &Point<N>, b: &Point<N>, field: &Params) -> 
 }
 
 #[cfg(nistp_asm_cm4)]
-const P256_GENERATOR_AFFINE: P256AffinePoint = P256AffinePoint {
+#[allow(dead_code)]
+const P256_GENERATOR_AFFINE: P256Point = P256Point {
     x: [
         0x6b, 0x17, 0xd1, 0xf2, 0xe1, 0x2c, 0x42, 0x47, 0xf8, 0xbc, 0xe6, 0xe5, 0x63, 0xa4, 0x40,
         0xf2, 0x77, 0x03, 0x7d, 0x81, 0x2d, 0xeb, 0x33, 0xa0, 0xf4, 0xa1, 0x39, 0x45, 0xd8, 0x98,
@@ -167,7 +153,8 @@ const P256_GENERATOR_AFFINE: P256AffinePoint = P256AffinePoint {
 };
 
 #[cfg(nistp_asm_cm4)]
-fn jacobian_to_canonical_affine(out_j: &[[u32; 8]; 3]) -> P256AffinePoint {
+#[allow(dead_code)]
+fn jacobian_to_canonical_affine(out_j: &[[u32; 8]; 3]) -> Option<P256Point> {
     let mut is_zero = true;
     for &w in &out_j[2] {
         if w != 0 {
@@ -176,7 +163,7 @@ fn jacobian_to_canonical_affine(out_j: &[[u32; 8]; 3]) -> P256AffinePoint {
         }
     }
     if is_zero {
-        return P256AffinePoint::default();
+        return None;
     }
 
     let mut aff_mont_x = [0u32; 8];
@@ -191,15 +178,16 @@ fn jacobian_to_canonical_affine(out_j: &[[u32; 8]; 3]) -> P256AffinePoint {
         let mut y = [0u32; 8];
         crate::backend::cortex_m4::p256::P256_from_montgomery(x.as_mut_ptr(), aff_mont_x.as_ptr());
         crate::backend::cortex_m4::p256::P256_from_montgomery(y.as_mut_ptr(), aff_mont_y.as_ptr());
-        P256AffinePoint {
+        Some(P256Point {
             x: limbs_to_be_256(&x),
             y: limbs_to_be_256(&y),
-        }
+        })
     }
 }
 
 #[cfg(nistp_asm_cm4)]
-fn affine_to_jacobian(p: &P256AffinePoint) -> Option<[[u32; 8]; 3]> {
+#[allow(dead_code)]
+fn affine_to_jacobian(p: &P256Point) -> Option<[[u32; 8]; 3]> {
     let mut px = [0u32; 8];
     let mut py = [0u32; 8];
     be_to_limbs_256(&p.x, &mut px);
@@ -264,21 +252,10 @@ fn wipe(buf: &mut [u8]) {
     core::hint::black_box(&mut *buf);
 }
 
-/// Draw a canonical non-zero P-256 scalar with rejection sampling.
-fn fill_nonzero_scalar(rng: &mut dyn Rng, out: &mut [u8; 32]) -> Result<(), CryptoError> {
-    loop {
-        rng.rng_fill(out)?;
-        if ScalarP256::from_be_bytes_nonzero(&P256_CURVE, out).is_ok() {
-            return Ok(());
-        }
-        wipe(out);
-    }
-}
-
 /// Normalize an ECDSA `s` value to low-S without branching on the secret value.
-fn p256_low_s(s: &[u8; 32]) -> Result<[u8; 32], CryptoError> {
+fn p256_low_s(s: &[u8; 32]) -> Result<[u8; 32], drv::Error> {
     let scalar =
-        ScalarP256::from_be_bytes_nonzero(&P256_CURVE, s).map_err(|_| CryptoError::InvalidInput)?;
+        ScalarP256::from_be_bytes_nonzero(&P256_CURVE, s).map_err(|_| drv::Error::InvalidInput)?;
     let negated = scalar.neg(&P256_CURVE);
     let scalar_limbs = scalar.to_int(&P256_CURVE);
     let half = half_order::<8>(P256_CURVE.order);
@@ -298,11 +275,11 @@ fn p256_low_s(s: &[u8; 32]) -> Result<[u8; 32], CryptoError> {
 // P-256 scalar multiplication
 // ---------------------------------------------------------------------------
 
-impl drv::P256ScalarMul for McuCryptoAsmDriver {
-    fn mul_base(k: P256Scalar) -> P256AffinePoint {
-        let k_sc = p256_scalar_from_canonical(&k).unwrap_or(ScalarP256::ZERO);
+impl McuCryptoAsmDriver {
+    fn p256_mul_base(k: &P256Scalar) -> Result<P256Point, drv::Error> {
+        let k_sc = p256_scalar_from_canonical(k).unwrap_or(ScalarP256::ZERO);
         if k_sc.is_zero() {
-            return P256AffinePoint::default();
+            return Err(drv::Error::InvalidInput);
         }
         #[cfg(nistp_asm_cm4)]
         {
@@ -325,27 +302,29 @@ impl drv::P256ScalarMul for McuCryptoAsmDriver {
                     aff_mont_y.as_ptr(),
                 );
             }
-            P256AffinePoint {
+            Ok(P256Point {
                 x: limbs_to_be_256(&x),
                 y: limbs_to_be_256(&y),
-            }
+            })
         }
         #[cfg(not(nistp_asm_cm4))]
         {
             p256_point_to_canonical(&crate::p256::mul_base(&k_sc.to_int(&P256_CURVE)))
+                .ok_or(drv::Error::InvalidInput)
         }
     }
 
-    fn mul_affine(k: P256Scalar, p: P256AffinePoint) -> P256AffinePoint {
+    #[allow(dead_code)]
+    fn p256_mul_affine(k: P256Scalar, p: P256Point) -> Result<P256Point, drv::Error> {
         let k_sc = p256_scalar_from_canonical(&k).unwrap_or(ScalarP256::ZERO);
         if k_sc.is_zero() {
-            return P256AffinePoint::default();
+            return Err(drv::Error::InvalidInput);
         }
         #[cfg(nistp_asm_cm4)]
         {
             let in_j = match affine_to_jacobian(&p) {
                 Some(j) => j,
-                None => return P256AffinePoint::default(),
+                None => return Err(drv::Error::InvalidInput),
             };
             let mut out_j = [[0u32; 8]; 3];
             crate::backend::cortex_m4::p256::scalarmult_variable_base_jacobian(
@@ -353,270 +332,239 @@ impl drv::P256ScalarMul for McuCryptoAsmDriver {
                 &in_j,
                 &k_sc.to_int(&P256_CURVE),
             );
-            jacobian_to_canonical_affine(&out_j)
+            jacobian_to_canonical_affine(&out_j).ok_or(drv::Error::InvalidInput)
         }
         #[cfg(not(nistp_asm_cm4))]
         {
             let pt = p256_point_from_canonical(&p).unwrap_or_else(|| Point::identity(&P256_FIELD));
             if pt.is_identity() {
-                return P256AffinePoint::default();
+                return Err(drv::Error::InvalidInput);
             }
             p256_point_to_canonical(&pt.mul_scalar(&P256_CURVE, &k_sc.to_int(&P256_CURVE)))
+                .ok_or(drv::Error::InvalidInput)
         }
     }
 }
-
-drv::p256_scalar_mul_impl!(McuCryptoAsmDriver);
+//
+// drv::p256_scalar_mul_impl!(McuCryptoAsmDriver);
 
 // ---------------------------------------------------------------------------
 // P-384 scalar multiplication
 // ---------------------------------------------------------------------------
 
-impl drv::P384ScalarMul for McuCryptoAsmDriver {
-    fn mul_base(k: P384Scalar) -> P384AffinePoint {
-        let k = p384_scalar_from_canonical(&k).unwrap_or(ScalarP384::ZERO);
-        if k.is_zero() {
-            return P384AffinePoint {
-                x: [0u8; 48],
-                y: [0u8; 48],
-            };
-        }
-        p384_point_to_canonical(&crate::p384::mul_base(&k.to_int(&P384_CURVE)))
-    }
-
-    fn mul_affine(k: P384Scalar, p: P384AffinePoint) -> P384AffinePoint {
-        let k = p384_scalar_from_canonical(&k).unwrap_or(ScalarP384::ZERO);
-        let p = p384_point_from_canonical(&p).unwrap_or_else(|| Point::identity(&P384_FIELD));
-        if k.is_zero() || p.is_identity() {
-            return P384AffinePoint {
-                x: [0u8; 48],
-                y: [0u8; 48],
-            };
-        }
-        p384_point_to_canonical(&p.mul_scalar(&P384_CURVE, &k.to_int(&P384_CURVE)))
-    }
-}
-
-drv::p384_scalar_mul_impl!(McuCryptoAsmDriver);
+// impl drv::P384ScalarMul for McuCryptoAsmDriver {
+//     fn mul_base(k: P384Scalar) -> P384AffinePoint {
+//         let k = p384_scalar_from_canonical(&k).unwrap_or(ScalarP384::ZERO);
+//         if k.is_zero() {
+//             return P384AffinePoint {
+//                 x: [0u8; 48],
+//                 y: [0u8; 48],
+//             };
+//         }
+//         p384_point_to_canonical(&crate::p384::mul_base(&k.to_int(&P384_CURVE)))
+//     }
+//
+//     fn mul_affine(k: P384Scalar, p: P384AffinePoint) -> P384AffinePoint {
+//         let k = p384_scalar_from_canonical(&k).unwrap_or(ScalarP384::ZERO);
+//         let p = p384_point_from_canonical(&p).unwrap_or_else(|| Point::identity(&P384_FIELD));
+//         if k.is_zero() || p.is_identity() {
+//             return P384AffinePoint {
+//                 x: [0u8; 48],
+//                 y: [0u8; 48],
+//             };
+//         }
+//         p384_point_to_canonical(&p.mul_scalar(&P384_CURVE, &k.to_int(&P384_CURVE)))
+//     }
+// }
+//
+// drv::p384_scalar_mul_impl!(McuCryptoAsmDriver);
 
 // ---------------------------------------------------------------------------
 // Scalar inversion
 // ---------------------------------------------------------------------------
 
-impl drv::P256ScalarInvert for McuCryptoAsmDriver {
-    fn invert(k: P256Scalar) -> P256Scalar {
-        let k_sc = p256_scalar_from_canonical(&k).unwrap_or(ScalarP256::ZERO);
-        if k_sc.is_zero() {
-            return P256Scalar([0u8; 32]);
-        }
-        #[cfg(nistp_asm_cm4)]
-        {
-            let mut out = [0u32; 8];
-            crate::backend::cortex_m4::p256::mod_n_inv(&mut out, &k_sc.to_int(&P256_CURVE));
-            P256Scalar(limbs_to_be_256(&out))
-        }
-        #[cfg(not(nistp_asm_cm4))]
-        {
-            p256_scalar_to_canonical(&k_sc.invert(&P256_CURVE).unwrap_or(ScalarP256::ZERO))
-        }
-    }
-
-    fn invert_vartime(k: P256Scalar) -> P256Scalar {
-        let k_sc = p256_scalar_from_canonical(&k).unwrap_or(ScalarP256::ZERO);
-        if k_sc.is_zero() {
-            return P256Scalar([0u8; 32]);
-        }
-        #[cfg(nistp_asm_cm4)]
-        {
-            let mut out = [0u32; 8];
-            let limbs = k_sc.to_int(&P256_CURVE);
-            unsafe {
-                crate::backend::cortex_m4::p256::P256_mod_n_inv_vartime(
-                    out.as_mut_ptr(),
-                    limbs.as_ptr(),
-                );
-            }
-            P256Scalar(limbs_to_be_256(&out))
-        }
-        #[cfg(not(nistp_asm_cm4))]
-        {
-            Self::invert(k)
-        }
-    }
-}
-
-drv::p256_scalar_invert_impl!(McuCryptoAsmDriver);
-
-impl drv::P384ScalarInvert for McuCryptoAsmDriver {
-    fn invert(k: P384Scalar) -> P384Scalar {
-        let k = p384_scalar_from_canonical(&k).unwrap_or(ScalarP384::ZERO);
-        p384_scalar_to_canonical(&k.invert(&P384_CURVE).unwrap_or(ScalarP384::ZERO))
-    }
-
-    fn invert_vartime(k: P384Scalar) -> P384Scalar {
-        Self::invert(k)
-    }
-}
-
-drv::p384_scalar_invert_impl!(McuCryptoAsmDriver);
+// impl drv::P256ScalarInvert for McuCryptoAsmDriver {
+//     fn invert(k: P256Scalar) -> P256Scalar {
+//         let k_sc = p256_scalar_from_canonical(&k).unwrap_or(ScalarP256::ZERO);
+//         if k_sc.is_zero() {
+//             return P256Scalar([0u8; 32]);
+//         }
+//         #[cfg(nistp_asm_cm4)]
+//         {
+//             let mut out = [0u32; 8];
+//             crate::backend::cortex_m4::p256::mod_n_inv(&mut out, &k_sc.to_int(&P256_CURVE));
+//             P256Scalar(limbs_to_be_256(&out))
+//         }
+//         #[cfg(not(nistp_asm_cm4))]
+//         {
+//             p256_scalar_to_canonical(&k_sc.invert(&P256_CURVE).unwrap_or(ScalarP256::ZERO))
+//         }
+//     }
+//
+//     fn invert_vartime(k: P256Scalar) -> P256Scalar {
+//         let k_sc = p256_scalar_from_canonical(&k).unwrap_or(ScalarP256::ZERO);
+//         if k_sc.is_zero() {
+//             return P256Scalar([0u8; 32]);
+//         }
+//         #[cfg(nistp_asm_cm4)]
+//         {
+//             let mut out = [0u32; 8];
+//             let limbs = k_sc.to_int(&P256_CURVE);
+//             unsafe {
+//                 crate::backend::cortex_m4::p256::P256_mod_n_inv_vartime(
+//                     out.as_mut_ptr(),
+//                     limbs.as_ptr(),
+//                 );
+//             }
+//             P256Scalar(limbs_to_be_256(&out))
+//         }
+//         #[cfg(not(nistp_asm_cm4))]
+//         {
+//             Self::invert(k)
+//         }
+//     }
+// }
+//
+// drv::p256_scalar_invert_impl!(McuCryptoAsmDriver);
+//
+// impl drv::P384ScalarInvert for McuCryptoAsmDriver {
+//     fn invert(k: P384Scalar) -> P384Scalar {
+//         let k = p384_scalar_from_canonical(&k).unwrap_or(ScalarP384::ZERO);
+//         p384_scalar_to_canonical(&k.invert(&P384_CURVE).unwrap_or(ScalarP384::ZERO))
+//     }
+//
+//     fn invert_vartime(k: P384Scalar) -> P384Scalar {
+//         Self::invert(k)
+//     }
+// }
+//
+// drv::p384_scalar_invert_impl!(McuCryptoAsmDriver);
 
 // ---------------------------------------------------------------------------
 // Double-base linear combinations
 // ---------------------------------------------------------------------------
 
-impl drv::P256Lincomb for McuCryptoAsmDriver {
-    fn lincomb(
-        k1: P256Scalar,
-        p1: P256AffinePoint,
-        k2: P256Scalar,
-        p2: P256AffinePoint,
-    ) -> Option<P256AffinePoint> {
-        let k1_sc = p256_scalar_from_canonical(&k1).unwrap_or(ScalarP256::ZERO);
-        let k2_sc = p256_scalar_from_canonical(&k2).unwrap_or(ScalarP256::ZERO);
-        let k1_zero = k1_sc.is_zero();
-        let k2_zero = k2_sc.is_zero();
-        if k1_zero && k2_zero {
-            return None;
-        }
-        if k1_zero {
-            let r = <Self as P256ScalarMul>::mul_affine(k2, p2);
-            return if r == P256AffinePoint::default() {
-                None
-            } else {
-                Some(r)
-            };
-        }
-        if k2_zero {
-            let r = <Self as P256ScalarMul>::mul_affine(k1, p1);
-            return if r == P256AffinePoint::default() {
-                None
-            } else {
-                Some(r)
-            };
-        }
-
-        #[cfg(nistp_asm_cm4)]
-        {
-            let p1_is_g = p1 == P256_GENERATOR_AFFINE;
-            let p2_is_g = p2 == P256_GENERATOR_AFFINE;
-
-            let mut p1_j = [[0u32; 8]; 3];
-            let mut p2_j = [[0u32; 8]; 3];
-
-            if !p1_is_g {
-                p1_j = affine_to_jacobian(&p1)?;
-            }
-            if !p2_is_g {
-                p2_j = affine_to_jacobian(&p2)?;
-            }
-
-            let mut out_j = [[0u32; 8]; 3];
-            crate::backend::cortex_m4::p256::lincomb_jacobian(
-                &mut out_j,
-                &k1_sc.to_int(&P256_CURVE),
-                &p1_j,
-                p1_is_g,
-                &k2_sc.to_int(&P256_CURVE),
-                &p2_j,
-                p2_is_g,
-            );
-
-            let aff = jacobian_to_canonical_affine(&out_j);
-            if aff == P256AffinePoint::default() {
-                None
-            } else {
-                Some(aff)
-            }
-        }
-        #[cfg(not(nistp_asm_cm4))]
-        {
-            let p1 = p256_point_from_canonical(&p1).unwrap_or_else(|| Point::identity(&P256_FIELD));
-            let p2 = p256_point_from_canonical(&p2).unwrap_or_else(|| Point::identity(&P256_FIELD));
-
-            let result = Point::lincomb(
-                &P256_CURVE,
-                &k1_sc.to_int(&P256_CURVE),
-                &p1,
-                &k2_sc.to_int(&P256_CURVE),
-                &p2,
-            );
-
-            p256_point_to_canonical_opt(&result)
-        }
-    }
-}
-
-drv::p256_lincomb_impl!(McuCryptoAsmDriver);
-
-impl drv::P384Lincomb for McuCryptoAsmDriver {
-    fn lincomb(
-        k1: P384Scalar,
-        p1: P384AffinePoint,
-        k2: P384Scalar,
-        p2: P384AffinePoint,
-    ) -> Option<P384AffinePoint> {
-        let k1 = p384_scalar_from_canonical(&k1).unwrap_or(ScalarP384::ZERO);
-        let k2 = p384_scalar_from_canonical(&k2).unwrap_or(ScalarP384::ZERO);
-        let p1 = p384_point_from_canonical(&p1).unwrap_or_else(|| Point::identity(&P384_FIELD));
-        let p2 = p384_point_from_canonical(&p2).unwrap_or_else(|| Point::identity(&P384_FIELD));
-
-        let result = Point::lincomb(
-            &P384_CURVE,
-            &k1.to_int(&P384_CURVE),
-            &p1,
-            &k2.to_int(&P384_CURVE),
-            &p2,
-        );
-
-        p384_point_to_canonical_opt(&result)
-    }
-}
-
-drv::p384_lincomb_impl!(McuCryptoAsmDriver);
+// impl drv::P256Lincomb for McuCryptoAsmDriver {
+//     fn lincomb(k1: P256Scalar, p1: P256Point, k2: P256Scalar, p2: P256Point) -> Option<P256Point> {
+//         let k1_sc = p256_scalar_from_canonical(&k1).unwrap_or(ScalarP256::ZERO);
+//         let k2_sc = p256_scalar_from_canonical(&k2).unwrap_or(ScalarP256::ZERO);
+//         let k1_zero = k1_sc.is_zero();
+//         let k2_zero = k2_sc.is_zero();
+//         if k1_zero && k2_zero {
+//             return None;
+//         }
+//         if k1_zero {
+//             let r = <Self as P256ScalarMul>::mul_affine(k2, p2);
+//             return if r == P256Point::default() {
+//                 None
+//             } else {
+//                 Some(r)
+//             };
+//         }
+//         if k2_zero {
+//             let r = <Self as P256ScalarMul>::mul_affine(k1, p1);
+//             return if r == P256Point::default() {
+//                 None
+//             } else {
+//                 Some(r)
+//             };
+//         }
+//
+//         #[cfg(nistp_asm_cm4)]
+//         {
+//             let p1_is_g = p1 == P256_GENERATOR_AFFINE;
+//             let p2_is_g = p2 == P256_GENERATOR_AFFINE;
+//
+//             let mut p1_j = [[0u32; 8]; 3];
+//             let mut p2_j = [[0u32; 8]; 3];
+//
+//             if !p1_is_g {
+//                 p1_j = affine_to_jacobian(&p1)?;
+//             }
+//             if !p2_is_g {
+//                 p2_j = affine_to_jacobian(&p2)?;
+//             }
+//
+//             let mut out_j = [[0u32; 8]; 3];
+//             crate::backend::cortex_m4::p256::lincomb_jacobian(
+//                 &mut out_j,
+//                 &k1_sc.to_int(&P256_CURVE),
+//                 &p1_j,
+//                 p1_is_g,
+//                 &k2_sc.to_int(&P256_CURVE),
+//                 &p2_j,
+//                 p2_is_g,
+//             );
+//
+//             let aff = jacobian_to_canonical_affine(&out_j);
+//             if aff == P256Point::default() {
+//                 None
+//             } else {
+//                 Some(aff)
+//             }
+//         }
+//         #[cfg(not(nistp_asm_cm4))]
+//         {
+//             let p1 = p256_point_from_canonical(&p1).unwrap_or_else(|| Point::identity(&P256_FIELD));
+//             let p2 = p256_point_from_canonical(&p2).unwrap_or_else(|| Point::identity(&P256_FIELD));
+//
+//             let result = Point::lincomb(
+//                 &P256_CURVE,
+//                 &k1_sc.to_int(&P256_CURVE),
+//                 &p1,
+//                 &k2_sc.to_int(&P256_CURVE),
+//                 &p2,
+//             );
+//
+//             p256_point_to_canonical_opt(&result)
+//         }
+//     }
+// }
+//
+// drv::p256_lincomb_impl!(McuCryptoAsmDriver);
+//
+// impl drv::P384Lincomb for McuCryptoAsmDriver {
+//     fn lincomb(
+//         k1: P384Scalar,
+//         p1: P384AffinePoint,
+//         k2: P384Scalar,
+//         p2: P384AffinePoint,
+//     ) -> Option<P384AffinePoint> {
+//         let k1 = p384_scalar_from_canonical(&k1).unwrap_or(ScalarP384::ZERO);
+//         let k2 = p384_scalar_from_canonical(&k2).unwrap_or(ScalarP384::ZERO);
+//         let p1 = p384_point_from_canonical(&p1).unwrap_or_else(|| Point::identity(&P384_FIELD));
+//         let p2 = p384_point_from_canonical(&p2).unwrap_or_else(|| Point::identity(&P384_FIELD));
+//
+//         let result = Point::lincomb(
+//             &P384_CURVE,
+//             &k1.to_int(&P384_CURVE),
+//             &p1,
+//             &k2.to_int(&P384_CURVE),
+//             &p2,
+//         );
+//
+//         p384_point_to_canonical_opt(&result)
+//     }
+// }
+//
+// drv::p384_lincomb_impl!(McuCryptoAsmDriver);
 
 // ---------------------------------------------------------------------------
 // High-level P-256 operations
 // ---------------------------------------------------------------------------
 
-impl drv::P256Ec for McuCryptoAsmDriver {
-    fn generate_keypair(rng: &mut dyn Rng) -> Result<(P256Scalar, P256AffinePoint), CryptoError> {
-        let mut d = [0u8; 32];
-        fill_nonzero_scalar(rng, &mut d)?;
-        let private_key = P256Scalar(d);
-        let public_key = <Self as P256ScalarMul>::mul_base(P256Scalar(d));
-        wipe(&mut d);
-        Ok((private_key, public_key))
-    }
-
-    fn public_key(mut k: P256Scalar) -> Result<P256AffinePoint, CryptoError> {
+impl drv::P256Ecdh for McuCryptoAsmDriver {
+    fn public_key(k: &P256Scalar) -> Result<P256Point, drv::Error> {
         if ScalarP256::from_be_bytes_nonzero(&P256_CURVE, &k.0).is_err() {
-            wipe(&mut k.0);
-            return Err(CryptoError::InvalidKey);
+            return Err(drv::Error::InvalidKey);
         }
 
-        let pk = <Self as P256ScalarMul>::mul_base(k);
-        wipe(&mut k.0);
-        Ok(pk)
+        Self::p256_mul_base(k)
     }
 
-    fn validate_point(p: &P256AffinePoint) -> bool {
-        #[cfg(nistp_asm_cm4)]
-        {
-            affine_to_jacobian(p).is_some()
-        }
-        #[cfg(not(nistp_asm_cm4))]
-        {
-            p256_point_from_canonical(p).is_some()
-        }
-    }
-
-    fn ecdh_shared_secret(
-        mut k: P256Scalar,
-        peer: P256AffinePoint,
-    ) -> Result<[u8; 32], CryptoError> {
+    fn shared_secret(k: &P256Scalar, peer: &P256Point) -> Result<[u8; 32], drv::Error> {
         if ScalarP256::from_be_bytes_nonzero(&P256_CURVE, &k.0).is_err() {
-            wipe(&mut k.0);
-            return Err(CryptoError::InvalidKey);
+            return Err(drv::Error::InvalidKey);
         }
 
         let mut peer_enc = [0u8; 65];
@@ -626,36 +574,41 @@ impl drv::P256Ec for McuCryptoAsmDriver {
 
         let mut out = [0u8; 32];
         let result = crate::p256::ecdh::shared_secret(&k.0, &peer_enc, &mut out);
-        wipe(&mut k.0);
 
         result.map_err(|e| match e {
-            crate::ecdh::Error::BadScalar => CryptoError::InvalidKey,
+            crate::ecdh::Error::BadScalar => drv::Error::InvalidKey,
             crate::ecdh::Error::BadPoint | crate::ecdh::Error::BadLength => {
-                CryptoError::InvalidInput
+                drv::Error::InvalidInput
             }
         })?;
         Ok(out)
     }
+}
 
-    fn ecdsa_sign(
-        mut k: P256Scalar,
-        digest: &[u8; 32],
-        rng: &mut dyn Rng,
-    ) -> Result<P256Signature, CryptoError> {
+reg::p256_ecdh_impl!(McuCryptoAsmDriver);
+
+impl drv::P256Ecdsa for McuCryptoAsmDriver {
+    fn public_key(k: &P256Scalar) -> Result<P256Point, drv::Error> {
         if ScalarP256::from_be_bytes_nonzero(&P256_CURVE, &k.0).is_err() {
-            wipe(&mut k.0);
-            return Err(CryptoError::InvalidKey);
+            return Err(drv::Error::InvalidKey);
+        }
+
+        Self::p256_mul_base(k)
+    }
+
+    fn sign(k: &P256Scalar, digest: &[u8; 32]) -> Result<P256Signature, drv::Error> {
+        if ScalarP256::from_be_bytes_nonzero(&P256_CURVE, &k.0).is_err() {
+            return Err(drv::Error::InvalidKey);
         }
 
         let mut nonce = [0u8; 32];
-        fill_nonzero_scalar(rng, &mut nonce)?;
+        drv::RngImpl::fill_bytes(&mut nonce)?;
 
         let mut r = [0u8; 32];
         let mut s = [0u8; 32];
         let result = crate::p256::ecdsa::sign(&k.0, digest, &nonce, &mut r, &mut s);
         wipe(&mut nonce);
-        wipe(&mut k.0);
-        result.map_err(|_| CryptoError::InvalidInput)?;
+        result.map_err(|_| drv::Error::InvalidInput)?;
 
         s = p256_low_s(&s)?;
         Ok(P256Signature {
@@ -664,24 +617,20 @@ impl drv::P256Ec for McuCryptoAsmDriver {
         })
     }
 
-    fn ecdsa_verify(
-        q: P256AffinePoint,
-        digest: &[u8; 32],
-        sig: &P256Signature,
-    ) -> Result<(), CryptoError> {
+    fn verify(q: &P256Point, digest: &[u8; 32], sig: &P256Signature) -> Result<(), drv::Error> {
         let mut q_enc = [0u8; 65];
         q_enc[0] = 0x04;
         q_enc[1..33].copy_from_slice(&q.x);
         q_enc[33..65].copy_from_slice(&q.y);
 
         crate::p256::ecdsa::verify(&q_enc, digest, &sig.r.0, &sig.s.0).map_err(|e| match e {
-            crate::ecdsa::Error::BadSignature => CryptoError::InvalidSignature,
-            crate::ecdsa::Error::BadScalar => CryptoError::InvalidSignature,
+            crate::ecdsa::Error::BadSignature => drv::Error::InvalidSignature,
+            crate::ecdsa::Error::BadScalar => drv::Error::InvalidSignature,
             crate::ecdsa::Error::BadPoint | crate::ecdsa::Error::BadLength => {
-                CryptoError::InvalidInput
+                drv::Error::InvalidInput
             }
         })
     }
 }
 
-drv::p256_ec_impl!(McuCryptoAsmDriver);
+reg::p256_ecdsa_impl!(McuCryptoAsmDriver);
