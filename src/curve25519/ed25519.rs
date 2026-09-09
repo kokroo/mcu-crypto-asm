@@ -2,7 +2,10 @@
 
 #[allow(unused_imports)]
 use super::portable::Fe51;
-use core::ops::{Add, Index, IndexMut, Mul, Neg, Sub};
+use core::{
+    array,
+    ops::{Add, Index, IndexMut, Mul, Neg, Sub},
+};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct CompressedEdwardsY(pub [u8; 32]);
@@ -85,7 +88,10 @@ impl Scalar {
         if (bytes[31] >> 7) != 0u8 {
             return None;
         }
-        let candidate = Scalar(unsafe { core::mem::transmute(bytes) });
+
+        let candidate = Scalar(array::from_fn(|i| {
+            u32::from_ne_bytes(bytes[i * 4..i * 4 + 4].try_into().unwrap())
+        }));
         if candidate == candidate.reduce() {
             Some(candidate)
         } else {
@@ -148,7 +154,11 @@ impl Add<Scalar> for Scalar {
             a[i] = sum;
             carry = c;
         }
-        a - L
+
+        #[allow(clippy::suspicious_arithmetic_impl)]
+        {
+            a - L
+        }
     }
 }
 
@@ -261,6 +271,7 @@ fn words_to_fe51(words: &[u32]) -> Fe51 {
 
 #[cfg(not(nistp_asm_cm4))]
 impl EdwardsPoint {
+    #[allow(clippy::wrong_self_convention)]
     fn to_fe(&self) -> PointFe {
         PointFe {
             x: words_to_fe51(&self.0[0..8]),

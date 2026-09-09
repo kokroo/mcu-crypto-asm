@@ -245,7 +245,7 @@ pub(crate) mod ct {
 
     #[inline(always)]
     fn rotr16(x: u32) -> u32 {
-        (x << 16) | (x >> 16)
+        x.rotate_right(16)
     }
 
     #[inline(always)]
@@ -258,14 +258,14 @@ pub(crate) mod ct {
         let q5 = q[5];
         let q6 = q[6];
         let q7 = q[7];
-        let r0 = (q0 >> 8) | (q0 << 24);
-        let r1 = (q1 >> 8) | (q1 << 24);
-        let r2 = (q2 >> 8) | (q2 << 24);
-        let r3 = (q3 >> 8) | (q3 << 24);
-        let r4 = (q4 >> 8) | (q4 << 24);
-        let r5 = (q5 >> 8) | (q5 << 24);
-        let r6 = (q6 >> 8) | (q6 << 24);
-        let r7 = (q7 >> 8) | (q7 << 24);
+        let r0 = q0.rotate_right(8);
+        let r1 = q1.rotate_right(8);
+        let r2 = q2.rotate_right(8);
+        let r3 = q3.rotate_right(8);
+        let r4 = q4.rotate_right(8);
+        let r5 = q5.rotate_right(8);
+        let r6 = q6.rotate_right(8);
+        let r7 = q7.rotate_right(8);
 
         q[0] = q7 ^ r7 ^ r0 ^ rotr16(q0 ^ r0);
         q[1] = q0 ^ r0 ^ q7 ^ r7 ^ r1 ^ rotr16(q1 ^ r1);
@@ -302,7 +302,7 @@ pub(crate) mod ct {
 
         for i in 0..nk {
             tmp = u32::from_le_bytes(key[i * 4..i * 4 + 4].try_into().unwrap());
-            skey[(i << 1) + 0] = tmp;
+            skey[i << 1] = tmp;
             skey[(i << 1) + 1] = tmp;
         }
 
@@ -310,13 +310,13 @@ pub(crate) mod ct {
         let mut k = 0;
         for i in nk..nkf {
             if j == 0 {
-                tmp = (tmp << 24) | (tmp >> 8);
+                tmp = tmp.rotate_right(8);
                 tmp = sub_word(tmp) ^ RCON[k];
             } else if nk > 6 && j == 4 {
                 tmp = sub_word(tmp);
             }
             tmp ^= skey[(i - nk) << 1];
-            skey[(i << 1) + 0] = tmp;
+            skey[i << 1] = tmp;
             skey[(i << 1) + 1] = tmp;
             j += 1;
             if j == nk {
@@ -338,7 +338,7 @@ pub(crate) mod ct {
         for u in 0..nkf {
             let comp = (skey[u * 2] & 0x55555555) | (skey[u * 2 + 1] & 0xAAAAAAAA);
             let x = comp & 0x55555555;
-            rkeys[u * 2 + 0] = x | (x << 1);
+            rkeys[u * 2] = x | (x << 1);
             let y = comp & 0xAAAAAAAA;
             rkeys[u * 2 + 1] = y | (y >> 1);
         }
