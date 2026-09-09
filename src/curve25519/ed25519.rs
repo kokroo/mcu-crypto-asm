@@ -2,7 +2,10 @@
 
 #[allow(unused_imports)]
 use super::portable::Fe51;
-use core::ops::{Add, Index, IndexMut, Mul, Neg, Sub};
+use core::{
+    array,
+    ops::{Add, Index, IndexMut, Mul, Neg, Sub},
+};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct CompressedEdwardsY(pub [u8; 32]);
@@ -86,8 +89,9 @@ impl Scalar {
             return None;
         }
 
-        // TODO: explanation for this
-        let candidate = Scalar(unsafe { core::mem::transmute::<[u8; 32], [u32; 8]>(bytes) });
+        let candidate = Scalar(array::from_fn(|i| {
+            u32::from_ne_bytes(bytes[i * 4..i * 4 + 4].try_into().unwrap())
+        }));
         if candidate == candidate.reduce() {
             Some(candidate)
         } else {
