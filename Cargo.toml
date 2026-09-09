@@ -13,6 +13,7 @@ keywords = ["crypto", "embedded", "no-std", "cortex-m", "assembly"]
 embassy-crypto = { git = "https://github.com/embassy-rs/embassy", rev = "5c42b0f", optional = true }
 
 [dev-dependencies]
+embassy-crypto-test = { git = "https://github.com/embassy-rs/embassy", rev = "5c42b0f" }
 num-bigint = "0.4"
 num-traits = "0.2"
 hex = "0.4"

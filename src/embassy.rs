@@ -1215,6 +1215,7 @@ macro_rules! impl_cmac {
 }
 
 impl_cmac!(Aes128Cmac, aes128_cmac_impl, Aes128, Aes128CmacContext, 16);
+#[cfg(target_pointer_width = "64")]
 impl_cmac!(Aes256Cmac, aes256_cmac_impl, Aes256, Aes256CmacContext, 32);
 
 // ---------------------------------------------------------------------------
@@ -2032,8 +2033,10 @@ impl Sha512Core {
             crate::sha512::compress_blocks(&mut self.state, blk);
         }
         let rem = chunks.remainder();
-        self.buffer[..rem.len()].copy_from_slice(rem);
-        self.buf_len = rem.len();
+        if !rem.is_empty() {
+            self.buffer[..rem.len()].copy_from_slice(rem);
+            self.buf_len = rem.len();
+        }
     }
 
     fn finalize(mut self) -> [u8; 64] {
@@ -2086,16 +2089,19 @@ impl_sha512_family!(Sha512_256, sha512_256_impl, 32, SHA512_256_IV);
 pub struct HmacSha512Family {
     inner: Sha512Core,
     opad: [u8; 128],
+    /// Full digest length of this SHA-512 variant (64/48/28/32). HMAC feeds
+    /// the inner hash's truncated output to the outer hash.
+    out_len: usize,
 }
 
 impl HmacSha512Family {
-    fn new(iv: [u64; 8], key: &[u8]) -> Self {
+    fn new(iv: [u64; 8], key: &[u8], out_len: usize) -> Self {
         let mut kblock = [0u8; 128];
         if key.len() > 128 {
             let mut h = Sha512Core::new(iv);
             h.update(key);
             let digest = h.finalize();
-            kblock[..64].copy_from_slice(&digest);
+            kblock[..out_len].copy_from_slice(&digest[..out_len]);
         } else {
             kblock[..key.len()].copy_from_slice(key);
         }
@@ -2111,7 +2117,11 @@ impl HmacSha512Family {
         let mut inner = Sha512Core::new(iv);
         inner.update(&ipad);
         wipe(&mut ipad);
-        Self { inner, opad }
+        Self {
+            inner,
+            opad,
+            out_len,
+        }
     }
 
     fn update(&mut self, data: &[u8]) {
@@ -2122,7 +2132,7 @@ impl HmacSha512Family {
         let inner_digest = self.inner.finalize();
         let mut outer = Sha512Core::new(iv);
         outer.update(&self.opad);
-        outer.update(&inner_digest);
+        outer.update(&inner_digest[..self.out_len]);
         outer.finalize()
     }
 }
@@ -2133,7 +2143,7 @@ macro_rules! impl_hmac_sha512_family {
             type Context = HmacSha512Family;
 
             fn init(key: &[u8]) -> Self::Context {
-                HmacSha512Family::new($iv, key)
+                HmacSha512Family::new($iv, key, $out_len)
             }
 
             fn update(ctx: &mut Self::Context, data: &[u8]) {
