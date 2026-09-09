@@ -224,7 +224,7 @@ fn rev32(mut x: u32) -> u32 {
     x = ((x & 0x33333333) << 2) | ((x >> 2) & 0x33333333);
     x = ((x & 0x0F0F0F0F) << 4) | ((x >> 4) & 0x0F0F0F0F);
     x = ((x & 0x00FF00FF) << 8) | ((x >> 8) & 0x00FF00FF);
-    (x << 16) | (x >> 16)
+    x.rotate_right(16)
 }
 
 pub fn ghash_ctmul32(y: &mut [u8; 16], h: &[u8; 16], data: &[u8]) {

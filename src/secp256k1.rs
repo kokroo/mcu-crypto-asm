@@ -137,7 +137,7 @@ impl FieldElement {
     /// Constant-time conditional selection: returns `a` if `choice == 0`, `b` if `choice == 1`.
     #[inline(always)]
     pub fn conditional_select(a: &Self, b: &Self, choice: u32) -> Self {
-        let mask = (!choice.wrapping_sub(1)) as u32; // 0xFFFFFFFF if 1, 0 if 0
+        let mask = !choice.wrapping_sub(1); // 0xFFFFFFFF if 1, 0 if 0
         let mut out = [0u32; 8];
         for i in 0..8 {
             out[i] = a.0[i] ^ (mask & (a.0[i] ^ b.0[i]));
@@ -414,8 +414,8 @@ pub fn secp256k1_reduce(product: &[u32; 16], out: &mut [u32; 8]) {
 fn comba_mul_8(a: &[u32; 8], b: &[u32; 8], out: &mut [u32; 16]) {
     let mut acc: u64 = 0;
     let mut r2: u32 = 0;
-    for i in 0..15 {
-        let start = if i > 7 { i - 7 } else { 0 };
+    for i in 0..15usize {
+        let start = i.saturating_sub(7);
         let end = if i < 7 { i } else { 7 };
         for j in start..=end {
             let p = (a[j] as u64) * (b[i - j] as u64);
@@ -437,8 +437,8 @@ fn comba_mul_8(a: &[u32; 8], b: &[u32; 8], out: &mut [u32; 16]) {
 fn comba_sqr_8(a: &[u32; 8], out: &mut [u32; 16]) {
     let mut acc: u64 = 0;
     let mut r2: u32 = 0;
-    for i in 0..15 {
-        let start = if i > 7 { i - 7 } else { 0 };
+    for i in 0..15usize {
+        let start = i.saturating_sub(7);
         let end = if i < 7 { i } else { 7 };
         let mut off_diag: u64 = 0;
         let mut off_r2: u32 = 0;
