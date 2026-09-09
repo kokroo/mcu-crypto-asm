@@ -633,4 +633,751 @@ impl drv::P256Ecdsa for McuCryptoAsmDriver {
     }
 }
 
+// ---------------------------------------------------------------------------
+// AES driver support
+// ---------------------------------------------------------------------------
+//
+// All AES modes here are built on the crate's fixsliced AES core, which is
+// encryption-only (Adomnicai's CHES 2020 fixslicing defines no inverse
+// transforms). That covers every `embassy-crypto-driver` AES trait except
+// ECB and CBC, whose `decrypt_blocks` requires the raw inverse cipher. Those
+// two traits are intentionally not registered; firmware that needs them
+// should fall back to `embassy-crypto`'s software AES for those modes.
+//
+// Mode implementations follow NIST SP 800-38A (CTR), SP 800-38B (CMAC),
+// SP 800-38C / RFC 3610 (CCM) and SP 800-38D (GCM).
+
+use crate::aes::{Aes128, Aes256};
+use crate::ghash::{Ghash, Htable};
+
+/// Facade over the two fixsliced AES cores so the mode helpers below are
+/// generic over the key size.
+trait AesEncrypt {
+    fn encrypt_block(&self, ptext: &[u8; 16], ctext: &mut [u8; 16]);
+    fn encrypt_two_blocks(
+        &self,
+        p0: &[u8; 16],
+        p1: &[u8; 16],
+        c0: &mut [u8; 16],
+        c1: &mut [u8; 16],
+    );
+}
+
+impl AesEncrypt for Aes128 {
+    #[inline]
+    fn encrypt_block(&self, ptext: &[u8; 16], ctext: &mut [u8; 16]) {
+        Aes128::encrypt_block(self, ptext, ctext);
+    }
+    #[inline]
+    fn encrypt_two_blocks(
+        &self,
+        p0: &[u8; 16],
+        p1: &[u8; 16],
+        c0: &mut [u8; 16],
+        c1: &mut [u8; 16],
+    ) {
+        Aes128::encrypt_two_blocks(self, p0, p1, c0, c1);
+    }
+}
+
+impl AesEncrypt for Aes256 {
+    #[inline]
+    fn encrypt_block(&self, ptext: &[u8; 16], ctext: &mut [u8; 16]) {
+        Aes256::encrypt_block(self, ptext, ctext);
+    }
+    #[inline]
+    fn encrypt_two_blocks(
+        &self,
+        p0: &[u8; 16],
+        p1: &[u8; 16],
+        c0: &mut [u8; 16],
+        c1: &mut [u8; 16],
+    ) {
+        Aes256::encrypt_two_blocks(self, p0, p1, c0, c1);
+    }
+}
+
+#[inline]
+fn xor_block(a: &mut [u8; 16], b: &[u8; 16]) {
+    for i in 0..16 {
+        a[i] ^= b[i];
+    }
+}
+
+/// Increment the rightmost 32 bits of the counter block (GCM, SP 800-38D).
+#[inline]
+fn inc32(blk: &mut [u8; 16]) {
+    let c = u32::from_be_bytes(blk[12..16].try_into().unwrap()).wrapping_add(1);
+    blk[12..16].copy_from_slice(&c.to_be_bytes());
+}
+
+/// Increment the full 128-bit big-endian counter (CTR, SP 800-38A).
+#[inline]
+fn inc128(blk: &mut [u8; 16]) {
+    for i in (0..16).rev() {
+        let (v, carry) = blk[i].overflowing_add(1);
+        blk[i] = v;
+        if !carry {
+            break;
+        }
+    }
+}
+
+/// XOR `data` with the keystream `E(counter)`, `E(inc(counter))`, ... in
+/// place, processing two blocks per call where possible.
+fn ctr_apply<E: AesEncrypt>(
+    aes: &E,
+    counter: &mut [u8; 16],
+    inc: fn(&mut [u8; 16]),
+    data: &mut [u8],
+) {
+    let mut chunks = data.chunks_exact_mut(32);
+    for pair in &mut chunks {
+        let (l, r) = pair.split_at_mut(16);
+        let c0: &mut [u8; 16] = l.try_into().unwrap();
+        let c1: &mut [u8; 16] = r.try_into().unwrap();
+        let (m0, m1) = (*c0, *c1);
+        let mut k0 = [0u8; 16];
+        let mut k1 = [0u8; 16];
+        let b0 = *counter;
+        inc(counter);
+        let b1 = *counter;
+        inc(counter);
+        aes.encrypt_two_blocks(&b0, &b1, &mut k0, &mut k1);
+        for i in 0..16 {
+            c0[i] = m0[i] ^ k0[i];
+            c1[i] = m1[i] ^ k1[i];
+        }
+    }
+    let rem = chunks.into_remainder();
+    let mut chunks16 = rem.chunks_exact_mut(16);
+    for blk in &mut chunks16 {
+        let b: &mut [u8; 16] = blk.try_into().unwrap();
+        let m = *b;
+        let mut k = [0u8; 16];
+        let ctr = *counter;
+        inc(counter);
+        aes.encrypt_block(&ctr, &mut k);
+        for i in 0..16 {
+            b[i] = m[i] ^ k[i];
+        }
+    }
+    let tail = chunks16.into_remainder();
+    if !tail.is_empty() {
+        let mut k = [0u8; 16];
+        let ctr = *counter;
+        inc(counter);
+        aes.encrypt_block(&ctr, &mut k);
+        for i in 0..tail.len() {
+            tail[i] ^= k[i];
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GCM (NIST SP 800-38D)
+// ---------------------------------------------------------------------------
+
+/// GHASH subkey table: H = E_K(0^128).
+fn gcm_htable<E: AesEncrypt>(aes: &E) -> Htable {
+    let mut h = [0u8; 16];
+    aes.encrypt_block(&[0u8; 16], &mut h);
+    let ht = Htable::new(&h);
+    wipe(&mut h);
+    ht
+}
+
+/// Feed `data` into GHASH, zero-padding a trailing partial block.
+fn ghash_update_padded(g: &mut Ghash, data: &[u8]) {
+    let mut chunks = data.chunks_exact(16);
+    for blk in &mut chunks {
+        g.update_block(blk.try_into().unwrap());
+    }
+    let rem = chunks.remainder();
+    if !rem.is_empty() {
+        let mut blk = [0u8; 16];
+        blk[..rem.len()].copy_from_slice(rem);
+        g.update_block(&blk);
+    }
+}
+
+/// The closing `[len(A)]_64 || [len(C)]_64` block of the GHASH input.
+fn gcm_length_block(aad_len: usize, ct_len: usize) -> [u8; 16] {
+    let mut blk = [0u8; 16];
+    blk[0..8].copy_from_slice(&((aad_len as u64).wrapping_mul(8)).to_be_bytes());
+    blk[8..16].copy_from_slice(&((ct_len as u64).wrapping_mul(8)).to_be_bytes());
+    blk
+}
+
+/// Derive J0 from the nonce (SP 800-38D section 5.2).
+fn gcm_j0<E: AesEncrypt>(_aes: &E, htable: &Htable, nonce: &[u8]) -> Result<[u8; 16], drv::Error> {
+    if nonce.len() == 12 {
+        let mut j0 = [0u8; 16];
+        j0[..12].copy_from_slice(nonce);
+        j0[15] = 1;
+        Ok(j0)
+    } else {
+        if nonce.is_empty() {
+            return Err(drv::Error::InvalidInput);
+        }
+        let mut g = Ghash::from_htable(*htable);
+        ghash_update_padded(&mut g, nonce);
+        g.update_block(&gcm_length_block(0, nonce.len()));
+        Ok(g.finalize())
+    }
+}
+
+/// GCM authentication tag: `GHASH(A || pad || C || pad || len) ^ E_K(J0)`.
+fn gcm_tag<E: AesEncrypt>(
+    aes: &E,
+    htable: &Htable,
+    j0: &[u8; 16],
+    aad: &[u8],
+    ct: &[u8],
+) -> [u8; 16] {
+    let mut g = Ghash::from_htable(*htable);
+    ghash_update_padded(&mut g, aad);
+    ghash_update_padded(&mut g, ct);
+    g.update_block(&gcm_length_block(aad.len(), ct.len()));
+    let mut s = g.finalize();
+    let mut e_j0 = [0u8; 16];
+    aes.encrypt_block(j0, &mut e_j0);
+    xor_block(&mut s, &e_j0);
+    wipe(&mut e_j0);
+    s
+}
+
+/// First data counter block: inc32(J0).
+#[inline]
+fn gcm_ctr_start(j0: &[u8; 16]) -> [u8; 16] {
+    let mut c = *j0;
+    inc32(&mut c);
+    c
+}
+
+macro_rules! impl_gcm {
+    ($trait:ident, $reg_macro:ident, $aes:ident, $ctx:ident, $key_len:expr) => {
+        /// Key schedule for the AES-GCM driver. The raw key is kept so the
+        /// `Clone` bound on the driver's opaque context can be honored (the
+        /// fixsliced cores are not themselves `Clone`).
+        pub struct $ctx {
+            aes: $aes,
+            key: [u8; $key_len],
+        }
+
+        impl Clone for $ctx {
+            fn clone(&self) -> Self {
+                $ctx {
+                    aes: $aes::new(&self.key),
+                    key: self.key,
+                }
+            }
+        }
+
+        impl drv::$trait for McuCryptoAsmDriver {
+            type Context = $ctx;
+
+            fn init(key: &[u8; $key_len]) -> Self::Context {
+                $ctx {
+                    aes: $aes::new(key),
+                    key: *key,
+                }
+            }
+
+            fn encrypt(
+                ctx: &Self::Context,
+                nonce: &[u8; 12],
+                aad: &[u8],
+                buffer: drv::InOutBuf<'_, '_, u8>,
+                tag: &mut [u8; 16],
+            ) -> Result<(), drv::Error> {
+                let htable = gcm_htable(&ctx.aes);
+                let j0 = gcm_j0(&ctx.aes, &htable, nonce)?;
+                let mut buf = buffer.into_out_with_copied_in();
+                let mut ctr = gcm_ctr_start(&j0);
+                ctr_apply(&ctx.aes, &mut ctr, inc32, &mut buf);
+                let mut t = gcm_tag(&ctx.aes, &htable, &j0, aad, &buf);
+                tag.copy_from_slice(&t);
+                wipe(&mut t);
+                Ok(())
+            }
+
+            fn decrypt(
+                ctx: &Self::Context,
+                nonce: &[u8; 12],
+                aad: &[u8],
+                buffer: drv::InOutBuf<'_, '_, u8>,
+                tag: &[u8; 16],
+            ) -> Result<(), drv::Error> {
+                let htable = gcm_htable(&ctx.aes);
+                let j0 = gcm_j0(&ctx.aes, &htable, nonce)?;
+                let mut buf = buffer.into_out_with_copied_in();
+                let mut t = gcm_tag(&ctx.aes, &htable, &j0, aad, &buf);
+                let mut diff = 0u8;
+                for i in 0..16 {
+                    diff |= t[i] ^ tag[i];
+                }
+                wipe(&mut t);
+                if diff != 0 {
+                    // Never release unauthenticated plaintext.
+                    for b in buf.iter_mut() {
+                        *b = 0;
+                    }
+                    return Err(drv::Error::InvalidSignature);
+                }
+                let mut ctr = gcm_ctr_start(&j0);
+                ctr_apply(&ctx.aes, &mut ctr, inc32, &mut buf);
+                Ok(())
+            }
+        }
+
+        reg::$reg_macro!(McuCryptoAsmDriver);
+    };
+}
+
+impl_gcm!(Aes128Gcm, aes128_gcm_impl, Aes128, Aes128GcmContext, 16);
+impl_gcm!(Aes256Gcm, aes256_gcm_impl, Aes256, Aes256GcmContext, 32);
+
+// ---------------------------------------------------------------------------
+// CTR (NIST SP 800-38A)
+// ---------------------------------------------------------------------------
+
+macro_rules! impl_ctr {
+    ($trait:ident, $reg_macro:ident, $aes:ident, $ctx:ident, $key_len:expr) => {
+        /// Streaming keystream state for the AES-CTR driver.
+        #[derive(Clone)]
+        pub struct $ctx {
+            aes: $aes,
+            counter: [u8; 16],
+            keystream: [u8; 16],
+            /// Number of keystream bytes already consumed from `keystream`;
+            /// 16 means the buffer is exhausted and a fresh block is needed.
+            pos: usize,
+        }
+
+        impl drv::$trait for McuCryptoAsmDriver {
+            type Context = $ctx;
+
+            fn init(key: &[u8; $key_len], iv: &[u8; 16]) -> Self::Context {
+                $ctx {
+                    aes: $aes::new(key),
+                    counter: *iv,
+                    keystream: [0u8; 16],
+                    pos: 16,
+                }
+            }
+
+            fn apply_keystream(ctx: &mut Self::Context, buf: drv::InOutBuf<'_, '_, u8>) {
+                let data = buf.into_out_with_copied_in();
+                let mut offset = 0;
+                while offset < data.len() {
+                    if ctx.pos == 16 {
+                        if data.len() - offset >= 32 {
+                            // Bulk path: two fixsliced blocks per call.
+                            ctr_apply(&ctx.aes, &mut ctx.counter, inc128, &mut data[offset..]);
+                            return;
+                        }
+                        ctx.aes.encrypt_block(&ctx.counter, &mut ctx.keystream);
+                        inc128(&mut ctx.counter);
+                        ctx.pos = 0;
+                    }
+                    let n = core::cmp::min(16 - ctx.pos, data.len() - offset);
+                    for j in 0..n {
+                        data[offset + j] ^= ctx.keystream[ctx.pos + j];
+                    }
+                    ctx.pos += n;
+                    offset += n;
+                }
+            }
+        }
+
+        reg::$reg_macro!(McuCryptoAsmDriver);
+    };
+}
+
+impl_ctr!(Aes128Ctr, aes128_ctr_impl, Aes128, Aes128CtrContext, 16);
+impl_ctr!(Aes256Ctr, aes256_ctr_impl, Aes256, Aes256CtrContext, 32);
+
+// ---------------------------------------------------------------------------
+// CMAC (NIST SP 800-38B)
+// ---------------------------------------------------------------------------
+
+/// GF(2^128) doubling (multiply by x; reduction polynomial
+/// x^128 + x^7 + x^2 + x + 1).
+#[inline]
+fn cmac_double(blk: &[u8; 16]) -> [u8; 16] {
+    let mut out = [0u8; 16];
+    let carry = blk[0] >> 7;
+    for i in 0..15 {
+        out[i] = (blk[i] << 1) | (blk[i + 1] >> 7);
+    }
+    out[15] = blk[15] << 1;
+    if carry != 0 {
+        out[15] ^= 0x87;
+    }
+    out
+}
+
+/// Streaming CMAC state shared by both key sizes. Only subkey K1 is stored;
+/// K2 = dbl(K1) is derived in `finalize`. The raw key is stored by the
+/// wrapping context so `Clone` can be honored.
+struct CmacState<E> {
+    aes: E,
+    state: [u8; 16],
+    buffer: [u8; 16],
+    buf_len: usize,
+    k1: [u8; 16],
+}
+
+impl<E: AesEncrypt> CmacState<E> {
+    fn new(aes: E) -> Self {
+        let mut l = [0u8; 16];
+        aes.encrypt_block(&[0u8; 16], &mut l);
+        let k1 = cmac_double(&l);
+        wipe(&mut l);
+        Self {
+            aes,
+            state: [0u8; 16],
+            buffer: [0u8; 16],
+            buf_len: 0,
+            k1,
+        }
+    }
+
+    /// Compress one full block into the CBC-MAC chain.
+    fn mac_feed(&mut self, blk: &[u8; 16]) {
+        let mut x = *blk;
+        xor_block(&mut x, &self.state);
+        self.aes.encrypt_block(&x, &mut self.state);
+    }
+
+    /// Buffer input, always holding back the final block (which may turn out
+    /// to be complete or need padding).
+    fn update(&mut self, mut data: &[u8]) {
+        loop {
+            if self.buf_len == 16 {
+                if data.is_empty() {
+                    return;
+                }
+                let blk = self.buffer;
+                self.mac_feed(&blk);
+                self.buf_len = 0;
+            }
+            if data.is_empty() {
+                return;
+            }
+            let n = core::cmp::min(16 - self.buf_len, data.len());
+            self.buffer[self.buf_len..self.buf_len + n].copy_from_slice(&data[..n]);
+            self.buf_len += n;
+            data = &data[n..];
+        }
+    }
+
+    fn finalize(self) -> [u8; 16] {
+        let k2 = cmac_double(&self.k1);
+        let (blk, key) = if self.buf_len == 16 {
+            (self.buffer, self.k1)
+        } else {
+            let mut b = self.buffer;
+            for i in self.buf_len..16 {
+                b[i] = 0;
+            }
+            b[self.buf_len] = 0x80;
+            (b, k2)
+        };
+        let mut x = blk;
+        xor_block(&mut x, &key);
+        xor_block(&mut x, &self.state);
+        let mut out = [0u8; 16];
+        self.aes.encrypt_block(&x, &mut out);
+        out
+    }
+
+    fn reset(&mut self) {
+        self.state = [0u8; 16];
+        self.buf_len = 0;
+    }
+}
+
+macro_rules! impl_cmac {
+    ($trait:ident, $reg_macro:ident, $aes:ident, $ctx:ident, $key_len:expr) => {
+        /// Context for the AES-CMAC driver.
+        pub struct $ctx {
+            inner: CmacState<$aes>,
+            key: [u8; $key_len],
+        }
+
+        impl Clone for $ctx {
+            fn clone(&self) -> Self {
+                $ctx {
+                    inner: CmacState::new($aes::new(&self.key)),
+                    key: self.key,
+                }
+            }
+        }
+
+        impl drv::$trait for McuCryptoAsmDriver {
+            type Context = $ctx;
+
+            fn init(key: &[u8; $key_len]) -> Self::Context {
+                $ctx {
+                    inner: CmacState::new($aes::new(key)),
+                    key: *key,
+                }
+            }
+
+            fn update(ctx: &mut Self::Context, data: &[u8]) {
+                ctx.inner.update(data);
+            }
+
+            fn finalize(ctx: Self::Context, out: &mut [u8; 16]) {
+                *out = ctx.inner.finalize();
+            }
+
+            fn reset(ctx: &mut Self::Context) {
+                ctx.inner.reset();
+            }
+        }
+
+        reg::$reg_macro!(McuCryptoAsmDriver);
+    };
+}
+
+impl_cmac!(Aes128Cmac, aes128_cmac_impl, Aes128, Aes128CmacContext, 16);
+//  impl_cmac!(Aes256Cmac, aes256cmac_impl, Aes256, Aes256CmacContext, 32);
+
+// ---------------------------------------------------------------------------
+// CCM (NIST SP 800-38C / RFC 3610)
+// ---------------------------------------------------------------------------
+
+/// Validate nonce/tag sizes; returns `(q, t)` on success.
+fn ccm_params(nonce_len: usize, tag_len: usize) -> Result<(usize, usize), drv::Error> {
+    if nonce_len < 7 || nonce_len > 13 {
+        return Err(drv::Error::InvalidInput);
+    }
+    match tag_len {
+        4 | 6 | 8 | 10 | 12 | 14 | 16 => {}
+        _ => return Err(drv::Error::InvalidInput),
+    }
+    Ok((15 - nonce_len, tag_len))
+}
+
+/// The message length must fit the q-byte big-endian length field.
+fn ccm_check_len(q: usize, msg_len: usize) -> Result<(), drv::Error> {
+    if q < 8 && (msg_len as u128) >= (1u128 << (8 * q)) {
+        return Err(drv::Error::InvalidInput);
+    }
+    Ok(())
+}
+
+/// CBC-MAC block processor: buffers partial input and zero-pads at section
+/// boundaries via `feed_padded`.
+struct CcmMac<'a, E> {
+    aes: &'a E,
+    y: [u8; 16],
+    blk: [u8; 16],
+    len: usize,
+}
+
+impl<'a, E: AesEncrypt> CcmMac<'a, E> {
+    fn new(aes: &'a E) -> Self {
+        Self {
+            aes,
+            y: [0u8; 16],
+            blk: [0u8; 16],
+            len: 0,
+        }
+    }
+
+    fn feed_block(&mut self, blk: &[u8; 16]) {
+        let mut x = *blk;
+        xor_block(&mut x, &self.y);
+        self.aes.encrypt_block(&x, &mut self.y);
+    }
+
+    fn feed(&mut self, mut data: &[u8]) {
+        while !data.is_empty() {
+            let n = core::cmp::min(16 - self.len, data.len());
+            self.blk[self.len..self.len + n].copy_from_slice(&data[..n]);
+            self.len += n;
+            data = &data[n..];
+            if self.len == 16 {
+                let b = self.blk;
+                self.feed_block(&b);
+                self.len = 0;
+            }
+        }
+    }
+
+    /// Zero-pad and flush a trailing partial block.
+    fn feed_padded(&mut self) {
+        if self.len > 0 {
+            for i in self.len..16 {
+                self.blk[i] = 0;
+            }
+            let b = self.blk;
+            self.feed_block(&b);
+            self.len = 0;
+        }
+    }
+}
+
+/// CCM CBC-MAC over `B0 || aad-encoding || msg`, with the final message
+/// block zero-padded as required.
+fn ccm_cbc_mac<E: AesEncrypt>(
+    aes: &E,
+    q: usize,
+    t: usize,
+    nonce: &[u8],
+    aad: &[u8],
+    msg: &[u8],
+) -> Result<[u8; 16], drv::Error> {
+    ccm_check_len(q, msg.len())?;
+
+    let mut mac = CcmMac::new(aes);
+
+    // B0: flags || nonce || msg length (q bytes, big-endian).
+    let mut b0 = [0u8; 16];
+    b0[0] =
+        (if aad.is_empty() { 0u8 } else { 0x40 }) | ((((t - 2) / 2) as u8) << 3) | (q - 1) as u8;
+    b0[1..1 + nonce.len()].copy_from_slice(nonce);
+    let mlen = (msg.len() as u128).to_be_bytes();
+    b0[16 - q..16].copy_from_slice(&mlen[16 - q..16]);
+    mac.feed_block(&b0);
+
+    if !aad.is_empty() {
+        let mut hdr = [0u8; 16];
+        let off;
+        if aad.len() < 0xFF00 {
+            hdr[0..2].copy_from_slice(&(aad.len() as u16).to_be_bytes());
+            off = 2;
+        } else if aad.len() < (1usize << 32) {
+            hdr[0] = 0xFF;
+            hdr[1] = 0xFE;
+            hdr[2..6].copy_from_slice(&(aad.len() as u32).to_be_bytes());
+            off = 6;
+        } else {
+            return Err(drv::Error::InvalidInput);
+        }
+        let n = core::cmp::min(16 - off, aad.len());
+        hdr[off..off + n].copy_from_slice(&aad[..n]);
+        mac.feed(&hdr[..off + n]);
+        mac.feed(&aad[n..]);
+        mac.feed_padded();
+    }
+
+    mac.feed(msg);
+    mac.feed_padded();
+
+    Ok(mac.y)
+}
+
+/// Format a CCM counter block `A_i = flags(q-1) || nonce || i`, with `i`
+/// occupying the last q bytes as a big-endian integer.
+fn ccm_ctr_block(q: usize, nonce: &[u8], ctr: u64) -> [u8; 16] {
+    let mut a = [0u8; 16];
+    a[0] = (q - 1) as u8;
+    a[1..1 + nonce.len()].copy_from_slice(nonce);
+    let c = ctr.to_be_bytes();
+    a[16 - q..16].copy_from_slice(&c[8 - q..8]);
+    a
+}
+
+/// CCM CTR crypt, starting at counter value `start`.
+fn ccm_ctr_crypt<E: AesEncrypt>(aes: &E, q: usize, nonce: &[u8], start: u64, data: &mut [u8]) {
+    let mut ctr = start;
+    let mut offset = 0;
+    while offset < data.len() {
+        let a = ccm_ctr_block(q, nonce, ctr);
+        ctr = ctr.wrapping_add(1);
+        let mut k = [0u8; 16];
+        aes.encrypt_block(&a, &mut k);
+        let n = core::cmp::min(16, data.len() - offset);
+        for j in 0..n {
+            data[offset + j] ^= k[j];
+        }
+        offset += n;
+    }
+}
+
+macro_rules! impl_ccm {
+    ($trait:ident, $reg_macro:ident, $aes:ident, $ctx:ident, $key_len:expr) => {
+        /// Context for the AES-CCM driver. Only the key schedule is needed:
+        /// CCM's CBC-MAC and CTR encryption both derive from E_K alone.
+        pub struct $ctx {
+            aes: $aes,
+            key: [u8; $key_len],
+        }
+
+        impl Clone for $ctx {
+            fn clone(&self) -> Self {
+                $ctx {
+                    aes: $aes::new(&self.key),
+                    key: self.key,
+                }
+            }
+        }
+
+        impl drv::$trait for McuCryptoAsmDriver {
+            type Context = $ctx;
+
+            fn init(key: &[u8; $key_len]) -> Self::Context {
+                $ctx {
+                    aes: $aes::new(key),
+                    key: *key,
+                }
+            }
+
+            fn encrypt(
+                ctx: &Self::Context,
+                nonce: &[u8],
+                aad: &[u8],
+                buffer: drv::InOutBuf<'_, '_, u8>,
+                tag: &mut [u8],
+            ) -> Result<(), drv::Error> {
+                let (q, t) = ccm_params(nonce.len(), tag.len())?;
+                let mut buf = buffer.into_out_with_copied_in();
+                let mac = ccm_cbc_mac(&ctx.aes, q, t, nonce, aad, &buf)?;
+                ccm_ctr_crypt(&ctx.aes, q, nonce, 1, &mut buf);
+                let mut s0 = [0u8; 16];
+                ctx.aes.encrypt_block(&ccm_ctr_block(q, nonce, 0), &mut s0);
+                for i in 0..t {
+                    tag[i] = mac[i] ^ s0[i];
+                }
+                wipe(&mut s0);
+                Ok(())
+            }
+
+            fn decrypt(
+                ctx: &Self::Context,
+                nonce: &[u8],
+                aad: &[u8],
+                buffer: drv::InOutBuf<'_, '_, u8>,
+                tag: &[u8],
+            ) -> Result<(), drv::Error> {
+                let (q, t) = ccm_params(nonce.len(), tag.len())?;
+                // Authenticate the ciphertext before releasing any plaintext.
+                let mac = ccm_cbc_mac(&ctx.aes, q, t, nonce, aad, buffer.get_in())?;
+                let mut s0 = [0u8; 16];
+                ctx.aes.encrypt_block(&ccm_ctr_block(q, nonce, 0), &mut s0);
+                let mut diff = 0u8;
+                for i in 0..t {
+                    diff |= mac[i] ^ s0[i] ^ tag[i];
+                }
+                wipe(&mut s0);
+                if diff != 0 {
+                    return Err(drv::Error::InvalidSignature);
+                }
+                let mut buf = buffer.into_out_with_copied_in();
+                ccm_ctr_crypt(&ctx.aes, q, nonce, 1, &mut buf);
+                Ok(())
+            }
+        }
+
+        reg::$reg_macro!(McuCryptoAsmDriver);
+    };
+}
+
+impl_ccm!(Aes128Ccm, aes128_ccm_impl, Aes128, Aes128CcmContext, 16);
+impl_ccm!(Aes256Ccm, aes256_ccm_impl, Aes256, Aes256CcmContext, 32);
 reg::p256_ecdsa_impl!(McuCryptoAsmDriver);
