@@ -21,36 +21,56 @@ mod asm {
             b: *const u32,
             operand_length_bytes: usize,
         );
-        pub fn bignum_sqracc(
-            accumulator: *mut u32,
-            a: *const u32,
-            operand_length_bytes: usize,
-        );
+        pub fn bignum_sqracc(accumulator: *mut u32, a: *const u32, operand_length_bytes: usize);
     }
 }
 
 /// Modulus $p = 2^{256} - 2^{32} - 977$ in little-endian 32-bit limbs.
 pub const SECP256K1_P: [u32; 8] = [
-    0xFFFF_FC2F, 0xFFFF_FFFE, 0xFFFF_FFFF, 0xFFFF_FFFF,
-    0xFFFF_FFFF, 0xFFFF_FFFF, 0xFFFF_FFFF, 0xFFFF_FFFF,
+    0xFFFF_FC2F,
+    0xFFFF_FFFE,
+    0xFFFF_FFFF,
+    0xFFFF_FFFF,
+    0xFFFF_FFFF,
+    0xFFFF_FFFF,
+    0xFFFF_FFFF,
+    0xFFFF_FFFF,
 ];
 
 /// Curve order $n = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BB5D25E3DF031AD85$.
 pub const SECP256K1_N: [u32; 8] = [
-    0xD036_4141, 0xBFD2_5E8C, 0xAF48_A03B, 0xBAAE_DCE6,
-    0xFFFF_FFFE, 0xFFFF_FFFF, 0xFFFF_FFFF, 0xFFFF_FFFF,
+    0xD036_4141,
+    0xBFD2_5E8C,
+    0xAF48_A03B,
+    0xBAAE_DCE6,
+    0xFFFF_FFFE,
+    0xFFFF_FFFF,
+    0xFFFF_FFFF,
+    0xFFFF_FFFF,
 ];
 
 /// Base point G x-coordinate.
 pub const SECP256K1_GX: [u32; 8] = [
-    0x16F8_1798, 0x59F2_815B, 0x2DCE_28D9, 0x029B_FCDB,
-    0xCE87_0B07, 0x55A0_6295, 0xF9DC_BBAC, 0x79BE_667E,
+    0x16F8_1798,
+    0x59F2_815B,
+    0x2DCE_28D9,
+    0x029B_FCDB,
+    0xCE87_0B07,
+    0x55A0_6295,
+    0xF9DC_BBAC,
+    0x79BE_667E,
 ];
 
 /// Base point G y-coordinate.
 pub const SECP256K1_GY: [u32; 8] = [
-    0xFB10_D4B8, 0x9C47_D08F, 0xA685_5419, 0xFD17_B448,
-    0x0E11_08A8, 0x5DA4_FBFC, 0x26A3_C465, 0x483A_DA77,
+    0xFB10_D4B8,
+    0x9C47_D08F,
+    0xA685_5419,
+    0xFD17_B448,
+    0x0E11_08A8,
+    0x5DA4_FBFC,
+    0x26A3_C465,
+    0x483A_DA77,
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -574,7 +594,11 @@ impl ProjectivePoint {
         z3 = z3.mul(&t4);
         z3 = z3.add(&t0);
 
-        ProjectivePoint { x: x3, y: y3, z: z3 }
+        ProjectivePoint {
+            x: x3,
+            y: y3,
+            z: z3,
+        }
     }
 
     /// Point doubling: $P + P$.
@@ -650,7 +674,11 @@ impl AffinePoint {
     /// Check if point satisfies the curve equation $y^2 \equiv x^3 + 7 \pmod p$.
     pub fn is_on_curve(&self) -> bool {
         let y2 = self.y.square();
-        let x3_plus_7 = self.x.square().mul(&self.x).add(&FieldElement([7, 0, 0, 0, 0, 0, 0, 0]));
+        let x3_plus_7 = self
+            .x
+            .square()
+            .mul(&self.x)
+            .add(&FieldElement([7, 0, 0, 0, 0, 0, 0, 0]));
         y2 == x3_plus_7
     }
 
@@ -670,7 +698,10 @@ impl AffinePoint {
                 let x = FieldElement::from_bytes_be(&x_bytes)?;
 
                 // y^2 = x^3 + 7
-                let y2 = x.square().mul(&x).add(&FieldElement([7, 0, 0, 0, 0, 0, 0, 0]));
+                let y2 = x
+                    .square()
+                    .mul(&x)
+                    .add(&FieldElement([7, 0, 0, 0, 0, 0, 0, 0]));
                 let mut y = y2.sqrt().ok_or(Secp256k1Error::PointNotOnCurve)?;
 
                 let is_odd = bytes[0] == 0x03;
@@ -763,6 +794,8 @@ pub fn public_key_from_secret(secret_scalar: &[u8; 32]) -> Result<PublicKey, Sec
 pub fn ecdh(secret_scalar: &[u8; 32], public_key: &PublicKey) -> Result<[u8; 32], Secp256k1Error> {
     let proj = public_key.0.to_projective();
     let shared_proj = proj.scalarmult(secret_scalar);
-    let affine = shared_proj.to_affine().ok_or(Secp256k1Error::PointAtInfinity)?;
+    let affine = shared_proj
+        .to_affine()
+        .ok_or(Secp256k1Error::PointAtInfinity)?;
     Ok(affine.x.to_bytes_be())
 }

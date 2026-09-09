@@ -16,12 +16,7 @@ global_asm!(include_str!("../asm/cortex_m_ghash.S"), options(raw));
 
 #[cfg(all(cortex_m_thumb2, not(feature = "force-portable")))]
 extern "C" {
-    fn gcm_ghash_4bit(
-        state: *mut u8,
-        htable: *const [u32; 4],
-        inp: *const u8,
-        len: usize,
-    );
+    fn gcm_ghash_4bit(state: *mut u8, htable: *const [u32; 4], inp: *const u8, len: usize);
     fn gcm_gmult_4bit(state: *mut u8, htable: *const [u32; 4]);
 }
 
@@ -70,18 +65,10 @@ impl Htable {
         let mut words = [[0u32; 4]; 16];
         for i in 0..16 {
             let (hi, lo) = htbl[i];
-            words[i] = [
-                lo as u32,
-                (lo >> 32) as u32,
-                hi as u32,
-                (hi >> 32) as u32,
-            ];
+            words[i] = [lo as u32, (lo >> 32) as u32, hi as u32, (hi >> 32) as u32];
         }
 
-        Self {
-            words,
-            h_bytes: *h,
-        }
+        Self { words, h_bytes: *h }
     }
 }
 
@@ -211,10 +198,22 @@ fn bmul32(x: u32, y: u32) -> u32 {
     let y2 = y & 0x44444444;
     let y3 = y & 0x88888888;
 
-    let z0 = (x0.wrapping_mul(y0)) ^ (x1.wrapping_mul(y3)) ^ (x2.wrapping_mul(y2)) ^ (x3.wrapping_mul(y1));
-    let z1 = (x0.wrapping_mul(y1)) ^ (x1.wrapping_mul(y0)) ^ (x2.wrapping_mul(y3)) ^ (x3.wrapping_mul(y2));
-    let z2 = (x0.wrapping_mul(y2)) ^ (x1.wrapping_mul(y1)) ^ (x2.wrapping_mul(y0)) ^ (x3.wrapping_mul(y3));
-    let z3 = (x0.wrapping_mul(y3)) ^ (x1.wrapping_mul(y2)) ^ (x2.wrapping_mul(y1)) ^ (x3.wrapping_mul(y0));
+    let z0 = (x0.wrapping_mul(y0))
+        ^ (x1.wrapping_mul(y3))
+        ^ (x2.wrapping_mul(y2))
+        ^ (x3.wrapping_mul(y1));
+    let z1 = (x0.wrapping_mul(y1))
+        ^ (x1.wrapping_mul(y0))
+        ^ (x2.wrapping_mul(y3))
+        ^ (x3.wrapping_mul(y2));
+    let z2 = (x0.wrapping_mul(y2))
+        ^ (x1.wrapping_mul(y1))
+        ^ (x2.wrapping_mul(y0))
+        ^ (x3.wrapping_mul(y3));
+    let z3 = (x0.wrapping_mul(y3))
+        ^ (x1.wrapping_mul(y2))
+        ^ (x2.wrapping_mul(y1))
+        ^ (x3.wrapping_mul(y0));
 
     (z0 & 0x11111111) | (z1 & 0x22222222) | (z2 & 0x44444444) | (z3 & 0x88888888)
 }
@@ -354,18 +353,18 @@ mod tests {
     use super::*;
 
     const H: [u8; 16] = [
-        0x66, 0xe9, 0x4b, 0xd4, 0xef, 0x8a, 0x2c, 0x3b,
-        0x88, 0x4c, 0xfa, 0x59, 0xca, 0x34, 0x2b, 0x2e,
+        0x66, 0xe9, 0x4b, 0xd4, 0xef, 0x8a, 0x2c, 0x3b, 0x88, 0x4c, 0xfa, 0x59, 0xca, 0x34, 0x2b,
+        0x2e,
     ];
 
     const B1: [u8; 16] = [
-        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-        0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+        0x10,
     ];
 
     const B2: [u8; 16] = [
-        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
-        0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20,
+        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+        0x20,
     ];
 
     #[test]
@@ -374,8 +373,8 @@ mod tests {
         g.update(&B1);
         let tag = g.finalize();
         let expected = [
-            0x9f, 0x58, 0x94, 0x6a, 0x05, 0x63, 0xef, 0xa9,
-            0x60, 0x90, 0xaf, 0xfe, 0x7c, 0xd3, 0x55, 0x53,
+            0x9f, 0x58, 0x94, 0x6a, 0x05, 0x63, 0xef, 0xa9, 0x60, 0x90, 0xaf, 0xfe, 0x7c, 0xd3,
+            0x55, 0x53,
         ];
         assert_eq!(tag, expected);
     }
@@ -387,8 +386,8 @@ mod tests {
         g.update(&B2);
         let tag = g.finalize();
         let expected = [
-            0x94, 0xc4, 0xec, 0x81, 0xe0, 0x7a, 0x57, 0x99,
-            0xf5, 0x6e, 0x17, 0x7c, 0xdc, 0xab, 0x85, 0x85,
+            0x94, 0xc4, 0xec, 0x81, 0xe0, 0x7a, 0x57, 0x99, 0xf5, 0x6e, 0x17, 0x7c, 0xdc, 0xab,
+            0x85, 0x85,
         ];
         assert_eq!(tag, expected);
     }
@@ -399,8 +398,8 @@ mod tests {
         let mut xi = B1;
         gmult(&mut xi, &htable);
         let expected = [
-            0x9f, 0x58, 0x94, 0x6a, 0x05, 0x63, 0xef, 0xa9,
-            0x60, 0x90, 0xaf, 0xfe, 0x7c, 0xd3, 0x55, 0x53,
+            0x9f, 0x58, 0x94, 0x6a, 0x05, 0x63, 0xef, 0xa9, 0x60, 0x90, 0xaf, 0xfe, 0x7c, 0xd3,
+            0x55, 0x53,
         ];
         assert_eq!(xi, expected);
     }

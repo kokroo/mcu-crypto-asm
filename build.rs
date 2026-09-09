@@ -42,7 +42,10 @@ fn main() {
     let target = std::env::var("TARGET").unwrap_or_default();
 
     // --- Cortex-M3 / M4 / M7 / M33: Standard Thumb-2 (AES, ChaCha20, Keccak, Poly1305) ---
-    if target.starts_with("thumbv7em") || target.starts_with("thumbv8m.main") || target.starts_with("thumbv7m") {
+    if target.starts_with("thumbv7em")
+        || target.starts_with("thumbv8m.main")
+        || target.starts_with("thumbv7m")
+    {
         println!("cargo:rustc-cfg=cortex_m_thumb2");
     }
 

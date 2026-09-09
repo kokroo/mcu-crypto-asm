@@ -44,16 +44,16 @@ pub mod chacha20;
 pub mod comb_tables;
 pub mod curve25519;
 pub mod keccak;
+pub mod mlkem;
 pub mod params;
 pub mod poly1305;
 pub mod rsa;
 pub mod secp256k1;
-pub mod mlkem;
 pub use mlkem as kyber;
 pub mod mldsa;
 pub use mldsa as dilithium;
-pub mod sha512;
 pub mod ghash;
+pub mod sha512;
 
 pub mod ecdh;
 pub mod ecdsa;

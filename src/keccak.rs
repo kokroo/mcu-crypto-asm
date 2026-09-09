@@ -12,7 +12,12 @@ mod asm {
     extern "C" {
         pub fn KeccakP1600_Initialize(state: *mut u32);
         pub fn KeccakP1600_AddBytes(state: *mut u32, data: *const u8, offset: usize, length: usize);
-        pub fn KeccakP1600_ExtractBytes(state: *const u32, data: *mut u8, offset: usize, length: usize);
+        pub fn KeccakP1600_ExtractBytes(
+            state: *const u32,
+            data: *mut u8,
+            offset: usize,
+            length: usize,
+        );
         pub fn KeccakP1600_Permute_12rounds(state: *mut u32);
         pub fn KeccakP1600_Permute_24rounds(state: *mut u32);
     }
@@ -172,7 +177,8 @@ impl KeccakSponge {
         while out_idx < out.len() {
             let want = self.rate - self.pos;
             let take = core::cmp::min(want, out.len() - out_idx);
-            self.state.extract_bytes(&mut out[out_idx..out_idx + take], self.pos);
+            self.state
+                .extract_bytes(&mut out[out_idx..out_idx + take], self.pos);
             self.pos += take;
             out_idx += take;
 
@@ -215,28 +221,39 @@ pub fn shake256(msg: &[u8], out: &mut [u8]) {
 #[cfg(not(nistp_asm_cm4))]
 mod portable {
     const RC: [u64; 24] = [
-        0x0000000000000001, 0x0000000000008082, 0x800000000000808a, 0x8000000080008000,
-        0x000000000000808b, 0x0000000080000001, 0x8000000080008081, 0x8000000000008009,
-        0x000000000000008a, 0x0000000000000088, 0x0000000080008009, 0x000000008000000a,
-        0x000000008000808b, 0x800000000000008b, 0x8000000000008089, 0x8000000000008003,
-        0x8000000000008002, 0x8000000000000080, 0x000000000000800a, 0x800000008000000a,
-        0x8000000080008081, 0x8000000000008080, 0x0000000080000001, 0x8000000080008008,
+        0x0000000000000001,
+        0x0000000000008082,
+        0x800000000000808a,
+        0x8000000080008000,
+        0x000000000000808b,
+        0x0000000080000001,
+        0x8000000080008081,
+        0x8000000000008009,
+        0x000000000000008a,
+        0x0000000000000088,
+        0x0000000080008009,
+        0x000000008000000a,
+        0x000000008000808b,
+        0x800000000000008b,
+        0x8000000000008089,
+        0x8000000000008003,
+        0x8000000000008002,
+        0x8000000000000080,
+        0x000000000000800a,
+        0x800000008000000a,
+        0x8000000080008081,
+        0x8000000000008080,
+        0x0000000080000001,
+        0x8000000080008008,
     ];
 
     const RHO: [u32; 25] = [
-        0, 1, 62, 28, 27,
-        36, 44, 6, 55, 20,
-        3, 10, 43, 25, 39,
-        41, 45, 15, 21, 8,
-        18, 2, 61, 56, 14,
+        0, 1, 62, 28, 27, 36, 44, 6, 55, 20, 3, 10, 43, 25, 39, 41, 45, 15, 21, 8, 18, 2, 61, 56,
+        14,
     ];
 
     const PI: [usize; 25] = [
-        0, 10, 20, 5, 15,
-        16, 1, 11, 21, 6,
-        7, 17, 2, 12, 22,
-        23, 8, 18, 3, 13,
-        14, 24, 9, 19, 4,
+        0, 10, 20, 5, 15, 16, 1, 11, 21, 6, 7, 17, 2, 12, 22, 23, 8, 18, 3, 13, 14, 24, 9, 19, 4,
     ];
 
     #[inline(always)]
@@ -267,7 +284,8 @@ mod portable {
         // Chi
         for x in 0..5 {
             for y in 0..5 {
-                a[x + 5 * y] = b[x + 5 * y] ^ ((!b[((x + 1) % 5) + 5 * y]) & b[((x + 2) % 5) + 5 * y]);
+                a[x + 5 * y] =
+                    b[x + 5 * y] ^ ((!b[((x + 1) % 5) + 5 * y]) & b[((x + 2) % 5) + 5 * y]);
             }
         }
 

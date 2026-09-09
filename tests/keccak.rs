@@ -3,14 +3,16 @@ use mcu_crypto_asm::keccak::{sha3_256, sha3_512, shake128, shake256};
 #[test]
 fn test_sha3_256_empty() {
     let hash = sha3_256(b"");
-    let expected = hex::decode("a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a").unwrap();
+    let expected =
+        hex::decode("a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a").unwrap();
     assert_eq!(&hash[..], &expected[..]);
 }
 
 #[test]
 fn test_sha3_256_quick_brown_fox() {
     let hash = sha3_256(b"The quick brown fox jumps over the lazy dog");
-    let expected = hex::decode("69070dda01975c8c120c3aada1b282394e7f032fa9cf32f4cb2259a0897dfc04").unwrap();
+    let expected =
+        hex::decode("69070dda01975c8c120c3aada1b282394e7f032fa9cf32f4cb2259a0897dfc04").unwrap();
     assert_eq!(&hash[..], &expected[..]);
 }
 
@@ -32,7 +34,8 @@ fn test_sha3_512_quick_brown_fox() {
 fn test_shake128_quick_brown_fox() {
     let mut out = [0u8; 32];
     shake128(b"The quick brown fox jumps over the lazy dog", &mut out);
-    let expected = hex::decode("f4202e3c5852f9182a0430fd8144f0a74b95e7417ecae17db0f8cfeed0e3e66e").unwrap();
+    let expected =
+        hex::decode("f4202e3c5852f9182a0430fd8144f0a74b95e7417ecae17db0f8cfeed0e3e66e").unwrap();
     assert_eq!(&out[..], &expected[..]);
 }
 
@@ -40,6 +43,7 @@ fn test_shake128_quick_brown_fox() {
 fn test_shake256_quick_brown_fox() {
     let mut out = [0u8; 32];
     shake256(b"The quick brown fox jumps over the lazy dog", &mut out);
-    let expected = hex::decode("2f671343d9b2e1604dc9dcf0753e5fe15c7c64a0d283cbbf722d411a0e36f6ca").unwrap();
+    let expected =
+        hex::decode("2f671343d9b2e1604dc9dcf0753e5fe15c7c64a0d283cbbf722d411a0e36f6ca").unwrap();
     assert_eq!(&out[..], &expected[..]);
 }

@@ -24,11 +24,7 @@ mod asm {
             b: *const u32,
             operand_length_bytes: usize,
         );
-        pub fn bignum_sqracc(
-            accumulator: *mut u32,
-            a: *const u32,
-            operand_length_bytes: usize,
-        );
+        pub fn bignum_sqracc(accumulator: *mut u32, a: *const u32, operand_length_bytes: usize);
         pub fn bignum_mont_redc(
             input: *mut u32,
             modulus_length_bytes: usize,
@@ -222,13 +218,7 @@ fn sub_m_if_gte<const N: usize>(r: &mut [u32; N], m: &[u32; N], carry: u32) {
     }
 }
 
-fn mont_mul<const N: usize>(
-    a: &[u32; N],
-    b: &[u32; N],
-    m: &[u32; N],
-    mu: u32,
-    res: &mut [u32; N],
-) {
+fn mont_mul<const N: usize>(a: &[u32; N], b: &[u32; N], m: &[u32; N], mu: u32, res: &mut [u32; N]) {
     let mut t = [0u32; 130];
     for i in 0..N {
         let mut carry: u64 = 0;
@@ -362,7 +352,9 @@ mod tests {
         modulus[0] = 0xDEADBEEF;
         modulus[1] = 0xCAFEBABE;
         modulus[7] = 0x80000000; // ensure MSB set
-        if modulus[0] % 2 == 0 { modulus[0] |= 1; }
+        if modulus[0] % 2 == 0 {
+            modulus[0] |= 1;
+        }
 
         let mut res = [0u32; 8];
         portable_modexp_public(&base, &exp, &modulus, &mut res).unwrap();
@@ -371,11 +363,11 @@ mod tests {
         use num_bigint::BigUint;
         let mut base_bytes = [0u8; 32];
         for i in 0..8 {
-            base_bytes[i*4..(i+1)*4].copy_from_slice(&base[i].to_le_bytes());
+            base_bytes[i * 4..(i + 1) * 4].copy_from_slice(&base[i].to_le_bytes());
         }
         let mut mod_bytes = [0u8; 32];
         for i in 0..8 {
-            mod_bytes[i*4..(i+1)*4].copy_from_slice(&modulus[i].to_le_bytes());
+            mod_bytes[i * 4..(i + 1) * 4].copy_from_slice(&modulus[i].to_le_bytes());
         }
         let b = BigUint::from_bytes_le(&base_bytes);
         let m = BigUint::from_bytes_le(&mod_bytes);
@@ -383,7 +375,7 @@ mod tests {
         let expected = b.modpow(&e, &m);
         let mut res_bytes = [0u8; 32];
         for i in 0..8 {
-            res_bytes[i*4..(i+1)*4].copy_from_slice(&res[i].to_le_bytes());
+            res_bytes[i * 4..(i + 1) * 4].copy_from_slice(&res[i].to_le_bytes());
         }
         let actual = BigUint::from_bytes_le(&res_bytes);
         assert_eq!(actual, expected, "RSA 256-bit modexp mismatch");
@@ -408,11 +400,11 @@ mod tests {
         use num_bigint::BigUint;
         let mut base_bytes = [0u8; 256];
         for i in 0..64 {
-            base_bytes[i*4..(i+1)*4].copy_from_slice(&base[i].to_le_bytes());
+            base_bytes[i * 4..(i + 1) * 4].copy_from_slice(&base[i].to_le_bytes());
         }
         let mut mod_bytes = [0u8; 256];
         for i in 0..64 {
-            mod_bytes[i*4..(i+1)*4].copy_from_slice(&modulus[i].to_le_bytes());
+            mod_bytes[i * 4..(i + 1) * 4].copy_from_slice(&modulus[i].to_le_bytes());
         }
         let b = BigUint::from_bytes_le(&base_bytes);
         let m = BigUint::from_bytes_le(&mod_bytes);
@@ -420,7 +412,7 @@ mod tests {
         let expected = b.modpow(&e, &m);
         let mut res_bytes = [0u8; 256];
         for i in 0..64 {
-            res_bytes[i*4..(i+1)*4].copy_from_slice(&res[i].to_le_bytes());
+            res_bytes[i * 4..(i + 1) * 4].copy_from_slice(&res[i].to_le_bytes());
         }
         let actual = BigUint::from_bytes_le(&res_bytes);
         assert_eq!(actual, expected, "RSA 2048-bit modexp mismatch");

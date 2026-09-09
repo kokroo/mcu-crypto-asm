@@ -17,7 +17,10 @@ fn test_generator_on_curve() {
         x: FieldElement(SECP256K1_GX),
         y: FieldElement(SECP256K1_GY),
     };
-    assert!(g_affine.is_on_curve(), "Generator G must satisfy y^2 = x^3 + 7 mod p");
+    assert!(
+        g_affine.is_on_curve(),
+        "Generator G must satisfy y^2 = x^3 + 7 mod p"
+    );
 }
 
 #[test]
@@ -64,8 +67,16 @@ fn test_rfc6979_vector() {
     let expected_x = hex_to_32("653CA8F6019AEF38AEB8BA892D9CF8FD5A152625536D33EF4D15406CF0FEF096");
     let expected_y = hex_to_32("E6D51321CC291F3F39AD539F051DF140322C25A52F992823D658519B9A6A96AE");
 
-    assert_eq!(pubkey.0.x.to_bytes_be(), expected_x, "RFC 6979 pubkey x mismatch");
-    assert_eq!(pubkey.0.y.to_bytes_be(), expected_y, "RFC 6979 pubkey y mismatch");
+    assert_eq!(
+        pubkey.0.x.to_bytes_be(),
+        expected_x,
+        "RFC 6979 pubkey x mismatch"
+    );
+    assert_eq!(
+        pubkey.0.y.to_bytes_be(),
+        expected_y,
+        "RFC 6979 pubkey y mismatch"
+    );
 }
 
 #[test]

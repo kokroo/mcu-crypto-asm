@@ -66,11 +66,7 @@ impl Poly1305 {
 
         #[cfg(cortex_m_thumb2)]
         unsafe {
-            asm::poly1305_mul_reduce_umaal(
-                self.h.as_mut_ptr(),
-                self.r.as_ptr(),
-                self.s.as_ptr(),
-            );
+            asm::poly1305_mul_reduce_umaal(self.h.as_mut_ptr(), self.r.as_ptr(), self.s.as_ptr());
         }
 
         #[cfg(not(cortex_m_thumb2))]

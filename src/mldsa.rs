@@ -205,7 +205,11 @@ impl Polynomial {
         let mut r = Self::ZERO;
         #[cfg(all(nistp_asm_cm4, not(feature = "force-portable")))]
         unsafe {
-            pqcrystals_dilithium_poly_add(r.coeffs.as_mut_ptr(), self.coeffs.as_ptr(), other.coeffs.as_ptr());
+            pqcrystals_dilithium_poly_add(
+                r.coeffs.as_mut_ptr(),
+                self.coeffs.as_ptr(),
+                other.coeffs.as_ptr(),
+            );
         }
 
         #[cfg(any(not(nistp_asm_cm4), feature = "force-portable"))]
@@ -222,7 +226,11 @@ impl Polynomial {
         let mut r = Self::ZERO;
         #[cfg(all(nistp_asm_cm4, not(feature = "force-portable")))]
         unsafe {
-            pqcrystals_dilithium_poly_sub(r.coeffs.as_mut_ptr(), self.coeffs.as_ptr(), other.coeffs.as_ptr());
+            pqcrystals_dilithium_poly_sub(
+                r.coeffs.as_mut_ptr(),
+                self.coeffs.as_ptr(),
+                other.coeffs.as_ptr(),
+            );
         }
 
         #[cfg(any(not(nistp_asm_cm4), feature = "force-portable"))]
@@ -311,7 +319,11 @@ mod tests {
         let prod = a.mul_ring(&b);
         for i in 0..MLDSA_N {
             let got = (prod.coeffs[i] % MLDSA_Q + MLDSA_Q) % MLDSA_Q;
-            assert_eq!(got, expected[i], "ML-DSA ring multiplication mismatch at index {}", i);
+            assert_eq!(
+                got, expected[i],
+                "ML-DSA ring multiplication mismatch at index {}",
+                i
+            );
         }
     }
 }

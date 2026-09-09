@@ -100,7 +100,13 @@ impl Fe51 {
     pub fn sub(&self, rhs: &Self) -> Self {
         // Add 2 * P to prevent underflow before subtraction: 2*P = (2*19, 0, 0, 0, 2*(1<<51))
         let mut out = [0u64; 5];
-        let p_bias = [0x7ffffffffffed * 2, 0x7ffffffffffff * 2, 0x7ffffffffffff * 2, 0x7ffffffffffff * 2, 0x7ffffffffffff * 2];
+        let p_bias = [
+            0x7ffffffffffed * 2,
+            0x7ffffffffffff * 2,
+            0x7ffffffffffff * 2,
+            0x7ffffffffffff * 2,
+            0x7ffffffffffff * 2,
+        ];
         for i in 0..5 {
             out[i] = self.0[i] + p_bias[i] - rhs.0[i];
         }
