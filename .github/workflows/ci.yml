@@ -77,6 +77,6 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y qemu-system-arm
       - run: rustup target add thumbv7em-none-eabihf
       - name: install cargo-qtest
-        run: cargo install cargo-qemu-test
+        run: cargo install cargo-qemu-test@=0.2.0
       - name: run suites under QEMU (one fresh boot per test)
         run: cargo qtest --target thumbv7em-none-eabihf --release --features embassy-driver --test embassy_suites --verbose
