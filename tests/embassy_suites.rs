@@ -22,6 +22,9 @@ mod embassy_suites_tests {
     use cortex_m_rt as _;
 
     #[cfg(target_os = "none")]
+    use defmt_semihosting as _;
+
+    #[cfg(target_os = "none")]
     use embassy_crypto_test::Outcome;
 
     /// Shared verdict logic, allocation-free so it works on both sides: a suite
