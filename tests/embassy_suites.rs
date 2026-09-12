@@ -22,6 +22,9 @@ mod embassy_suites_tests {
     use cortex_m_rt as _;
 
     #[cfg(target_os = "none")]
+    use cortex_m as _;
+
+    #[cfg(target_os = "none")]
     use defmt_semihosting as _;
 
     #[cfg(target_os = "none")]
