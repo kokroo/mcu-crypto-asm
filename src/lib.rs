@@ -187,6 +187,9 @@ pub mod p256 {
     pub fn mul_base(k: &[u32; N]) -> PointP256 {
         #[cfg(nistp_asm_cm4)]
         {
+            if k.iter().all(|&w| w == 0) {
+                return PointP256::identity(&FIELD);
+            }
             let mut x_mont = [0u32; N];
             let mut y_mont = [0u32; N];
             crate::backend::cortex_m4::p256::scalarmult_fixed_base(&mut x_mont, &mut y_mont, k);

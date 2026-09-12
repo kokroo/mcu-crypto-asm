@@ -235,7 +235,9 @@ setzero:
  vmov r1,r2,s13,s14
  vmov r3,s15
  adds r0,lr,r12
+ adcs r1,r1,#0
  mov lr,#0
+ adcs lr,lr,#0
  adds r8,r8,r5
  adcs r9,r9,r6
  adcs r10,r10,r4
@@ -243,7 +245,8 @@ setzero:
  adcs r0,r0,r4
  adcs r1,r1,r5
  adcs r2,r2,lr
- adcs r3,r3,lr
+ adcs r3,r3,#0
+ mov lr,#0
  adds r10,r10,r7
  adcs r11,r11,lr
  adcs r0,r0,r6
