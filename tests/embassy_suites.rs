@@ -109,16 +109,6 @@ mod embassy_suites_tests {
         }));
         libtest_mimic::run(&libtest_mimic::Arguments::from_args(), ts).exit();
     }
-
-    /// Override the default handler for all unhandled interrupts/exceptions
-    #[cfg(target_os = "none")]
-    #[no_mangle]
-    pub unsafe extern "C" fn DefaultHandler(_irqn: i16) {
-        // You can halt, reset, or handle differently
-        loop {
-            cortex_m::asm::bkpt(); // Breakpoint for debugger
-        }
-    }
 }
 
 /// Stub so `cargo test` works with the `embassy-driver` feature disabled.
