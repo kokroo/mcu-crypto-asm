@@ -21,10 +21,12 @@ mod embassy_suites_tests {
     #[cfg(target_os = "none")]
     use cortex_m_rt as _;
 
+    #[cfg(target_os = "none")]
     use embassy_crypto_test::Outcome;
 
     /// Shared verdict logic, allocation-free so it works on both sides: a suite
     /// must run to completion and cover at least one case.
+    #[cfg(target_os = "none")]
     fn assert_suite(outcome: Outcome) {
         let stats = outcome.unwrap();
         assert!(stats.passed > 0);
@@ -99,7 +101,7 @@ mod embassy_suites_tests {
     }
 
     #[cfg(not(target_os = "none"))]
-    fn main() {
+    pub fn main() {
         let mut ts = trials();
         ts.push(libtest_mimic::Trial::test("driver_link_root", || {
             driver_link_root();
@@ -123,4 +125,7 @@ mod embassy_suites_tests {
 /// The real `main` (libtest-mimic) above is cfg'd on the feature; this one
 /// only exists when the file's inner cfg has emptied the crate.
 #[cfg(not(target_os = "none"))]
-fn main() {}
+fn main() {
+    #[cfg(feature = "embassy-driver")]
+    embassy_suites_tests::main();
+}
