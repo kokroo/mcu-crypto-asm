@@ -36,6 +36,19 @@ fn main() {
     println!("cargo:rustc-check-cfg=cfg(nistp_asm_xtensa)");
     println!("cargo:rustc-check-cfg=cfg(cortex_m_thumb2)");
 
+    if std::env::var("TARGET")
+        .map(|t| t.starts_with("thumb"))
+        .unwrap_or(false)
+    {
+        // Cargo doesn't forward cortex-m-rt's build-script link args to our
+        // harness=false test target, and cargo-qtest re-adds only -Tlink.x /
+        // -L / -Tembedded-test.x — not cortex-m-rt's precompiled vector-table
+        // object. Link it explicitly.
+        if let Ok(out_dir) = std::env::var("DEP_CORTEX_M_RT_OUT_DIR") {
+            println!("cargo:rustc-link-arg={out_dir}/cortex-m-rt.o");
+        }
+    }
+
     if std::env::var("CARGO_FEATURE_FORCE_PORTABLE").is_ok() {
         return;
     }

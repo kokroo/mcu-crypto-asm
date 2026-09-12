@@ -10,14 +10,36 @@ categories = ["cryptography", "no-std", "embedded"]
 keywords = ["crypto", "embedded", "no-std", "cortex-m", "assembly"]
 
 [dependencies]
-embassy-crypto = { git = "https://github.com/embassy-rs/embassy", rev = "5c42b0f", optional = true }
+embassy-crypto = { git = "https://github.com/embassy-rs/embassy", rev = "69208416f8", optional = true }
 
 [dev-dependencies]
-embassy-crypto-test = { git = "https://github.com/embassy-rs/embassy", rev = "5c42b0f" }
+embassy-crypto-test = { git = "https://github.com/embassy-rs/embassy", rev = "69208416f8" }
+
+# Host-only dev-dependencies. These transitively require std (getrandom via
+# proptest's rand, std itself in libtest-mimic, hex's default "std" feature)
+# and must not be compiled for the bare-metal `cargo qtest` targets.
+[target.'cfg(not(target_os = "none"))'.dev-dependencies]
 num-bigint = "0.4"
 num-traits = "0.2"
 hex = "0.4"
 proptest = "1"
+# Host side of the dual-mode `embassy_suites` test target (harness = false).
+libtest-mimic = "0.8"
+
+# Bare-metal side, only compiled for `cargo qtest` cross targets
+# (embedded-test 0.7.x protocol, supported by cargo-qemu-test).
+[target.'cfg(target_os = "none")'.dev-dependencies]
+embedded-test = "0.7"
+cortex-m-rt = "0.7"
+# Pulls cortex-m-rt into the final link (fixes `symbol not found: DefaultHandler_`)
+# and provides the critical-section implementation embedded-test relies on.
+cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
+
+# Dual-mode (host libtest-mimic / embedded-test under QEMU); driven by
+# `cargo qtest --target thumbv7em-none-eabihf --features embassy-driver`.
+[[test]]
+name = "embassy_suites"
+harness = false
 
 [features]
 default = []

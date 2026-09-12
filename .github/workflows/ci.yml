@@ -68,3 +68,15 @@ jobs:
           qemu-system-arm -machine mps2-an386 -cpu cortex-m4 -icount shift=0 \
             -nographic -semihosting-config enable=on,target=native \
             -kernel target/thumbv7em-none-eabihf/release/ct
+
+  embassy:
+    name: embassy suites on QEMU (thumbv7em, cargo-qtest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y qemu-system-arm
+      - run: rustup target add thumbv7em-none-eabihf
+      - name: install cargo-qtest
+        run: cargo install cargo-qemu-test
+      - name: run suites under QEMU (one fresh boot per test)
+        run: cargo qtest --target thumbv7em-none-eabihf --release --features embassy-driver --test embassy_suites --verbose

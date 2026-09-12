@@ -368,13 +368,13 @@ impl drv::P256Ecdsa for McuCryptoAsmDriver {
             return Err(drv::Error::InvalidKey);
         }
 
-        // The nonce is drawn from RngImpl by rejection sampling into [1, n).
+        // The nonce is drawn from the registered Rng driver by rejection sampling into [1, n).
         let mut nonce = [0u8; 32];
         let mut r = [0u8; 32];
         let mut s = [0u8; 32];
         let mut result: Result<(), crate::ecdsa::Error> = Err(crate::ecdsa::Error::BadScalar);
         for _ in 0..8 {
-            drv::RngImpl::fill_bytes(&mut nonce)?;
+            embassy_crypto::rng_fill_bytes(&mut nonce);
             result = crate::p256::ecdsa::sign(&k.0, digest, &nonce, &mut r, &mut s);
             if result.is_ok() {
                 break;
@@ -648,13 +648,13 @@ impl drv::P384Ecdsa for McuCryptoAsmDriver {
             return Err(drv::Error::InvalidKey);
         }
 
-        // The nonce is drawn from RngImpl by rejection sampling into [1, n).
+        // The nonce is drawn from the registered Rng driver by rejection sampling into [1, n).
         let mut nonce = [0u8; 48];
         let mut r = [0u8; 48];
         let mut s = [0u8; 48];
         let mut result: Result<(), crate::ecdsa::Error> = Err(crate::ecdsa::Error::BadScalar);
         for _ in 0..8 {
-            drv::RngImpl::fill_bytes(&mut nonce)?;
+            embassy_crypto::rng_fill_bytes(&mut nonce);
             result = crate::p384::ecdsa::sign(&k.0, digest, &nonce, &mut r, &mut s);
             if result.is_ok() {
                 break;
@@ -1323,7 +1323,7 @@ fn ccm_cbc_mac<E: AesEncrypt>(
         if aad.len() < 0xFF00 {
             hdr[0..2].copy_from_slice(&(aad.len() as u16).to_be_bytes());
             off = 2;
-        } else if aad.len() < (1usize << 32) {
+        } else if aad.len() as u64 <= u32::MAX as u64 {
             hdr[0] = 0xFF;
             hdr[1] = 0xFE;
             hdr[2..6].copy_from_slice(&(aad.len() as u32).to_be_bytes());
