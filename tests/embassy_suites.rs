@@ -16,11 +16,10 @@
 
 #[cfg(feature = "embassy-driver")]
 mod embassy_suites_tests {
-    // Force cortex-m-rt onto the link line: rustc drops unused dev-dep rlibs,
-    // and link.x needs its DefaultHandler_ trampoline.
+    #[cfg(target_os = "none")]
+    use cortex_m as _;
     #[cfg(target_os = "none")]
     use cortex_m_rt as _;
-
     #[cfg(target_os = "none")]
     use embassy_crypto_test::Outcome;
 
@@ -55,13 +54,23 @@ mod embassy_suites_tests {
             #[cfg(target_os = "none")]
             #[embedded_test::tests]
             mod embedded {
+                use core::fmt::Write;
+                use cortex_m_semihosting::hio;
+
                 #[init]
                 fn init() {}
 
                 $(#[test]
                 $(#[$m])*
                 fn $name() {
-                    super::assert_suite(embassy_crypto_test::$name());
+                    let mut stdout = hio::hstdout().map_err(|_| core::fmt::Error).unwrap();
+                    let outcome = embassy_crypto_test::$name();
+
+                    if let Err(e) = &outcome {
+                        write!(stdout, "test failed: {:?}", e).unwrap();
+                    }
+
+                    super::assert_suite(outcome);
                 })*
             }
         };
