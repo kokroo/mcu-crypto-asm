@@ -30,6 +30,10 @@ mod embassy_suites_tests {
     #[cfg(target_os = "none")]
     use embassy_crypto_test::Outcome;
 
+    #[cfg(target_os = "none")]
+    #[export_name = "_defmt_timestamp"]
+    fn defmt_default_timestamp(_f: defmt::Formatter<'_>) {}
+
     /// Shared verdict logic, allocation-free so it works on both sides: a suite
     /// must run to completion and cover at least one case.
     #[cfg(target_os = "none")]
