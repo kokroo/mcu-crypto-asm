@@ -61,6 +61,8 @@ mod embassy_suites_tests {
                 $(#[test]
                 $(#[$m])*
                 fn $name() {
+                    defmt::info!("hello world");
+
                     super::assert_suite(embassy_crypto_test::$name());
                 })*
             }

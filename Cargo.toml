@@ -30,6 +30,8 @@ libtest-mimic = "0.8"
 # (embedded-test 0.7.x protocol, supported by cargo-qemu-test).
 [target.'cfg(target_os = "none")'.dev-dependencies]
 embedded-test = "0.7"
+defmt = "1.1.1"
+defmt-semihosting = "0.3.0"
 cortex-m-rt = "0.7"
 # Pulls cortex-m-rt into the final link (fixes `symbol not found: DefaultHandler_`)
 # and provides the critical-section implementation embedded-test relies on.
