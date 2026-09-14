@@ -14,6 +14,7 @@ embassy-crypto = { git = "https://github.com/embassy-rs/embassy", rev = "6920841
 
 [dev-dependencies]
 embassy-crypto-test = { git = "https://github.com/embassy-rs/embassy", rev = "69208416f8" }
+qemu-test = "0.1.0"
 
 # Host-only dev-dependencies. These transitively require std (getrandom via
 # proptest's rand, std itself in libtest-mimic, hex's default "std" feature)
@@ -23,13 +24,10 @@ num-bigint = "0.4"
 num-traits = "0.2"
 hex = "0.4"
 proptest = "1"
-# Host side of the dual-mode `embassy_suites` test target (harness = false).
-libtest-mimic = "0.8"
 
 # Bare-metal side, only compiled for `cargo qtest` cross targets
 # (embedded-test 0.7.x protocol, supported by cargo-qemu-test).
 [target.'cfg(target_os = "none")'.dev-dependencies]
-embedded-test = "0.7"
 cortex-m-rt = "0.7"
 cortex-m-semihosting = "0.6"
 # Pulls cortex-m-rt into the final link (fixes `symbol not found: DefaultHandler_`)
