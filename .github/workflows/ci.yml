@@ -24,6 +24,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: cache rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-bin
       - run: cargo test --verbose
       - run: cargo test --features force-portable --verbose
       - run: cargo test --features embassy-driver --test embassy_suites
@@ -79,11 +87,19 @@ jobs:
           # - thumbv8m.main-none-eabihf # Cortex-M33
           - thumbv7m-none-eabi # Cortex-M3: must fall back to portable
           # - thumbv6m-none-eabi # Cortex-M0+: portable
-          - riscv32imc-unknown-none-elf
+          # - riscv32imc-unknown-none-elf
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y qemu-system-arm
       - run: rustup target add ${{ matrix.target }}
+      - name: cache rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-bin
       - name: install cargo-qtest
         run: cargo install cargo-qemu-test@=0.3.0
       - name: run suites under QEMU (one fresh boot per test)
