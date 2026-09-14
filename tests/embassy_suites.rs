@@ -18,24 +18,15 @@
 use cortex_m as _;
 #[cfg(target_os = "none")]
 use cortex_m_rt as _;
-#[cfg(feature = "embassy-driver")]
-use embassy_crypto_test::Outcome;
 #[allow(unused_imports)]
 use mcu_crypto_asm as _;
-
-#[cfg(feature = "embassy-driver")]
-fn assert_suite(outcome: Outcome) {
-    assert!(outcome.unwrap().passed > 0);
-}
 
 macro_rules! suites {
     ($($(#[$m:meta])* $name:ident),* $(,)?) => {
         #[qemu_test::tests]
         mod embedded {
             #[cfg(target_os = "none")]
-            use core::fmt::Write;
-            #[cfg(target_os = "none")]
-            use cortex_m_semihosting::hio;
+            use semihosting::println;
 
             #[init]
             fn init() {}
@@ -44,18 +35,14 @@ macro_rules! suites {
             $(#[$m])*
             #[cfg(feature = "embassy-driver")]
             fn $name() {
-                #[cfg(target_os = "none")]
-                let mut stdout = hio::hstdout().map_err(|_| core::fmt::Error).unwrap();
-                let outcome = embassy_crypto_test::$name();
+                println!("hello world");
 
+                let outcome = embassy_crypto_test::$name();
                 if let Err(e) = &outcome {
-                    #[cfg(target_os = "none")]
-                    write!(stdout, "test failed: {:?}", e).unwrap();
-                    #[cfg(not(target_os = "none"))]
                     println!("test failed: {:?}", e);
                 }
 
-                super::assert_suite(outcome);
+                assert!(outcome.unwrap().passed > 0);
             })*
         }
     };

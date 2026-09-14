@@ -29,7 +29,7 @@ proptest = "1"
 # (embedded-test 0.7.x protocol, supported by cargo-qemu-test).
 [target.'cfg(target_os = "none")'.dev-dependencies]
 cortex-m-rt = "0.7"
-cortex-m-semihosting = "0.6"
+semihosting = { version = "0.1.25", features = ["stdio"] }
 # Pulls cortex-m-rt into the final link (fixes `symbol not found: DefaultHandler_`)
 # and provides the critical-section implementation embedded-test relies on.
 cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
