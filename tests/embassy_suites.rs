@@ -14,14 +14,14 @@
 #![cfg_attr(target_os = "none", no_std, no_main)]
 #![allow(unexpected_cfgs)]
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_os = "none", target_arch = "arm"))]
 use cortex_m as _;
-#[cfg(target_os = "none")]
+#[cfg(all(target_os = "none", target_arch = "arm"))]
 use cortex_m_rt as _;
 #[allow(unused_imports)]
 use mcu_crypto_asm as _;
 
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_os = "none", target_arch = "riscv32"))]
 core::arch::global_asm!(
     r#"
     .section .text._start, "ax", @progbits
