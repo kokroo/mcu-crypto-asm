@@ -79,7 +79,7 @@ jobs:
           # - thumbv8m.main-none-eabihf # Cortex-M33
           - thumbv7m-none-eabi # Cortex-M3: must fall back to portable
           # - thumbv6m-none-eabi # Cortex-M0+: portable
-          # - riscv32imc-unknown-none-elf
+          - riscv32imc-unknown-none-elf
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y qemu-system-arm

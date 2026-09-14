@@ -21,6 +21,22 @@ use cortex_m_rt as _;
 #[allow(unused_imports)]
 use mcu_crypto_asm as _;
 
+#[cfg(target_arch = "riscv32")]
+core::arch::global_asm!(
+    r#"
+    .section .text._start, "ax", @progbits
+    .globl _start
+    .align 2
+_start:
+    .option push
+    .option norelax
+    la sp, _stack_top
+    .option pop
+    call main
+1:  j 1b
+"#
+);
+
 macro_rules! suites {
     ($($(#[$m:meta])* $name:ident),* $(,)?) => {
         #[qemu_test::tests]
