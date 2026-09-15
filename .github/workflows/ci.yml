@@ -103,6 +103,6 @@ jobs:
           key: ${{ runner.os }}-cargo-bin
       - name: install cargo-qtest
         # if: steps.cargo-cache.outputs.cache-hit != 'true'
-        run: cargo install cargo-qemu-test@=0.3.2
+        run: cargo install cargo-qemu-test@=0.3.2 --force
       - name: run suites under QEMU (one fresh boot per test)
         run: cargo qtest --target ${{ matrix.target }} --release --features embassy-all --test embassy_suites --verbose
