@@ -101,6 +101,6 @@ jobs:
             ~/.cargo/git
           key: ${{ runner.os }}-cargo-bin
       - name: install cargo-qtest
-        run: cargo install cargo-qemu-test@=0.3.0
+        run: cargo install cargo-qemu-test@=0.3.1
       - name: run suites under QEMU (one fresh boot per test)
         run: cargo qtest --target ${{ matrix.target }} --release --features embassy-driver --test embassy_suites --verbose
