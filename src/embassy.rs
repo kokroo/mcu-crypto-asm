@@ -1573,7 +1573,9 @@ impl drv::Ed25519 for McuCryptoAsmDriver {
     fn public_key(k: &drv::Ed25519SecretKey) -> Result<drv::Ed25519PublicKey, drv::Error> {
         use crate::curve25519::ed25519::{Scalar, ED25519_BASEPOINT_POINT};
 
-        let mut h = crate::sha512::sha512(&k.0);
+        let mut h = embassy_crypto::Sha512::new();
+        h.update(&k.0[..]);
+        let mut h = h.finalize();
         let mut a_bytes = [0u8; 32];
         a_bytes.copy_from_slice(&h[..32]);
         ed25519_prune(&mut a_bytes);
@@ -1588,7 +1590,9 @@ impl drv::Ed25519 for McuCryptoAsmDriver {
     fn sign(k: &drv::Ed25519SecretKey, msg: &[u8]) -> Result<drv::Ed25519Signature, drv::Error> {
         use crate::curve25519::ed25519::{Scalar, ED25519_BASEPOINT_POINT};
 
-        let mut h = crate::sha512::sha512(&k.0);
+        let mut h = embassy_crypto::Sha512::new();
+        h.update(&k.0[..]);
+        let mut h = h.finalize();
         let mut a_bytes = [0u8; 32];
         a_bytes.copy_from_slice(&h[..32]);
         ed25519_prune(&mut a_bytes);
@@ -1600,7 +1604,7 @@ impl drv::Ed25519 for McuCryptoAsmDriver {
 
         // r = H(prefix || msg) mod L (RFC 8032 section 5.1.6). Deterministic:
         // no random source is used.
-        let mut hr = crate::sha512::Sha512::new();
+        let mut hr = embassy_crypto::Sha512::new();
         hr.update(&prefix);
         hr.update(msg);
         let r_hash = hr.finalize();
@@ -1609,7 +1613,7 @@ impl drv::Ed25519 for McuCryptoAsmDriver {
         let r_enc = (r * ED25519_BASEPOINT_POINT).compress().0;
 
         // k = H(R || A || msg) mod L.
-        let mut hk = crate::sha512::Sha512::new();
+        let mut hk = embassy_crypto::Sha512::new();
         hk.update(&r_enc);
         hk.update(&apk);
         hk.update(msg);
@@ -1655,7 +1659,7 @@ impl drv::Ed25519 for McuCryptoAsmDriver {
         }
         let s = Scalar::from_canonical_bytes(s_bytes).ok_or(drv::Error::InvalidSignature)?;
 
-        let mut hk = crate::sha512::Sha512::new();
+        let mut hk = embassy_crypto::Sha512::new();
         hk.update(&r_bytes);
         hk.update(&a.0);
         hk.update(msg);
