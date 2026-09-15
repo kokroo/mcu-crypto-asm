@@ -34,7 +34,7 @@ jobs:
           key: ${{ runner.os }}-cargo-bin-host
       - run: cargo test --verbose
       - run: cargo test --features force-portable --verbose
-      - run: cargo test --features embassy-driver --test embassy_suites
+      - run: cargo test --features embassy-all --test embassy_suites
   cross:
     name: cross-compile (assembly backends must build)
     runs-on: ubuntu-latest
@@ -103,4 +103,4 @@ jobs:
       - name: install cargo-qtest
         run: cargo install cargo-qemu-test@=0.3.1
       - name: run suites under QEMU (one fresh boot per test)
-        run: cargo qtest --target ${{ matrix.target }} --release --features embassy-driver --test embassy_suites --verbose
+        run: cargo qtest --target ${{ matrix.target }} --release --features embassy-all --test embassy_suites --verbose
