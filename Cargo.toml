@@ -25,13 +25,13 @@ num-traits = "0.2"
 hex = "0.4"
 proptest = "1"
 
-# Bare-metal side, only compiled for `cargo qtest` cross targets
-# (embedded-test 0.7.x protocol, supported by cargo-qemu-test).
+# Bare-metal side, compiled for `cargo qtest` cross targets
 [target.'cfg(target_os = "none")'.dev-dependencies]
-cortex-m-rt = "0.7"
 semihosting = { version = "0.1.25", features = ["stdio"] }
-# Pulls cortex-m-rt into the final link (fixes `symbol not found: DefaultHandler_`)
-# and provides the critical-section implementation embedded-test relies on.
+
+# Bare-metal arm side, compiled for `cargo qtest` cross targets
+[target.'cfg(all(target_os = "none",target_arch = "arm"))'.dev-dependencies]
+cortex-m-rt = "0.7"
 cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
 
 # Dual-mode (host libtest-mimic / embedded-test under QEMU); driven by
@@ -45,7 +45,7 @@ default = []
 # Force the portable backend even on an arch that has assembly. Used by the
 # differential tests: they need BOTH backends live in one binary to compare.
 force-portable = []
-# Implement embassy-crypto-driver's P256Ops for this crate.
+# Implement embassy-crypto-driver for this crate.
 embassy-driver = ["dep:embassy-crypto"]
 
 [profile.release]

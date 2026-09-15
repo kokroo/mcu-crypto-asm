@@ -14,12 +14,28 @@
 #![cfg_attr(target_os = "none", no_std, no_main)]
 #![allow(unexpected_cfgs)]
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_os = "none", target_arch = "arm"))]
 use cortex_m as _;
-#[cfg(target_os = "none")]
+#[cfg(all(target_os = "none", target_arch = "arm"))]
 use cortex_m_rt as _;
 #[allow(unused_imports)]
 use mcu_crypto_asm as _;
+
+#[cfg(all(target_os = "none", target_arch = "riscv32"))]
+core::arch::global_asm!(
+    r#"
+    .section .text._start, "ax", @progbits
+    .globl _start
+    .align 2
+_start:
+    .option push
+    .option norelax
+    la sp, _stack_top
+    .option pop
+    call main
+1:  j 1b
+"#
+);
 
 macro_rules! suites {
     ($($(#[$m:meta])* $name:ident),* $(,)?) => {
