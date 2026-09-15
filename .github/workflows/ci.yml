@@ -84,7 +84,7 @@ jobs:
         target:
           - thumbv7em-none-eabihf # Cortex-M4 / M7
           # - thumbv7em-none-eabi
-          # - thumbv8m.main-none-eabihf # Cortex-M33
+          - thumbv8m.main-none-eabihf # Cortex-M33
           - thumbv7m-none-eabi # Cortex-M3: must fall back to portable
           # - thumbv6m-none-eabi # Cortex-M0+: portable
           - riscv32imc-unknown-none-elf
@@ -102,7 +102,7 @@ jobs:
             ~/.cargo/git
           key: ${{ runner.os }}-cargo-bin
       - name: install cargo-qtest
-        if: steps.cargo-cache.outputs.cache-hit != 'true'
-        run: cargo install cargo-qemu-test@=0.3.1
+        # if: steps.cargo-cache.outputs.cache-hit != 'true'
+        run: cargo install cargo-qemu-test@=0.3.2
       - name: run suites under QEMU (one fresh boot per test)
         run: cargo qtest --target ${{ matrix.target }} --release --features embassy-all --test embassy_suites --verbose
