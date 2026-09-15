@@ -352,6 +352,7 @@ impl drv::P256Ecdh for McuCryptoAsmDriver {
     }
 }
 
+#[cfg(feature = "embassy-crypto-p256-ecdh")]
 reg::p256_ecdh_impl!(McuCryptoAsmDriver);
 
 impl drv::P256Ecdsa for McuCryptoAsmDriver {
@@ -406,6 +407,7 @@ impl drv::P256Ecdsa for McuCryptoAsmDriver {
     }
 }
 
+#[cfg(feature = "embassy-crypto-p256-ecdsa")]
 reg::p256_ecdsa_impl!(McuCryptoAsmDriver);
 
 // ---------------------------------------------------------------------------
@@ -507,6 +509,7 @@ impl drv::P256Arith for McuCryptoAsmDriver {
     }
 }
 
+#[cfg(feature = "embassy-crypto-p256-arith")]
 reg::p256_arith_impl!(McuCryptoAsmDriver);
 
 // ---------------------------------------------------------------------------
@@ -608,6 +611,7 @@ impl drv::P384Arith for McuCryptoAsmDriver {
     }
 }
 
+#[cfg(feature = "embassy-crypto-p384-arith")]
 reg::p384_arith_impl!(McuCryptoAsmDriver);
 
 impl drv::P384Ecdh for McuCryptoAsmDriver {
@@ -634,6 +638,7 @@ impl drv::P384Ecdh for McuCryptoAsmDriver {
     }
 }
 
+#[cfg(feature = "embassy-crypto-p384-ecdh")]
 reg::p384_ecdh_impl!(McuCryptoAsmDriver);
 
 impl drv::P384Ecdsa for McuCryptoAsmDriver {
@@ -686,6 +691,7 @@ impl drv::P384Ecdsa for McuCryptoAsmDriver {
     }
 }
 
+#[cfg(feature = "embassy-crypto-p384-ecdsa")]
 reg::p384_ecdsa_impl!(McuCryptoAsmDriver);
 
 // ---------------------------------------------------------------------------
@@ -993,7 +999,9 @@ macro_rules! impl_gcm {
     };
 }
 
+#[cfg(feature = "embassy-crypto-aes128-gcm")]
 impl_gcm!(Aes128Gcm, aes128_gcm_impl, Aes128, Aes128GcmContext, 16);
+#[cfg(feature = "embassy-crypto-aes256-gcm")]
 impl_gcm!(Aes256Gcm, aes256_gcm_impl, Aes256, Aes256GcmContext, 32);
 
 // ---------------------------------------------------------------------------
@@ -1066,7 +1074,9 @@ macro_rules! impl_ctr {
     };
 }
 
+#[cfg(feature = "embassy-crypto-aes128-ctr")]
 impl_ctr!(Aes128Ctr, aes128_ctr_impl, Aes128, Aes128CtrContext, 16);
+#[cfg(feature = "embassy-crypto-aes256-ctr")]
 impl_ctr!(Aes256Ctr, aes256_ctr_impl, Aes256, Aes256CtrContext, 32);
 
 // ---------------------------------------------------------------------------
@@ -1214,8 +1224,9 @@ macro_rules! impl_cmac {
     };
 }
 
+#[cfg(feature = "embassy-crypto-aes128-cmac")]
 impl_cmac!(Aes128Cmac, aes128_cmac_impl, Aes128, Aes128CmacContext, 16);
-#[cfg(target_pointer_width = "64")]
+#[cfg(all(target_pointer_width = "64", feature = "embassy-crypto-aes256-cmac"))]
 impl_cmac!(Aes256Cmac, aes256_cmac_impl, Aes256, Aes256CmacContext, 32);
 
 // ---------------------------------------------------------------------------
@@ -1451,7 +1462,9 @@ macro_rules! impl_ccm {
     };
 }
 
+#[cfg(feature = "embassy-crypto-aes128-ccm")]
 impl_ccm!(Aes128Ccm, aes128_ccm_impl, Aes128, Aes128CcmContext, 16);
+#[cfg(feature = "embassy-crypto-aes256-ccm")]
 impl_ccm!(Aes256Ccm, aes256_ccm_impl, Aes256, Aes256CcmContext, 32);
 // ---------------------------------------------------------------------------
 // X25519 (RFC 7748)
@@ -1474,6 +1487,7 @@ impl drv::X25519 for McuCryptoAsmDriver {
     }
 }
 
+#[cfg(feature = "embassy-crypto-x25519")]
 reg::x25519_impl!(McuCryptoAsmDriver);
 
 // ---------------------------------------------------------------------------
@@ -1660,6 +1674,7 @@ impl drv::Ed25519 for McuCryptoAsmDriver {
     }
 }
 
+#[cfg(feature = "embassy-crypto-ed25519")]
 reg::ed25519_impl!(McuCryptoAsmDriver);
 
 // ---------------------------------------------------------------------------
@@ -1958,9 +1973,13 @@ macro_rules! impl_cbc {
     };
 }
 
+#[cfg(feature = "embassy-crypto-aes128-ecb")]
 impl_ecb!(Aes128Ecb, aes128_ecb_impl, Aes128EcbContext, 16, 4, 10, 176);
+#[cfg(feature = "embassy-crypto-aes256-ecb")]
 impl_ecb!(Aes256Ecb, aes256_ecb_impl, Aes256EcbContext, 32, 8, 14, 240);
+#[cfg(feature = "embassy-crypto-aes128-cbc")]
 impl_cbc!(Aes128Cbc, aes128_cbc_impl, Aes128CbcContext, 16, 4, 10, 176);
+#[cfg(feature = "embassy-crypto-aes256-cbc")]
 impl_cbc!(Aes256Cbc, aes256_cbc_impl, Aes256CbcContext, 32, 8, 14, 240);
 
 // ---------------------------------------------------------------------------
@@ -2079,9 +2098,13 @@ macro_rules! impl_sha512_family {
     };
 }
 
+#[cfg(feature = "embassy-crypto-sha512")]
 impl_sha512_family!(Sha512, sha512_impl, 64, crate::sha512::SHA512_IV);
+#[cfg(feature = "embassy-crypto-sha384")]
 impl_sha512_family!(Sha384, sha384_impl, 48, crate::sha512::SHA384_IV);
+#[cfg(feature = "embassy-crypto-sha512-224")]
 impl_sha512_family!(Sha512_224, sha512_224_impl, 28, SHA512_224_IV);
+#[cfg(feature = "embassy-crypto-sha512-256")]
 impl_sha512_family!(Sha512_256, sha512_256_impl, 32, SHA512_256_IV);
 
 /// HMAC over any member of the SHA-512 family (RFC 2104; 128-byte block).
@@ -2160,7 +2183,11 @@ macro_rules! impl_hmac_sha512_family {
     };
 }
 
+#[cfg(feature = "embassy-crypto-hmac-sha512")]
 impl_hmac_sha512_family!(HmacSha512, hmac_sha512_impl, 64, crate::sha512::SHA512_IV);
+#[cfg(feature = "embassy-crypto-hmac-sha384")]
 impl_hmac_sha512_family!(HmacSha384, hmac_sha384_impl, 48, crate::sha512::SHA384_IV);
+#[cfg(feature = "embassy-crypto-hmac-sha512-224")]
 impl_hmac_sha512_family!(HmacSha512_224, hmac_sha512_224_impl, 28, SHA512_224_IV);
+#[cfg(feature = "embassy-crypto-hmac-sha512-256")]
 impl_hmac_sha512_family!(HmacSha512_256, hmac_sha512_256_impl, 32, SHA512_256_IV);

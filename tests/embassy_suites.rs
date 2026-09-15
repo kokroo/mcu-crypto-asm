@@ -49,7 +49,7 @@ macro_rules! suites {
 
             $(#[test]
             $(#[$m])*
-            #[cfg(feature = "embassy-driver")]
+            #[cfg(feature = "embassy-all")]
             fn $name() {
                 println!("hello world");
 
