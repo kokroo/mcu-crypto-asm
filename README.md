@@ -2,7 +2,7 @@
 
 **Hand-written assembly cryptography for 32-bit microcontrollers** — constant-time, `no_std`, zero allocator, zero dependencies.
 
-Fast, audited assembly kernels for **P-256 and P-384** on **ARM Cortex-M4/M7/M33** and **Xtensa LX7** (ESP32-S2/S3), with a clean portable Rust fallback for any other 32-bit target. All benchmarks are verified on silicon.
+Fast assembly kernels for **P-256 and P-384** on **ARM Cortex-M4/M7/M33** and **Xtensa LX7** (ESP32-S2/S3), tested against Wycheproof with a clean portable Rust fallback for any other 32-bit target. All benchmarks are verified on silicon.
 
 ```toml
 [dependencies]
