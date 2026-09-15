@@ -35,7 +35,7 @@ cortex-m-rt = "0.7"
 cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
 
 # Dual-mode (host libtest-mimic / embedded-test under QEMU); driven by
-# `cargo qtest --target thumbv7em-none-eabihf --features embassy-driver`.
+# `cargo qtest --target thumbv7em-none-eabihf --features embassy-all`.
 [[test]]
 name = "embassy_suites"
 harness = false

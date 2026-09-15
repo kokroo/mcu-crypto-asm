@@ -18,7 +18,7 @@ fiat-crypto = { version = "0.3", default-features = false }
 
 [features]
 default = []
-embassy-driver = ["mcu-crypto-asm/embassy-driver"]
+embassy-driver = ["mcu-crypto-asm/embassy-all"]
 
 [profile.release]
 opt-level = 3

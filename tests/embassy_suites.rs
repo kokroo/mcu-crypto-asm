@@ -1,10 +1,10 @@
 //! embassy-crypto-test Wycheproof/generated suites against the MCU driver.
 //!
 //! Dual-mode test target (cargo-qemu-test's dual-demo pattern):
-//! - host: `cargo test --features embassy-driver --test embassy_suites` runs a
+//! - host: `cargo test --features embassy-all --test embassy_suites` runs a
 //!   libtest-mimic `main`, keeping libtest-style output;
 //! - bare metal: `cargo qtest --target thumbv7em-none-eabihf --features
-//!   embassy-driver --test embassy_suites` compiles the same cases as an
+//!   embassy-all --test embassy_suites` compiles the same cases as an
 //!   `embedded_test::tests` module and runs each one in a fresh QEMU boot
 //!   (MPS2-AN386 / Cortex-M4).
 //!
