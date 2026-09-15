@@ -34,7 +34,7 @@ jobs:
           key: ${{ runner.os }}-cargo-bin-host
       - run: cargo test --verbose
       - run: cargo test --features force-portable --verbose
-      - run: cargo test --features embassy-driver --test embassy_suites
+      - run: cargo test --features embassy-all --test embassy_suites
   cross:
     name: cross-compile (assembly backends must build)
     runs-on: ubuntu-latest
@@ -93,6 +93,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y qemu-system-arm qemu-system-riscv32
       - run: rustup target add ${{ matrix.target }}
       - name: cache rust
+        id: cargo-cache
         uses: actions/cache@v4
         with:
           path: |
@@ -101,6 +102,7 @@ jobs:
             ~/.cargo/git
           key: ${{ runner.os }}-cargo-bin
       - name: install cargo-qtest
+        if: steps.cargo-cache.outputs.cache-hit != 'true'
         run: cargo install cargo-qemu-test@=0.3.1
       - name: run suites under QEMU (one fresh boot per test)
-        run: cargo qtest --target ${{ matrix.target }} --release --features embassy-driver --test embassy_suites --verbose
+        run: cargo qtest --target ${{ matrix.target }} --release --features embassy-all --test embassy_suites --verbose
