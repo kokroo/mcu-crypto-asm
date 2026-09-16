@@ -20,6 +20,8 @@ use cortex_m as _;
 use cortex_m_rt as _;
 #[allow(unused_imports)]
 use mcu_crypto_asm as _;
+#[cfg(all(target_os = "none", target_arch = "xtensa"))]
+use xtensa_lx_rt as _;
 
 #[cfg(all(target_os = "none", target_arch = "riscv32"))]
 core::arch::global_asm!(

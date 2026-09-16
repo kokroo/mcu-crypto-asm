@@ -102,15 +102,8 @@ pub fn try_sqr_mont(a: &[u32], p: &[u32], n0inv: u32, out: &mut [u32]) -> bool {
             );
             true
         },
-        12 => unsafe {
-            nistp_sqr_mont_12(
-                out.as_mut_ptr(),
-                a.as_ptr(),
-                p.as_ptr(),
-                scratch.as_mut_ptr(),
-            );
-            true
-        },
+        // Dedicated 12-limb squaring falls back to nistp_mul_mont_12.
+        12 => false,
         _ => false,
     }
 }

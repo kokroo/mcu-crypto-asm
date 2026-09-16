@@ -26,13 +26,23 @@ hex = "0.4"
 proptest = "1"
 
 # Bare-metal side, compiled for `cargo qtest` cross targets
-[target.'cfg(target_os = "none")'.dev-dependencies]
+[target.'cfg(all(target_os = "none", not(target_arch = "xtensa")))'.dev-dependencies]
 semihosting = { version = "0.1.25", features = ["stdio"] }
 
 # Bare-metal arm side, compiled for `cargo qtest` cross targets
 [target.'cfg(all(target_os = "none",target_arch = "arm"))'.dev-dependencies]
 cortex-m-rt = "0.7"
 cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
+
+# Bare-metal xtensa side, compiled for `cargo qtest` cross targets
+[target.'cfg(all(target_os = "none", target_arch = "xtensa"))'.dev-dependencies]
+semihosting = { version = "0.1.25", features = ["stdio", "openocd-semihosting"] }
+xtensa-lx-rt = "0.23"
+
+[patch.crates-io]
+qemu-test = { git = "https://github.com/xoviat/cargo-qemu-test" }
+qemu-test-macros = { git = "https://github.com/xoviat/cargo-qemu-test" }
+
 
 # Dual-mode (host libtest-mimic / embedded-test under QEMU); driven by
 # `cargo qtest --target thumbv7em-none-eabihf --features embassy-all`.
