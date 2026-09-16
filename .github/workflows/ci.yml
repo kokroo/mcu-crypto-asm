@@ -47,6 +47,7 @@ jobs:
           - thumbv7m-none-eabi # Cortex-M3: must fall back to portable
           - thumbv6m-none-eabi # Cortex-M0+: portable
           - riscv32imc-unknown-none-elf
+          - riscv32imac-unknown-none-elf
     steps:
       - uses: actions/checkout@v4
       - run: rustup target add ${{ matrix.target }}
@@ -90,6 +91,7 @@ jobs:
           - riscv32imc-unknown-none-elf
           - xtensa-esp32-none-elf
           - xtensa-esp32s3-none-elf
+          - riscv32imac-unknown-none-elf
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y qemu-system-arm qemu-system-riscv32
@@ -123,3 +125,46 @@ jobs:
         run: cargo install --git https://github.com/xoviat/cargo-qemu-test --force
       - name: run suites under QEMU (one fresh boot per test)
         run: cargo qtest --target ${{ matrix.target }} --release --features embassy-all --test embassy_suites --verbose
+
+  xtensa-qemu:
+    name: xtensa suites on QEMU (ESP32 / ESP32-S3)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust for Xtensa
+        uses: esp-rs/xtensa-toolchain@v1.5
+        with:
+          default: true
+          buildtargets: esp32,esp32s3
+          ldproxy: false
+      - name: Install QEMU runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgcrypt20 libglib2.0-0 libpixman-1-0 libslirp0
+      - name: Cache QEMU Xtensa binary
+        id: cache-qemu
+        uses: actions/cache@v4
+        with:
+          path: /opt/qemu-xtensa
+          key: qemu-system-xtensa-v0.1.0-noble
+      - name: Download prebuilt QEMU Xtensa
+        if: steps.cache-qemu.outputs.cache-hit != 'true'
+        run: |
+          sudo mkdir -p /opt/qemu-xtensa
+          curl -sL https://github.com/kokroo/qemu/releases/download/v0.1.0-semihosting/qemu-system-xtensa-esp32.tar.gz | sudo tar -xz -C /opt/qemu-xtensa
+          sudo chmod +x /opt/qemu-xtensa/qemu-system-xtensa
+      - name: Add QEMU to PATH
+        run: echo "/opt/qemu-xtensa" >> "$GITHUB_PATH"
+      - name: Install cargo-qtest
+        run: cargo install --git https://github.com/xoviat/cargo-qemu-test --force
+      - name: Cross-compile check for ESP32 (LX6)
+        env:
+          CARGO_UNSTABLE_BUILD_STD: core
+          CARGO_UNSTABLE_BUILD_STD_FEATURES: compiler-builtins-mem
+        run: cargo build --release --target xtensa-esp32-none-elf
+      - name: Run embassy suites under QEMU on ESP32-S3 (LX7)
+        env:
+          CARGO_UNSTABLE_BUILD_STD: core
+          CARGO_UNSTABLE_BUILD_STD_FEATURES: compiler-builtins-mem
+        run: cargo qtest --target xtensa-esp32s3-none-elf --release --features embassy-all --test embassy_suites --verbose
+
