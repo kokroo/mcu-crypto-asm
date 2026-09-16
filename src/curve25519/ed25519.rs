@@ -508,6 +508,192 @@ pub const ED25519_BASEPOINT_POINT: EdwardsPoint = EdwardsPoint([
     0x64abe37d, 0x66ea4e8e, 0xd78b7665, 0x67875f0f,
 ]);
 
+// ---------------------------------------------------------------------------
+// High-level Ed25519 signatures (RFC 8032)
+// ---------------------------------------------------------------------------
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum SignatureError {
+    InvalidKey,
+    InvalidSignature,
+}
+
+#[inline]
+fn wipe(buf: &mut [u8]) {
+    for b in buf.iter_mut() {
+        *b = 0;
+    }
+    core::hint::black_box(&mut *buf);
+}
+
+/// Clamp the first half of the hashed Ed25519 seed (RFC 8032 section 5.1.5).
+pub fn ed25519_prune(h: &mut [u8; 32]) {
+    h[0] &= 248;
+    h[31] &= 63;
+    h[31] |= 64;
+}
+
+/// Little-endian bytes -> 4 x u64 limbs.
+fn le_limbs_256(b: &[u8; 32]) -> [u64; 4] {
+    let mut out = [0u64; 4];
+    for i in 0..4 {
+        out[i] = u64::from_le_bytes(b[i * 8..i * 8 + 8].try_into().unwrap());
+    }
+    out
+}
+
+/// `k * a + r` on 256-bit little-endian integers as a 64-byte little-endian
+/// value for reduction mod L by the caller. `k * a + r < L^2 + L < 2^512`, so
+/// the result always fits.
+pub fn mul_add_256le(k: &[u8; 32], a: &[u8; 32], r: &[u8; 32]) -> [u8; 64] {
+    let kl = le_limbs_256(k);
+    let al = le_limbs_256(a);
+
+    // 4x4 u64 schoolbook multiply -> 512-bit product.
+    let mut t = [0u64; 8];
+    for i in 0..4 {
+        let mut carry = 0u128;
+        for j in 0..4 {
+            let cur = t[i + j] as u128 + kl[i] as u128 * al[j] as u128 + carry;
+            t[i + j] = cur as u64;
+            carry = cur >> 64;
+        }
+        let mut idx = i + 4;
+        while carry != 0 {
+            let cur = t[idx] as u128 + carry;
+            t[idx] = cur as u64;
+            carry = cur >> 64;
+            idx += 1;
+        }
+    }
+
+    // Add r into the low half, propagating into the high half.
+    let rl = le_limbs_256(r);
+    let mut carry = 0u128;
+    for i in 0..4 {
+        let cur = t[i] as u128 + rl[i] as u128 + carry;
+        t[i] = cur as u64;
+        carry = cur >> 64;
+    }
+    let mut idx = 4;
+    while carry != 0 {
+        let cur = t[idx] as u128 + carry;
+        t[idx] = cur as u64;
+        carry = cur >> 64;
+        idx += 1;
+    }
+
+    let mut out = [0u8; 64];
+    for i in 0..8 {
+        out[i * 8..i * 8 + 8].copy_from_slice(&t[i].to_le_bytes());
+    }
+    out
+}
+
+/// True if `p` has order dividing 8 (three doublings reach the identity).
+pub fn ed25519_is_small_order(p: EdwardsPoint, identity: &EdwardsPoint) -> bool {
+    let mut t = p + p;
+    t = t + t;
+    t = t + t;
+    t.compress().0 == identity.compress().0
+}
+
+/// Computes the 32-byte Ed25519 public key corresponding to `secret_key`.
+pub fn public_key(secret_key: &[u8; 32]) -> [u8; 32] {
+    let mut h = crate::sha512::Sha512::new();
+    h.update(secret_key);
+    let mut h = h.finalize();
+    let mut a_bytes = [0u8; 32];
+    a_bytes.copy_from_slice(&h[..32]);
+    ed25519_prune(&mut a_bytes);
+    wipe(&mut h);
+    let a = Scalar::from_bytes_mod_order(a_bytes);
+
+    (a * ED25519_BASEPOINT_POINT).compress().0
+}
+
+/// Signs `msg` with `secret_key`, returning the 64-byte Ed25519 signature.
+pub fn sign(secret_key: &[u8; 32], msg: &[u8]) -> [u8; 64] {
+    let mut h = crate::sha512::Sha512::new();
+    h.update(secret_key);
+    let mut h = h.finalize();
+    let mut a_bytes = [0u8; 32];
+    a_bytes.copy_from_slice(&h[..32]);
+    ed25519_prune(&mut a_bytes);
+    let prefix: [u8; 32] = h[32..64].try_into().unwrap();
+    wipe(&mut h);
+
+    let a = Scalar::from_bytes_mod_order(a_bytes);
+    let apk = (a * ED25519_BASEPOINT_POINT).compress().0;
+
+    // r = H(prefix || msg) mod L (RFC 8032 section 5.1.6). Deterministic:
+    // no random source is used.
+    let mut hr = crate::sha512::Sha512::new();
+    hr.update(&prefix);
+    hr.update(msg);
+    let r_hash = hr.finalize();
+    let r = Scalar::from_bytes_mod_order_wide(&r_hash);
+
+    let r_enc = (r * ED25519_BASEPOINT_POINT).compress().0;
+
+    // k = H(R || A || msg) mod L.
+    let mut hk = crate::sha512::Sha512::new();
+    hk.update(&r_enc);
+    hk.update(&apk);
+    hk.update(msg);
+    let k_hash = hk.finalize();
+    let k = Scalar::from_bytes_mod_order_wide(&k_hash);
+
+    // S = (r + k * a) mod L, via a 512-bit wide reduction.
+    let s_wide = mul_add_256le(k.as_bytes(), &a_bytes, r.as_bytes());
+    let s = Scalar::from_bytes_mod_order_wide(&s_wide);
+
+    let mut sig = [0u8; 64];
+    sig[..32].copy_from_slice(&r_enc);
+    sig[32..].copy_from_slice(s.as_bytes());
+    sig
+}
+
+/// Verifies `sig` on `msg` under `public_key`.
+pub fn verify(public_key: &[u8; 32], msg: &[u8], sig: &[u8; 64]) -> Result<(), SignatureError> {
+    let a_pt = CompressedEdwardsY(*public_key)
+        .decompress()
+        .ok_or(SignatureError::InvalidKey)?;
+    let r_bytes: [u8; 32] = sig[..32].try_into().unwrap();
+    let s_bytes: [u8; 32] = sig[32..].try_into().unwrap();
+    let r_pt = CompressedEdwardsY(r_bytes)
+        .decompress()
+        .ok_or(SignatureError::InvalidSignature)?;
+
+    // Strict verification (RFC 8032 section 8.4 / Wycheproof): reject
+    // small-order public keys and R values before the equation check.
+    let identity = r_pt + (-r_pt);
+    if ed25519_is_small_order(a_pt, &identity) {
+        return Err(SignatureError::InvalidKey);
+    }
+    if ed25519_is_small_order(r_pt, &identity) {
+        return Err(SignatureError::InvalidSignature);
+    }
+    let s = Scalar::from_canonical_bytes(s_bytes).ok_or(SignatureError::InvalidSignature)?;
+
+    let mut hk = crate::sha512::Sha512::new();
+    hk.update(&r_bytes);
+    hk.update(public_key);
+    hk.update(msg);
+    let k_hash = hk.finalize();
+    let k = Scalar::from_bytes_mod_order_wide(&k_hash);
+
+    // [S]B == R + [k]A. Only public data; may be variable-time. Edwards
+    // points are compared by their canonical compressed encoding: the
+    // derived PartialEq compares raw projective coordinates, which differ
+    // for equal points in different (X, Y, Z, T) representations.
+    if (s * ED25519_BASEPOINT_POINT).compress().0 == (r_pt + k * a_pt).compress().0 {
+        Ok(())
+    } else {
+        Err(SignatureError::InvalidSignature)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -8,6 +8,8 @@
 pub const SHA512_BLOCK_SIZE: usize = 128;
 pub const SHA512_OUTPUT_SIZE: usize = 64;
 pub const SHA384_OUTPUT_SIZE: usize = 48;
+pub const SHA512_224_OUTPUT_SIZE: usize = 28;
+pub const SHA512_256_OUTPUT_SIZE: usize = 32;
 
 pub const SHA512_IV: [u64; 8] = [
     0x6a09e667f3bcc908,
@@ -29,6 +31,30 @@ pub const SHA384_IV: [u64; 8] = [
     0x8eb44a8768581511,
     0xdb0c2e0d64f98fa7,
     0x47b5481dbefa4fa4,
+];
+
+/// IV of SHA-512/224 (FIPS 180-4 section 5.3.6.2).
+pub const SHA512_224_IV: [u64; 8] = [
+    0x8C3D37C819544DA2,
+    0x73E1996689DCD4D6,
+    0x1DFAB7AE32FF9C82,
+    0x679DD514582F9FCF,
+    0x0F6D2B697BD44DA8,
+    0x77E36F7304C48942,
+    0x3F9D85A86A1D36C8,
+    0x1112E6AD91D692A1,
+];
+
+/// IV of SHA-512/256 (FIPS 180-4 section 5.3.6.3).
+pub const SHA512_256_IV: [u64; 8] = [
+    0x22312194FC2BF72C,
+    0x9F555FA3C84C64C2,
+    0x2393B86B6F53B151,
+    0x963877195940EABD,
+    0x96283EE2A88EFFE3,
+    0xBE5E1E2553863992,
+    0x2B0199FC2C85B8AA,
+    0x0EB72DDC81C52CA2,
 ];
 
 #[cfg(all(cortex_m_thumb2, not(feature = "force-portable")))]
@@ -222,6 +248,150 @@ pub fn sha384(data: &[u8]) -> [u8; SHA384_OUTPUT_SIZE] {
     let mut hasher = Sha384::new();
     hasher.update(data);
     hasher.finalize()
+}
+
+/// One-shot SHA-512/224 computation.
+pub fn sha512_224(data: &[u8]) -> [u8; SHA512_224_OUTPUT_SIZE] {
+    let mut core = Sha512Core::new(SHA512_224_IV);
+    core.update(data);
+    let digest = core.finalize();
+    let mut out = [0u8; SHA512_224_OUTPUT_SIZE];
+    out.copy_from_slice(&digest[..SHA512_224_OUTPUT_SIZE]);
+    out
+}
+
+/// One-shot SHA-512/256 computation.
+pub fn sha512_256(data: &[u8]) -> [u8; SHA512_256_OUTPUT_SIZE] {
+    let mut core = Sha512Core::new(SHA512_256_IV);
+    core.update(data);
+    let digest = core.finalize();
+    let mut out = [0u8; SHA512_256_OUTPUT_SIZE];
+    out.copy_from_slice(&digest[..SHA512_256_OUTPUT_SIZE]);
+    out
+}
+
+/// Best-effort wipe of temporary buffers.
+#[inline]
+fn wipe(buf: &mut [u8]) {
+    for b in buf.iter_mut() {
+        *b = 0;
+    }
+    core::hint::black_box(&mut *buf);
+}
+
+/// Streaming SHA-512 core with a configurable IV.
+#[derive(Clone, Copy, Debug)]
+pub struct Sha512Core {
+    state: [u64; 8],
+    buffer: [u8; 128],
+    buf_len: usize,
+    total_len: u128,
+}
+
+impl Sha512Core {
+    pub const BLOCK: usize = 128;
+
+    pub fn new(iv: [u64; 8]) -> Self {
+        Self {
+            state: iv,
+            buffer: [0u8; 128],
+            buf_len: 0,
+            total_len: 0,
+        }
+    }
+
+    pub fn update(&mut self, mut data: &[u8]) {
+        self.total_len = self.total_len.wrapping_add(data.len() as u128);
+        if self.buf_len > 0 {
+            let n = core::cmp::min(Self::BLOCK - self.buf_len, data.len());
+            self.buffer[self.buf_len..self.buf_len + n].copy_from_slice(&data[..n]);
+            self.buf_len += n;
+            data = &data[n..];
+            if self.buf_len == Self::BLOCK {
+                let blk = self.buffer;
+                compress_blocks(&mut self.state, &blk);
+                self.buf_len = 0;
+            }
+        }
+        let mut chunks = data.chunks_exact(Self::BLOCK);
+        for blk in &mut chunks {
+            compress_blocks(&mut self.state, blk);
+        }
+        let rem = chunks.remainder();
+        if !rem.is_empty() {
+            self.buffer[..rem.len()].copy_from_slice(rem);
+            self.buf_len = rem.len();
+        }
+    }
+
+    pub fn finalize(mut self) -> [u8; 64] {
+        let bit_len = self.total_len.wrapping_mul(8);
+        self.update(&[0x80]);
+        while self.buf_len != Self::BLOCK - 16 {
+            self.update(&[0]);
+        }
+        self.buffer[112..128].copy_from_slice(&bit_len.to_be_bytes());
+        let blk = self.buffer;
+        compress_blocks(&mut self.state, &blk);
+        let mut out = [0u8; 64];
+        for i in 0..8 {
+            out[i * 8..i * 8 + 8].copy_from_slice(&self.state[i].to_be_bytes());
+        }
+        out
+    }
+}
+
+/// HMAC over any member of the SHA-512 family (RFC 2104; 128-byte block).
+#[derive(Clone, Debug)]
+pub struct HmacSha512Family {
+    inner: Sha512Core,
+    opad: [u8; 128],
+    /// Full digest length of this SHA-512 variant (64/48/28/32). HMAC feeds
+    /// the inner hash's truncated output to the outer hash.
+    out_len: usize,
+}
+
+impl HmacSha512Family {
+    pub fn new(iv: [u64; 8], key: &[u8], out_len: usize) -> Self {
+        let mut kblock = [0u8; 128];
+        if key.len() > 128 {
+            let mut h = Sha512Core::new(iv);
+            h.update(key);
+            let digest = h.finalize();
+            kblock[..out_len].copy_from_slice(&digest[..out_len]);
+        } else {
+            kblock[..key.len()].copy_from_slice(key);
+        }
+
+        let mut ipad = [0u8; 128];
+        let mut opad = [0u8; 128];
+        for i in 0..128 {
+            ipad[i] = kblock[i] ^ 0x36;
+            opad[i] = kblock[i] ^ 0x5C;
+        }
+        wipe(&mut kblock);
+
+        let mut inner = Sha512Core::new(iv);
+        inner.update(&ipad);
+        wipe(&mut ipad);
+        Self {
+            inner,
+            opad,
+            out_len,
+        }
+    }
+
+    pub fn update(&mut self, data: &[u8]) {
+        self.inner.update(data);
+    }
+
+    pub fn finalize(self, iv: [u64; 8]) -> [u8; 64] {
+        let inner_digest = self.inner.finalize();
+        let mut outer = Sha512Core::new(iv);
+        outer.update(&self.opad);
+        outer.update(&inner_digest[..self.out_len]);
+        outer.finalize()
+    }
 }
 
 // --- Portable Fallback ---
