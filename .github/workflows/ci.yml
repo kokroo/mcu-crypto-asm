@@ -88,10 +88,28 @@ jobs:
           - thumbv7m-none-eabi # Cortex-M3: must fall back to portable
           # - thumbv6m-none-eabi # Cortex-M0+: portable
           - riscv32imc-unknown-none-elf
+          - xtensa-esp32-none-elf
+          - xtensa-esp32s3-none-elf
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y qemu-system-arm qemu-system-riscv32
       - run: rustup target add ${{ matrix.target }}
+      - name: Install QEMU runtime dependencies
+        if: startsWith(matrix.target, 'xtensa')
+        run: sudo apt-get install -y libgcrypt20 libglib2.0-0 libpixman-1-0 libslirp0
+      - name: Cache QEMU Xtensa binary
+        if: startsWith(matrix.target, 'xtensa')
+        uses: actions/cache@v4
+        id: cache-qemu
+        with:
+          path: /opt/qemu-xtensa
+          key: qemu-system-xtensa-v0.1.0-noble
+      - name: Download prebuilt QEMU Xtensa
+        if: startsWith(matrix.target, 'xtensa') && steps.cache-qemu.outputs.cache-hit != 'true'
+        run: |
+          sudo mkdir -p /opt/qemu-xtensa
+          curl -sL https://github.com/kokroo/qemu/releases/download/v0.1.0-semihosting/qemu-system-xtensa-esp32.tar.gz | sudo tar -xz -C /opt/qemu-xtensa
+          sudo chmod +x /opt/qemu-xtensa/qemu-system-xtensa
       - name: cache rust
         id: cargo-cache
         uses: actions/cache@v4
@@ -102,7 +120,7 @@ jobs:
             ~/.cargo/git
           key: ${{ runner.os }}-cargo-bin
       - name: install cargo-qtest
-        # if: steps.cargo-cache.outputs.cache-hit != 'true'
+        if: steps.cargo-cache.outputs.cache-hit != 'true'
         run: cargo install cargo-qemu-test@=0.3.2 --force
       - name: run suites under QEMU (one fresh boot per test)
         run: cargo qtest --target ${{ matrix.target }} --release --features embassy-all --test embassy_suites --verbose
