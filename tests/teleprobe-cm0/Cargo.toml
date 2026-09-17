@@ -1,8 +1,9 @@
 [package]
-name = "teleprobe-cm0-test"
+name = "teleprobe-hil-test"
 version = "0.1.0"
 edition = "2021"
 publish = false
+default-run = "all_crypto_test"
 
 [dependencies]
 mcu-crypto-asm = { path = "../.." }
@@ -13,7 +14,7 @@ cortex-m-rt = "0.7"
 panic-probe = { version = "1", features = ["print-defmt"] }
 
 [[bin]]
-name = "p256_cm0_test"
+name = "all_crypto_test"
 path = "src/main.rs"
 
 [profile.release]

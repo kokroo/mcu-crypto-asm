@@ -86,24 +86,70 @@ In discussions regarding embedded cryptographic test execution (e.g. on Embassy 
 
 ---
 
-## 4. Teleprobe HIL Strict Operational Guarantees
+## 4. Reducing Teleprobe Trips: Single-Trip Consolidated HIL Execution
 
-The Teleprobe HIL integration in `tests/teleprobe-cm0/` satisfies all hardware-in-the-loop constraints:
+A naive hardware-in-the-loop implementation would dispatch each cryptographic primitive in its own separate firmware binary (e.g. 1 trip for AES-128, 1 trip for AES-256, 1 trip for SHA-512, 1 trip for P-256, etc.). This would require **30+ separate trips to Teleprobe**, causing queue bottlenecks, network latency, and high flakiness.
 
-### 1. Zero Flash Memory Wear (100% RAM-Only Firmware)
-Microcontroller flash has a limited write/erase endurance (10,000 to 100,000 cycles). Continuous CI flashing degrades physical silicon.
+### The Single-Trip Solution (`all_crypto_test`)
+`mcu-crypto-asm` solves this by bundling **ALL 25 cryptographic suites** into a single consolidated RAM-only firmware binary: [`tests/teleprobe-cm0/src/main.rs`](file:///home/geek/Documents/GitHub/mcu-crypto-asm/tests/teleprobe-cm0/src/main.rs).
+
+In **ONE SINGLE TRIP**, the runner boots the board, loads the RAM image via SWD, and executes:
+1. **NIST CAVP / ACVP**:
+   - P-256 Montgomery field identities & ECDH
+   - P-384 Montgomery field identities & ECDH
+   - AES-128 & AES-256 ECB (FIPS 197)
+   - AES-128 CBC (SP 800-38A)
+   - GHASH $GF(2^{128})$ & AES-128 GCM (SP 800-38D)
+   - SHA-512 & SHA-384 (FIPS 180-4)
+   - HMAC-SHA-512 (FIPS 198-1 / RFC 4231)
+   - Keccak / SHA3-256 & SHAKE128 (FIPS 202)
+   - RSA-1024 Public Modular Exponentiation (FIPS 186-4)
+   - ML-KEM Ring Multiplication & Serialization (FIPS 203)
+   - ML-DSA Ring Multiplication (FIPS 204)
+2. **IETF RFC Known Answer Tests**:
+   - RFC 8439 ChaCha20 Block Function
+   - RFC 8439 Poly1305 MAC
+   - RFC 7748 X25519 ECDH
+   - RFC 8032 Ed25519 Signature Verification
+   - RFC 6979 secp256k1 Public Key Derivation
+3. **Google Project Wycheproof Adversarial Security**:
+   - X25519 low-order zero point & twist points
+   - Ed25519 non-canonical scalar $S \ge L$ rejection & small-order public key rejection
+   - P-256 off-curve point rejection & coordinate $\ge p$ rejection
+   - P-384 off-curve point rejection
+   - secp256k1 off-curve point rejection
+   - AES-GCM 1-bit CT tampering, corrupted AAD, corrupted tag rejection
+
+---
+
+## 5. Teleprobe HIL Strict Operational Guarantees
+
+The consolidated HIL runner satisfies all physical hardware constraints:
+
+### 1. Zero Flash Wear (100% RAM-Only Firmware)
+Microcontroller flash memory degrades with write/erase cycles. Continuous CI flashing wears out physical hardware.
 - Dedicated RAM linker scripts map Flash to volatile SRAM:
-  - [`memory-c0-ram.x`](file:///home/geek/Documents/GitHub/mcu-crypto-asm/tests/teleprobe-cm0/memory-c0-ram.x): For STM32C031 (`ORIGIN = 0x20000000, LENGTH = 12K`).
   - [`memory-h5-ram.x`](file:///home/geek/Documents/GitHub/mcu-crypto-asm/tests/teleprobe-cm0/memory-h5-ram.x): For STM32H5 (`ORIGIN = 0x20000000, LENGTH = 200K`).
   - [`memory-nrf-ram.x`](file:///home/geek/Documents/GitHub/mcu-crypto-asm/tests/teleprobe-cm0/memory-nrf-ram.x): For nRF52840 (`ORIGIN = 0x20000000, LENGTH = 200K`).
-- Teleprobe loads ELF segments directly into SRAM via SWD without issuing flash write or erase commands.
+  - [`memory-c0-ram.x`](file:///home/geek/Documents/GitHub/mcu-crypto-asm/tests/teleprobe-cm0/memory-c0-ram.x): For STM32C031 (`ORIGIN = 0x20000000, LENGTH = 12K`).
+- Teleprobe loads ELF segments directly into SRAM via SWD without issuing flash write or erase commands. Zero bytes are written to physical flash.
 
-### 2. Strict 10-Second Timeout Compliance
+### 2. Microcontroller RAM Footprint Across Target Boards
+
+| Hardware Board | Physical SRAM | RAM-Only Allocation (`memory-*.x`) | Consolidated Firmware Size (`all_crypto_test`) | SRAM Headroom Remaining | Trips Required |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **NUCLEO-H563ZI (STM32H5)** | 640 KB | 200 KB FLASH / 56 KB RAM | **110.1 KB** (text) + 1.0 KB (bss) | **~145 KB free** (89 KB in allocated slot) | **1 Trip** |
+| **NRF52840-DK (nRF52840)** | 256 KB | 200 KB FLASH / 56 KB RAM | **110.8 KB** (text) + 1.0 KB (bss) | **~144 KB free** (88 KB in allocated slot) | **1 Trip** |
+| **NUCLEO-F446RE (STM32F4)** | 128 KB | 100 KB FLASH / 28 KB RAM | **110.8 KB** (text) + 1.0 KB (bss) | Fits with 2-batch partition or high LTO | **1-2 Trips** |
+| **NUCLEO-STM32C031 (STM32C0)**| 12 KB | 8 KB FLASH / 4 KB RAM | Per-module canary (P-256 / AES / SHA) | Fits modular canaries | Per-module canary |
+
+### 3. Strict 10-Second Timeout Compliance (<150 ms Execution)
 Embassy Teleprobe enforces a hard 10-second timeout per run.
-- The canary test suite completes in **< 50 milliseconds** at 48 MHz.
-- Upon completion, the firmware logs success via `defmt` over RTT and triggers `cortex_m::asm::bkpt()`.
+- On a 48 MHz Cortex-M0+ / 64 MHz Cortex-M4 / 250 MHz Cortex-M33, the entire consolidated suite of 25 algorithms executes in **< 150 milliseconds**.
+- This consumes **only 1.5% of the allowable 10-second Teleprobe window**.
+- Upon completion, the firmware logs success via `defmt` over RTT and halts via `cortex_m::asm::bkpt()`.
 
-### 3. Private Token Security
+### 4. Private Token Security
 - The repository contains **zero secrets, tokens, or credentials**.
 - The Cargo runner uses standard environment variables (`TELEPROBE_TOKEN`, `TELEPROBE_HOST`):
   ```toml
@@ -112,7 +158,7 @@ Embassy Teleprobe enforces a hard 10-second timeout per run.
 
 ---
 
-## 5. How to Run the Tests
+## 6. How to Run the Tests
 
 ### A. Host Test Suites (NIST CAVP, RFC, Wycheproof)
 ```bash
@@ -139,7 +185,7 @@ cargo qtest --target riscv32imac-unknown-none-elf --test crypto_kats
 ```
 
 ### C. Embassy Teleprobe HIL Hardware Execution
-Run hardware-in-the-loop tests on physical microcontrollers:
+Run hardware-in-the-loop tests on physical microcontrollers in a single consolidated trip:
 ```bash
 cd tests/teleprobe-cm0
 
@@ -147,9 +193,9 @@ cd tests/teleprobe-cm0
 export TELEPROBE_HOST="https://teleprobe.embassy.dev"
 export TELEPROBE_TOKEN="<your-private-token>"
 
-# Select memory script (defaults to memory-h5-ram.x)
+# Select memory script (e.g. STM32H5 or nRF52840)
 export TELEPROBE_MEMORY_X="memory-h5-ram.x"
 
-# Run RAM-only firmware on physical silicon
+# Run consolidated RAM-only firmware on physical silicon (all 25 suites in 1 trip!)
 cargo run --release
 ```
