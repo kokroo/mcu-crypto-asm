@@ -1,0 +1,121 @@
+mcu-crypto-asm
+Copyright (c) 2026 Shiv Kokroo and mcu-crypto-asm contributors.
+
+This product includes software developed by Shiv Kokroo as part of the
+mcu-crypto-asm project (https://github.com/kokroo/mcu-crypto-asm).
+
+==============================================================================
+ORIGINAL WORKS & ATTRIBUTION
+==============================================================================
+
+Original assembly routines, mathematical optimizations, and architectural
+implementations authored by Shiv Kokroo:
+- Target 5 (Xtensa LX7: ESP32-S2 / ESP32-S3): Hand-written unrolled Montgomery
+  multiplication (nistp_mul_mont_8, nistp_mul_mont_12), Solinas Montgomery squaring
+  (nistp_sqr_mont_8, nistp_sqr_mont_12), and constant-time modular addition/subtraction
+  utilizing branchless SALTU carry emulation (Windowed ABI and Call0 ABI).
+- Target 1 (ARMv7E-M / ARMv8-M: Cortex-M4 / Cortex-M7 / Cortex-M33): Hand-written
+  12-limb unrolled UMAAL Montgomery multiplication (nistp_mul_mont_12), squaring, and
+  modular addition/subtraction for NIST P-384 with VFP register allocation.
+- Code generation tools (gen/gen_asm_xtensa.py, gen/gen_asm_cortex_m4.py).
+- Fast projective/Jacobian ECDSA verification (r * Z^2 == X mod p) eliminating
+  expensive field inversions modulo p.
+- Interleaved simultaneous double-scalar multiplication (PointJacobian::lincomb /
+  Shamir's trick) halving point doublings for P-256 and P-384.
+- Fixed-base Comb multiplication tables and Montgomery affine batch inversion.
+- Target 2 (ARMv6-M) secp256k1 Comba arithmetic engine and RSA CIOS Montgomery engine.
+- Unified multi-target runtime dispatch layer and Embassy crypto driver framework.
+
+==============================================================================
+THIRD-PARTY CODE & UPSTREAM ATTRIBUTIONS
+==============================================================================
+
+This project incorporates, adapts, or ports code from several upstream open-source
+projects. All such code is redistributed under the terms of its respective license:
+
+1. P-256 Cortex-M4 Assembly & Algorithms
+   Source: https://github.com/Emill/P256-Cortex-M4
+   Copyright (c) 2017-2021 Emil Lenngren
+   Copyright (c) 2021 Shortcut Labs AB
+   License: BSD-2-Clause / MIT
+
+2. P-256 Cortex-M0/M0+ Assembly
+   Source: https://github.com/Emill/P256-cortex-ecdh
+   Copyright (c) Emil Lenngren
+   Multiplication/squaring routines based on public domain µNaCl by Ana Helena Sánchez
+   and Björn Haase (https://munacl.cryptojedi.org/curve25519-cortexm0.shtml).
+   License: BSD-2-Clause / Public Domain
+
+3. Bignum Assembly Engine (RSA & secp256k1 UMAAL arithmetic)
+   Source: https://github.com/Emill/rsa-armv7
+   Copyright (c) 2025 Emil Lenngren
+   License: BSD-2-Clause
+
+4. Curve25519, X25519 & Ed25519 Cortex-M Assembly
+   Source: https://github.com/embassy-rs/cortex25519
+   Derived from: https://github.com/Emill/X25519-Cortex-M4
+   Copyright (c) 2021, 2023 Akiles Technologies
+   Copyright (c) 2017 Emil Lenngren
+   License: BSD-2-Clause
+
+5. X25519 Cortex-M0/M0+ Assembly
+   Source: https://github.com/pornin/x25519-cm0
+   Copyright (c) 2020 Thomas Pornin
+   License: MIT
+
+6. Fixsliced AES-128 / AES-256 Assembly
+   Source: https://github.com/Rvch7/Fixslicing-AES
+   Copyright (c) 2020 Alexandre Adomnicai
+   Reference: https://eprint.iacr.org/2020/1123.pdf
+   License: MIT
+
+7. BearSSL (AES Bitsliced S-Box & GHASH ctmul32)
+   Source: https://bearssl.org/
+   Copyright (c) 2016 Thomas Pornin <pornin@bolet.org>
+   License: MIT
+
+8. Poly1305 Assembly & Algorithms
+   Source: https://github.com/floodyberry/poly1305-opt
+   Source: https://github.com/floodyberry/poly1305-donna
+   Copyright (c) Andrew Moon (floodyberry)
+   License: MIT / Public Domain
+
+9. ChaCha20 Assembly
+   Source: https://github.com/Mickdep/ChaCha20-Optimization
+   Copyright (c) Mick de Pauw
+   Also referencing OpenSSL chacha-armv4.S by Andy Polyakov / The OpenSSL Project Authors
+   License: MIT / Apache-2.0
+
+10. GHASH (GCM Authenticator) Assembly
+    Source: OpenSSL Project (crypto/modes/asm/ghash-armv4.pl) / CRYPTOGAMS
+    Copyright (c) 2010-2025 The OpenSSL Project Authors
+    Author: Andy Polyakov
+    License: Apache-2.0 / Cryptogams BSD license
+
+11. SHA-512 / SHA-384 Assembly
+    Source: OpenSSL Project (crypto/sha/asm/sha512-armv4.pl) / CRYPTOGAMS
+    Copyright (c) 2004-2025 The OpenSSL Project Authors
+    Author: Andy Polyakov
+    License: Apache-2.0 / OpenSSL License
+
+12. Keccak-f[1600] / SHAKE Assembly
+    Source: https://eprint.iacr.org/2023/773
+    Author: Alexandre Adomnicai
+    Derived from: eXtended Keccak Code Package (XKCP) by Ronny Van Keer (https://github.com/XKCP/XKCP)
+    License: CC0 / Apache-2.0 / MIT
+
+13. ML-KEM (Kyber) Post-Quantum NTT Assembly
+    Source: PQM4 (https://github.com/mupq/pqm4)
+    Author: Junhao Huang, BNU-HKBU UIC (https://eprint.iacr.org/2022/956.pdf)
+    Copyright (c) 2022 Junhao Huang; PQM4 contributors
+    License: CC0 / Apache-2.0
+
+14. ML-DSA (Dilithium) Post-Quantum NTT Assembly
+    Source: PQM4 (https://github.com/mupq/pqm4)
+    Authors: Amin Abdulrahman, Vincent Hwang, Nele Mentens, Julian Wälde (PQM4 contributors)
+    License: CC0 / Apache-2.0
+
+15. micro-ecc (secp256k1 compact arithmetic inspiration)
+    Source: https://github.com/kmackay/micro-ecc
+    Copyright (c) 2014 Kenneth MacKay
+    License: BSD-2-Clause

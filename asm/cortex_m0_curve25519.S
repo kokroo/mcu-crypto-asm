@@ -1,4 +1,9 @@
 @ =======================================================================
+@ Copyright (c) 2020 Thomas Pornin
+@ Available under the MIT License.
+@ Upstream: https://github.com/pornin/x25519-cm0
+@ Ported to mcu-crypto-asm by Shiv Kokroo
+@ =======================================================================
 @ This is an X25519 implementation in ARMv6-M assembly, suitable for
 @ ARM Cortex M0 and M0+. It will also run on later 32-bit ARM CPUs,
 @ e.g. ARM Cortex M3 and M4 (but substantially faster implementations

@@ -1,3 +1,11 @@
+@ =======================================================================
+@ Cortex-M Bignum Arithmetic Engine (RSA & Multi-Precision Multiplication)
+@ Author: Emil Lenngren
+@ Copyright (c) 2025 Emil Lenngren
+@ Upstream: https://github.com/Emill/rsa-armv7
+@ Licensed under the BSD 2-Clause License.
+@ Adapted for mcu-crypto-asm.
+@ =======================================================================
 .syntax unified
 .thumb
 .arch armv7e-m

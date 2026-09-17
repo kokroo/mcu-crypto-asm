@@ -212,6 +212,53 @@ See [TODO.md](TODO.md) for our comprehensive cross-architecture algorithm optimi
 
 ---
 
+## Attribution & Provenance Matrix
+
+`mcu-crypto-asm` combines **original hand-written assembly** engineered specifically for this project with **ports and adaptations of state-of-the-art open-source assembly routines** from the cryptographic community. All original authors and upstream projects are credited below:
+
+| Primitive | Target Architecture / ISA | Component / Routine | Author(s) & Provenance | License |
+| :--- | :--- | :--- | :--- | :--- |
+| **NIST P-256** | **Target 5** (Xtensa LX7: ESP32-S2/S3) | Branchless `SALTU` Montgomery multiplication (`nistp_mul_mont_8`), squaring (`nistp_sqr_mont_8`), and modular add/sub (Windowed & Call0 ABIs) | **Shiv Kokroo** (Original ASM) | BSD-3-Clause |
+| **NIST P-256** | **Target 1** (ARMv7E-M / ARMv8-M: Cortex-M4/M7/M33) | Inversionless Projective ECDSA verification ($r \cdot Z^2 \equiv X \pmod p$), Interleaved Double-Scalar Multiplication (Shamir's Trick), Fixed-Base Comb Tables | **Shiv Kokroo** (Original Implementation) | BSD-3-Clause |
+| **NIST P-256** | **Target 1** (ARMv7E-M / ARMv8-M: Cortex-M4/M7/M33) | Montgomery `UMAAL` field multiplication (`P256_mulmod`), squaring (`P256_sqrmod`), add/sub, affine tables (`asm/cortex_m4_p256.S`) | **Emil Lenngren** ([`Emill/P256-Cortex-M4`](https://github.com/Emill/P256-Cortex-M4)) & Shortcut Labs AB | BSD-2-Clause / MIT |
+| **NIST P-256** | **Target 2** (ARMv6-M: Cortex-M0/M0+) | Pure 16-bit Thumb-1 field arithmetic (`asm/cortex_m0_p256.S`) | **Emil Lenngren** ([`Emill/P256-cortex-ecdh`](https://github.com/Emill/P256-cortex-ecdh)); mul/sqr based on µNaCl by Ana Helena Sánchez & Björn Haase | BSD-2-Clause / Public Domain |
+| **NIST P-384** | **Target 1** (ARMv7E-M / ARMv8-M: Cortex-M4/M7/M33) | 12-limb unrolled `UMAAL` Montgomery multiplication (`nistp_mul_mont_12`), squaring, add/sub with VFP register allocation (`asm/cortex_m4.S`, `gen/gen_asm_cortex_m4.py`) | **Shiv Kokroo** (Original ASM) | BSD-3-Clause |
+| **NIST P-384** | **Target 5** (Xtensa LX7: ESP32-S2/S3) | 12-limb unrolled branchless `SALTU` Montgomery multiplication (`nistp_mul_mont_12`), squaring, modular add/sub (Windowed & Call0 ABIs) | **Shiv Kokroo** (Original ASM) | BSD-3-Clause |
+| **NIST P-384** | All MCU Targets | 12-limb Comb fixed-base multiplication (3.3M cycles) & Projective ECDSA verification | **Shiv Kokroo** (Original Implementation) | BSD-3-Clause |
+| **Curve25519 / X25519** | **Target 1** (ARMv7E-M / ARMv8-M: Cortex-M4/M7/M33) | Constant-time field arithmetic (`cortex_m_fe25519.S`) and scalar multiplication (`cortex_m_curve25519.S`) | **Emil Lenngren** ([`Emill/X25519-Cortex-M4`](https://github.com/Emill/X25519-Cortex-M4)) & Akiles Technologies / Dario Nieuwenhuis ([`embassy-rs/cortex25519`](https://github.com/embassy-rs/cortex25519)) | BSD-2-Clause |
+| **Curve25519 / X25519** | **Target 2** (ARMv6-M: Cortex-M0/M0+) | Constant-time pure 16-bit Thumb-1 X25519 scalar multiplication (`asm/cortex_m0_curve25519.S`) | **Thomas Pornin** ([`pornin/x25519-cm0`](https://github.com/pornin/x25519-cm0) / BearSSL); ported by Shiv Kokroo | MIT |
+| **Ed25519** | **Target 1** (ARMv7E-M / ARMv8-M: Cortex-M4/M7/M33) | Extended twisted Edwards point operations (`asm/cortex_m_ed25519.S`) | **Akiles Technologies** & Dario Nieuwenhuis ([`embassy-rs/cortex25519`](https://github.com/embassy-rs/cortex25519)) | BSD-2-Clause |
+| **Ed25519** | **Target 2** (ARMv6-M: Cortex-M0/M0+) | Constant-time Edwards arithmetic, RFC 8032 square-root decompression, 256-bit scalar mul | **Shiv Kokroo** (Original Implementation) | BSD-3-Clause |
+| **secp256k1** | **Target 1** (ARMv7E-M / ARMv8-M: Cortex-M4/M7/M33) | Multi-precision `UMAAL` multiplication engine (`asm/cortex_m_bignum.S`) | **Emil Lenngren** ([`Emill/rsa-armv7`](https://github.com/Emill/rsa-armv7)) | BSD-2-Clause |
+| **secp256k1** | **Target 1** & **Target 2** | Solinas reduction ($2^{256}-2^{32}-977$), complete Renes-Costello-Batina ($a=0$) addition, Comba multiplier engine, Montgomery ladder | **Shiv Kokroo** (Original Implementation; inspiration from Kenneth MacKay / [`micro-ecc`](https://github.com/kmackay/micro-ecc)) | BSD-3-Clause |
+| **Poly1305** | **Target 1** (ARMv7E-M / ARMv8-M: Cortex-M4/M7/M33) | 26-bit limb constant-time multiplication using `UMLAL` (`asm/cortex_m_poly1305.S`) | **Andrew Moon** ([`floodyberry/poly1305-opt`](https://github.com/floodyberry/poly1305-opt), [`poly1305-donna`](https://github.com/floodyberry/poly1305-donna)) | MIT / Public Domain |
+| **Poly1305** | **Target 2** (ARMv6-M: Cortex-M0/M0+) | Constant-time 32-bit Poly1305 evaluation (~127 c/byte) | **Shiv Kokroo** (Original Implementation) | BSD-3-Clause |
+| **ChaCha20** | **Target 1** (ARMv7E-M / ARMv8-M: Cortex-M4/M7/M33) | Register-packed quarter-round unrolled block assembly (`asm/cortex_m_chacha20.S`) | **Mick de Pauw** ([`Mickdep/ChaCha20-Optimization`](https://github.com/Mickdep/ChaCha20-Optimization)) & **Andy Polyakov** ([OpenSSL](https://github.com/openssl/openssl)) | MIT / Apache-2.0 |
+| **ChaCha20** | **Target 2** (ARMv6-M: Cortex-M0/M0+) | Constant-time 32-bit quarter-round implementation | **Shiv Kokroo** (Original Implementation) | BSD-3-Clause |
+| **RSA-1024 / 2048 / 4096** | **Target 1** (ARMv7E-M / ARMv8-M: Cortex-M4/M7/M33) | Bignum Montgomery multiplication & squaring engine (`asm/cortex_m_bignum.S`) | **Emil Lenngren** ([`Emill/rsa-armv7`](https://github.com/Emill/rsa-armv7)) | BSD-2-Clause |
+| **RSA-1024 / 2048 / 4096** | **Target 2** (ARMv6-M: Cortex-M0/M0+) | Constant-time CIOS Montgomery reduction engine | **Shiv Kokroo** (Original Implementation) | BSD-3-Clause |
+| **ML-KEM (Kyber)** | **Target 1** (ARMv7E-M / ARMv8-M: Cortex-M4/M7/M33) | Plantard arithmetic and DSP SIMD NTT/InvNTT/Basemul assembly (`asm/cortex_m_mlkem.S`) | **Junhao Huang** ([eprint 2022/956](https://eprint.iacr.org/2022/956.pdf)) & **PQM4 Contributors** ([`mupq/pqm4`](https://github.com/mupq/pqm4)) | CC0 / Apache-2.0 |
+| **ML-KEM (Kyber)** | All MCU Targets | Safe `Polynomial` API, 12-bit serialization, ring arithmetic | **Shiv Kokroo** (Original Implementation) | BSD-3-Clause |
+| **ML-DSA (Dilithium)** | **Target 1** (ARMv7E-M / ARMv8-M: Cortex-M4/M7/M33) | DSP SIMD NTT/InvNTT and pointwise Montgomery multiplication (`asm/cortex_m_mldsa.S`) | **Amin Abdulrahman, Vincent Hwang, Nele Mentens, Julian Wälde** ([`mupq/pqm4`](https://github.com/mupq/pqm4)) | CC0 / Apache-2.0 |
+| **ML-DSA (Dilithium)** | All MCU Targets | Safe `Polynomial` API, Montgomery reduction, pointwise accumulation | **Shiv Kokroo** (Original Implementation) | BSD-3-Clause |
+| **SHA-512 / SHA-384** | **Target 1** (ARMv7E-M / ARMv8-M: Cortex-M4/M7/M33) | Paired 32-bit register assembly compression function (`asm/cortex_m_sha512.S`) | **Andy Polyakov** & **The OpenSSL Project Authors** ([OpenSSL `sha512-armv4.pl`](https://github.com/openssl/openssl)) | Apache-2.0 / OpenSSL |
+| **SHA-512 / SHA-384** | **Target 2** (ARMv6-M: Cortex-M0/M0+) | Boolean logic minimization for 64-bit word pairs | **Thomas Pornin** ([`BearSSL`](https://bearssl.org/)) & **Shiv Kokroo** | MIT / BSD-3-Clause |
+| **Keccak-f[1600] / SHAKE** | **Target 1** (ARMv7E-M / ARMv8-M: Cortex-M4/M7/M33) | 32-bit interleaved bit-sliced ARM assembly (`asm/cortex_m_keccak.S`) | **Alexandre Adomnicăi** ([eprint 2023/773](https://eprint.iacr.org/2023/773)); based on Ronny Van Keer / [XKCP](https://github.com/XKCP/XKCP) | CC0 / Apache-2.0 / MIT |
+| **Keccak-f[1600] / SHAKE** | All MCU Targets | FIPS 202 sponge implementation (SHA3-256/512, SHAKE-128/256) | **Shiv Kokroo** (Original Implementation) | BSD-3-Clause |
+| **Fixsliced AES** | **Target 1** (ARMv7E-M / ARMv8-M: Cortex-M4/M7/M33) | 2-block parallel Fixsliced AES-128 and AES-256 encryption (`asm/cortex_m_aes_encrypt.S`, `asm/cortex_m_aes_keyschedule.S`) | **Alexandre Adomnicăi** & **Thomas Peyrin** ([`Rvch7/Fixslicing-AES`](https://github.com/Rvch7/Fixslicing-AES)) | MIT |
+| **Bitsliced AES** | **Target 2** (ARMv6-M: Cortex-M0/M0+) | Constant-time Boyar-Peralta S-box bitsliced AES (0 RAM tables) | **Thomas Pornin** ([`BearSSL`](https://bearssl.org/)) | MIT |
+| **AES Cipher Modes** | All MCU Targets | Constant-time ECB, CBC, CTR, GCM cipher modes | **Shiv Kokroo** (Original Implementation) | BSD-3-Clause |
+| **GHASH (GCM)** | **Target 1** (ARMv7E-M / ARMv8-M: Cortex-M4/M7/M33) | 4-bit windowed GF(2^128) polynomial multiplier (`asm/cortex_m_ghash.S`) | **Andy Polyakov** & **The OpenSSL Project Authors** ([OpenSSL `ghash-armv4.pl`](https://github.com/openssl/openssl) / CRYPTOGAMS) | Apache-2.0 / Cryptogams BSD |
+| **GHASH (GCM)** | **Target 2** (ARMv6-M: Cortex-M0/M0+) | Constant-time 32-bit Karatsuba polynomial multiplier (`ghash_ctmul32`) | **Thomas Pornin** ([`BearSSL`](https://bearssl.org/)) | MIT |
+| **Multi-Target Architecture** | All Supported Targets | Target dispatch layer, trait abstraction, and Embassy cryptographic driver framework (`src/embassy.rs`, `src/backend/`) | **Shiv Kokroo** (Original Architecture) | BSD-3-Clause |
+
+---
+
 ## Licence
 
-MIT OR Apache-2.0, at your option. See [LICENSE-MIT](LICENSE-MIT) and [LICENSE-APACHE](LICENSE-APACHE).
+This project is licensed under the **BSD 3-Clause License**. See [LICENSE](LICENSE) for the full license text.
+
+### Mandatory Attribution
+The BSD 3-Clause license strictly mandates that copyright notices and attribution to **Shiv Kokroo**, project contributors, and original upstream authors must be retained and reproduced in **both source code distributions and compiled binary distributions** (such as firmware images, embedded binaries, SDKs, and accompanying documentation) no matter how it is redistributed.
+
+For detailed attribution of original works and third-party upstream components, see [NOTICE](NOTICE) and [AUTHORS.md](AUTHORS.md).

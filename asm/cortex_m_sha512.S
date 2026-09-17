@@ -1,3 +1,10 @@
+/* =======================================================================
+ * SHA-512 / SHA-384 block compression for ARMv7-M / ARMv7E-M / ARMv8-M.
+ * Copyright 2004-2025 The OpenSSL Project Authors. All Rights Reserved.
+ * Author: Andy Polyakov (CRYPTOGAMS / OpenSSL)
+ * Licensed under the Apache License 2.0.
+ * Ported to Cortex-M Thumb-2 for mcu-crypto-asm.
+ * ======================================================================= */
 .syntax unified
 .thumb
 .text

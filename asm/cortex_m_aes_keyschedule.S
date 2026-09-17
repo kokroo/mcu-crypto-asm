@@ -9,6 +9,7 @@
 *           alexandre.adomnicai@ntu.edu.sg
 *
 * @date     August 2020
+* @license  MIT License (Copyright (c) 2020 Alexandre Adomnicai)
 ******************************************************************************/
 
 .syntax unified

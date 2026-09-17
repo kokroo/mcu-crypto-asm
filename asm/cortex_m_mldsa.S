@@ -1,4 +1,11 @@
 
+// =======================================================================
+// ML-DSA (Dilithium) NTT & Pointwise Multiplication for ARM Cortex-M4
+// Adapted from PQM4 (https://github.com/mupq/pqm4)
+// Authors: Amin Abdulrahman, Vincent Hwang, Nele Mentens, Julian Wälde
+// License: CC0 / Apache-2.0
+// =======================================================================
+
 .syntax unified
 .cpu cortex-m4
 .thumb

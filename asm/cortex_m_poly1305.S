@@ -1,5 +1,10 @@
+@ =======================================================================
 @ Constant-time Poly1305 block multiplication using UMAAL on ARMv7E-M / ARMv8-M.
-@
+@ Based on algorithms and limb representations by Andrew Moon (floodyberry).
+@ Upstream: https://github.com/floodyberry/poly1305-opt
+@ Licensed under MIT / Public Domain.
+@ Adapted for mcu-crypto-asm.
+@ =======================================================================
 @ Computes (h * r) mod (2^130 - 5) using 26-bit limbs with 5 single-cycle UMAALs per limb.
 
 	.syntax unified

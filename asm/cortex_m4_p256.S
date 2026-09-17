@@ -1,3 +1,12 @@
+@ =======================================================================
+@ NIST P-256 Cortex-M4 Assembly Primitives
+@ Author: Emil Lenngren
+@ Copyright (c) 2017-2021 Emil Lenngren
+@ Copyright (c) 2021 Shortcut Labs AB
+@ Upstream: https://github.com/Emill/P256-Cortex-M4
+@ Licensed under MIT / BSD-2-Clause license.
+@ Adapted for mcu-crypto-asm.
+@ =======================================================================
 .syntax unified
  .thumb
  .text

@@ -1,5 +1,9 @@
+@ =======================================================================
 @ Constant-time ChaCha20 block function for ARMv7-M / ARMv7E-M / ARMv8-M.
-@
+@ Based on register allocation by Mick de Pauw (Mickdep/ChaCha20-Optimization)
+@ and OpenSSL chacha-armv4.pl by Andy Polyakov / The OpenSSL Project Authors.
+@ Adapted for constant-time execution in mcu-crypto-asm.
+@ =======================================================================
 @ Keeps 8 state words in registers (r5-r12) and 8 in memory (out[0..3] and out[12..15]),
 @ processing all 20 rounds without stack spills.
 
