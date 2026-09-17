@@ -49,9 +49,22 @@ fn main() {
         println!("cargo:rustc-cfg=cortex_m_thumb2");
     }
 
-    // --- Cortex-M4 / M7 / M33: UMAAL, constant-latency multiplier ---
-    if target.starts_with("thumbv7em") || target.starts_with("thumbv8m.main") {
+    let target_features = std::env::var("CARGO_CFG_TARGET_FEATURE").unwrap_or_default();
+    let rustflags = std::env::var("CARGO_ENCODED_RUSTFLAGS")
+        .or_else(|_| std::env::var("RUSTFLAGS"))
+        .unwrap_or_default();
+    let has_dsp = target_features.split(',').any(|f| f == "dsp") || rustflags.contains("+dsp");
+
+    // --- Cortex-M4 / M7 (always has UMAAL) or Cortex-M33 with DSP (+dsp) ---
+    if target.starts_with("thumbv7em") || (target.starts_with("thumbv8m.main") && has_dsp) {
         println!("cargo:rustc-cfg=nistp_asm_cm4");
+    } else if target.starts_with("thumbv8m.main") {
+        println!(
+            "cargo:warning=mcu-crypto-asm: {target} compiled without DSP extension (+dsp) — \
+             using Thumb-2 assembly for AES, ChaCha20, Keccak, and Poly1305. Bignum ECC \
+             uses portable backend. To enable UMAAL hardware acceleration, compile with \
+             RUSTFLAGS=\"-C target-feature=+dsp\"."
+        );
     }
 
     // --- Cortex-M0 / M0+: ARMv6-M (Thumb-1 only, no UMAAL) ---
