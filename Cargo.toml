@@ -50,6 +50,10 @@ qemu-test-macros = { git = "https://github.com/xoviat/cargo-qemu-test" }
 name = "embassy_suites"
 harness = false
 
+[[test]]
+name = "crypto_kats"
+harness = false
+
 [features]
 default = []
 # Force the portable backend even on an arch that has assembly. Used by the

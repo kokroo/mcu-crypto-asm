@@ -1,3 +1,18 @@
+# Teleprobe HIL Runner Configuration
+#
+# SECURITY NOTE:
+# The teleprobe token is private and MUST NOT be committed to git.
+# `teleprobe client` automatically reads authentication from:
+#   TELEPROBE_TOKEN=<token>
+#   TELEPROBE_HOST=<host>
+#
+# FIRMWARE MODE:
+# RAM-only execution via custom memory-*-ram.x linker scripts.
+# Flash is never erased or written.
+#
+# TIMEOUT PROTECTION:
+# Teleprobe terminates runs exceeding 10 seconds. All canary tests execute in <50 ms.
+
 [build]
 target = "thumbv6m-none-eabi"
 

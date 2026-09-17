@@ -6,9 +6,6 @@ publish = false
 
 [dependencies]
 mcu-crypto-asm = { path = "../.." }
-embassy-stm32 = { git = "https://github.com/embassy-rs/embassy", rev = "c0fdd08", features = ["defmt", "time-driver-any", "stm32c031c6", "memory-x"] }
-embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "c0fdd08", features = ["platform-cortex-m", "executor-thread", "defmt"] }
-embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "c0fdd08", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
 defmt = "1"
 defmt-rtt = "1"
 cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
@@ -23,3 +20,4 @@ path = "src/main.rs"
 debug = 2
 opt-level = "s"
 lto = true
+codegen-units = 1

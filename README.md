@@ -151,9 +151,17 @@ All operations execute in strictly constant time with zero operand-dependent bra
 
 ## Building and Testing
 
+For the full test matrix (NIST CAVP/ACVP, RFC KATs, Project Wycheproof), multi-ISA QEMU validation, and Embassy Teleprobe HIL execution, see [TESTS.md](TESTS.md).
+
 ```sh
-# Host tests (portable reference, BigInt oracle, constant-time audit)
+# Host tests (portable reference, BigInt oracle, constant-time audit, CAVP, RFC, Wycheproof)
 cargo test
+
+# QEMU bare-metal test suite across targets
+cargo qtest --target thumbv7em-none-eabihf --test crypto_kats
+cargo qtest --target thumbv7m-none-eabi --test crypto_kats
+cargo qtest --target thumbv6m-none-eabi --test crypto_kats
+cargo qtest --target riscv32imac-unknown-none-elf --test crypto_kats
 
 # Full multi-target test under QEMU
 ./run-all.sh

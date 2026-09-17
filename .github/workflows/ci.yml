@@ -106,7 +106,9 @@ jobs:
       - name: install cargo-qtest
         run: cargo install --git https://github.com/xoviat/cargo-qemu-test --force
       - name: run suites under QEMU (one fresh boot per test)
-        run: cargo qtest --target ${{ matrix.target }} --release --features embassy-all --test embassy_suites --verbose
+        run: |
+          cargo qtest --target ${{ matrix.target }} --release --features embassy-all --test embassy_suites --verbose
+          cargo qtest --target ${{ matrix.target }} --release --test crypto_kats --verbose
 
   xtensa-qemu:
     name: xtensa suites on QEMU (ESP32 / ESP32-S3)
