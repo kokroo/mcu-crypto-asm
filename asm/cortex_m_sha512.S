@@ -60,7 +60,8 @@ K512:
 sha512_block_data_order:
 	add	r2, r1, r2, lsl #7
 	stmdb	sp!, {r4-r12, lr}
-	ldr	r14, =K512
+	movw	r14, #:lower16:K512
+	movt	r14, #:upper16:K512
 	sub	sp,sp,#9*8
 
 	ldr	r7,[r0,#32+0]

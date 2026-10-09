@@ -1042,7 +1042,8 @@ P256_matrix_mul_mod_n:
  umaal r5,r7,r0,r8
  umaal r12,r7,r0,r9
  add lr,lr,r7
- ldr r0,=0xee00bc4f
+ movw r0,#0xbc4f
+ movt r0,#0xee00
  mul r0,r10,r0
  movs r6,#0
  ldrd r8,r9,P256_order_local
@@ -1888,7 +1889,8 @@ P256_negate_mod_m_if:
  .type P256_negate_mod_n_if, %function
 P256_negate_mod_n_if:
  .global P256_negate_mod_n_if
- ldr r3,=P256_order
+ movw r3, #:lower16:P256_order
+ movt r3, #:upper16:P256_order
  b P256_negate_mod_m_if
  .size P256_negate_mod_n_if, .-P256_negate_mod_n_if
  .type P256_negate_mod_p_if, %function

@@ -100,7 +100,8 @@ ed25519_add_impl:
 
 
 	// Y2 = k*T2
-    ldr r1, =ED25519_D2
+    movw r1, #:lower16:ED25519_D2
+    movt r1, #:upper16:ED25519_D2
 	add r2, sp, #324 // t2
 	bl fe25519_mul
 	add r8, sp, #260 // y2
@@ -448,7 +449,8 @@ ed25519_decompress:
 	// stack: y^2
 
 	mov r8, sp
-    ldr r9, =FE25519_ONE
+    movw r9, #:lower16:FE25519_ONE
+    movt r9, #:upper16:FE25519_ONE
 	bl fe25519_sub
 	bl fe25519_reduce
 	push {r0-r7}
@@ -456,14 +458,16 @@ ed25519_decompress:
 	// stack: u y^2
 
 	add r1, sp, #32
-    ldr r2, =ED25519_D
+    movw r2, #:lower16:ED25519_D
+    movt r2, #:upper16:ED25519_D
 	bl fe25519_mul
 	add r8, sp, #32
 	stm r8, {r0-r7}
 	// stack: u d*y^2
 
 	add r8, sp, #32
-    ldr r9, =FE25519_ONE
+    movw r9, #:lower16:FE25519_ONE
+    movt r9, #:upper16:FE25519_ONE
 	bl fe25519_add
 	add r8, sp, #32
 	stm r8, {r0-r7}
@@ -538,7 +542,8 @@ ed25519_decompress:
 	bne fail
 
 	add r1, sp, #32
-	ldr r2, =FE25519_SQRTM1
+	movw r2, #:lower16:FE25519_SQRTM1
+	movt r2, #:upper16:FE25519_SQRTM1
 	bl fe25519_mul
 	b found2
 	
