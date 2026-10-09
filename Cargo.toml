@@ -10,10 +10,10 @@ categories = ["cryptography", "no-std", "embedded"]
 keywords = ["crypto", "embedded", "no-std", "cortex-m", "assembly"]
 
 [dependencies]
-embassy-crypto = { git = "https://github.com/embassy-rs/embassy", rev = "69208416f8", optional = true }
+embassy-crypto = { git = "https://github.com/embassy-rs/embassy", rev = "5bef063886cbc9cf30360e1d1f24520d41781c0f", optional = true }
 
 [dev-dependencies]
-embassy-crypto-test = { git = "https://github.com/embassy-rs/embassy", rev = "69208416f8" }
+embassy-crypto-test = { git = "https://github.com/embassy-rs/embassy", rev = "5bef063886cbc9cf30360e1d1f24520d41781c0f", features = ["rng"] }
 qemu-test = "0.1.0"
 
 # Host-only dev-dependencies. These transitively require std (getrandom via
@@ -136,4 +136,3 @@ debug = true
 
 [profile.dev.build-override]
 opt-level = 3
-
