@@ -67,8 +67,14 @@ fn p384_point_to_canonical(p: &PointP384) -> Option<P384Point> {
 }
 
 #[inline]
-#[allow(dead_code)]
 fn be_to_limbs_256(b: &[u8; 32], out: &mut [u32; 8]) {
+    for (i, chunk) in b.rchunks_exact(4).enumerate() {
+        out[i] = u32::from_be_bytes(chunk.try_into().unwrap());
+    }
+}
+
+#[inline]
+fn be_to_limbs_384(b: &[u8; 48], out: &mut [u32; 12]) {
     for (i, chunk) in b.rchunks_exact(4).enumerate() {
         out[i] = u32::from_be_bytes(chunk.try_into().unwrap());
     }
@@ -450,6 +456,13 @@ impl drv::P256Arith for McuCryptoAsmDriver {
         p256_point_to_canonical(p)
     }
 
+    fn point_decompress(x: &[u8; 32], y_is_odd: bool) -> Option<P256Point> {
+        let mut xi = [0u32; 8];
+        be_to_limbs_256(x, &mut xi);
+        let p = PointP256::decompress(&P256_CURVE, &xi, y_is_odd)?;
+        p256_point_to_canonical(&p)
+    }
+
     fn point_is_identity(p: &Self::Point) -> bool {
         p.is_identity()
     }
@@ -550,6 +563,13 @@ impl drv::P384Arith for McuCryptoAsmDriver {
 
     fn point_to_affine(p: &Self::Point) -> Option<P384Point> {
         p384_point_to_canonical(p)
+    }
+
+    fn point_decompress(x: &[u8; 48], y_is_odd: bool) -> Option<P384Point> {
+        let mut xi = [0u32; 12];
+        be_to_limbs_384(x, &mut xi);
+        let p = PointP384::decompress(&P384_CURVE, &xi, y_is_odd)?;
+        p384_point_to_canonical(&p)
     }
 
     fn point_is_identity(p: &Self::Point) -> bool {
