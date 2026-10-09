@@ -358,6 +358,7 @@ pqcrystals_dilithium_ntt:
     //unbind aliases
     .unreq ptr_p
     .unreq ptr_zeta
+    .unreq zeta
     .unreq qinv
     .unreq q
     .unreq cntr
@@ -574,6 +575,7 @@ pqcrystals_dilithium_invntt_tomont:
     //unbind aliases
     .unreq ptr_p
     .unreq ptr_zeta
+    .unreq zeta
     .unreq qinv
     .unreq q
     .unreq cntr
@@ -674,6 +676,20 @@ pqcrystals_dilithium_asm_pointwise_montgomery:
     str.w res, [c_ptr]
 
     pop.w {r4-r11, pc}
+    .unreq c_ptr
+    .unreq a_ptr
+    .unreq b_ptr
+    .unreq qinv
+    .unreq q
+    .unreq pa0
+    .unreq pa1
+    .unreq pa2
+    .unreq pb0
+    .unreq pb1
+    .unreq pb2
+    .unreq tmp0
+    .unreq ctr
+    .unreq res
 .size pqcrystals_dilithium_asm_pointwise_montgomery, .-pqcrystals_dilithium_asm_pointwise_montgomery
 
 // void asm_pointwise_acc_montgomery(int32_t c[N], const int32_t a[N], const int32_t b[N]);
@@ -740,6 +756,20 @@ pqcrystals_dilithium_asm_pointwise_acc_montgomery:
     str.w res, [c_ptr]
 
     pop.w {r4-r11, pc}
+    .unreq c_ptr
+    .unreq a_ptr
+    .unreq b_ptr
+    .unreq qinv
+    .unreq q
+    .unreq pa0
+    .unreq pa1
+    .unreq pa2
+    .unreq pb0
+    .unreq pb1
+    .unreq pb2
+    .unreq tmp0
+    .unreq ctr
+    .unreq res
 .size pqcrystals_dilithium_asm_pointwise_acc_montgomery, .-pqcrystals_dilithium_asm_pointwise_acc_montgomery
 .syntax unified
 .thumb
