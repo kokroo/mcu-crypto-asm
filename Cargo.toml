@@ -3,7 +3,14 @@ name = "mcu-crypto-asm"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.85"
-license = "BSD-3-Clause"
+# The crate's original code is BSD-3-Clause. Vendored/ported assembly retains
+# its upstream licenses (see README "Attribution & Provenance Matrix" and
+# NOTICE). Several components are dual-licensed (e.g. Apache-2.0 OR OpenSSL,
+# CC0 OR Apache-2.0); every component has at least one of the four licenses
+# below available, so the mandatory set is the AND of these four. The OpenSSL
+# and Cryptogams BSD licenses and public-domain dedications appear only as
+# alternatives and have no additional obligations — see LICENSE for details.
+license = "BSD-3-Clause AND BSD-2-Clause AND MIT AND Apache-2.0"
 description = "Hand-written assembly cryptography for 32-bit microcontrollers: constant-time, no_std, Cortex-M and Xtensa. Currently P-256 and P-384."
 repository = "https://github.com/kokroo/mcu-crypto-asm"
 categories = ["cryptography", "no-std", "embedded"]

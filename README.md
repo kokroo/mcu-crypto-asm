@@ -264,9 +264,11 @@ See [TODO.md](TODO.md) for our comprehensive cross-architecture algorithm optimi
 
 ## Licence
 
-This project is licensed under the **BSD 3-Clause License**. See [LICENSE](LICENSE) for the full license text.
+This project is licensed under the **BSD 3-Clause License**. The distributed crate also contains third-party components ported from upstream projects, which retain their own licenses (**BSD-2-Clause, MIT, Apache-2.0**, with several components dual-licensed under alternatives such as **CC0-1.0, Public Domain, the OpenSSL License, and the Cryptogams BSD License** — see the [Attribution & Provenance Matrix](#attribution--provenance-matrix) above for the per-component breakdown). The crate's SPDX license expression is `BSD-3-Clause AND BSD-2-Clause AND MIT AND Apache-2.0`. All applicable licenses must be complied with when redistributing; for dual-licensed components you may choose any one of the offered licenses. See [LICENSE](LICENSE) for the full license texts.
+
+All licenses are permissive, so the crate may be used in proprietary and copyleft projects alike; note that Apache-2.0 is compatible with GPL-3.0 but not GPL-2.0-only works.
 
 ### Mandatory Attribution
-The BSD 3-Clause license strictly mandates that copyright notices and attribution to **Shiv Kokroo**, project contributors, and original upstream authors must be retained and reproduced in **both source code distributions and compiled binary distributions** (such as firmware images, embedded binaries, SDKs, and accompanying documentation) no matter how it is redistributed.
+All applicable licenses strictly mandate that copyright notices and attribution to **Shiv Kokroo**, project contributors, and original upstream authors must be retained and reproduced in **both source code distributions and compiled binary distributions** (such as firmware images, embedded binaries, SDKs, and accompanying documentation) no matter how it is redistributed.
 
 For detailed attribution of original works and third-party upstream components, see [NOTICE](NOTICE) and [AUTHORS.md](AUTHORS.md).
