@@ -46,11 +46,6 @@ cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
 semihosting = { version = "0.1.25", features = ["stdio", "openocd-semihosting"] }
 xtensa-lx-rt = "0.23"
 
-[patch.crates-io]
-qemu-test = { git = "https://github.com/xoviat/cargo-qemu-test" }
-qemu-test-macros = { git = "https://github.com/xoviat/cargo-qemu-test" }
-
-
 # Dual-mode (host libtest-mimic / embedded-test under QEMU); driven by
 # `cargo qtest --target thumbv7em-none-eabihf --features embassy-all`.
 [[test]]
