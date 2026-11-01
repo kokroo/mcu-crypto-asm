@@ -92,7 +92,14 @@ jobs:
           - riscv32imac-unknown-none-elf
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y qemu-system-arm qemu-system-riscv32
+      - name: install QEMU (arm + riscv)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-arm
+          # Ubuntu 26.04 (ubuntu-latest) ships qemu-system-riscv32 as a virtual
+          # package with no installation candidate; install a real provider
+          # instead and keep the old package name as a fallback for older images.
+          sudo apt-get install -y qemu-system-riscv || sudo apt-get install -y qemu-system-riscv32
       - run: rustup target add ${{ matrix.target }}
       - name: cache rust
         id: cargo-cache
