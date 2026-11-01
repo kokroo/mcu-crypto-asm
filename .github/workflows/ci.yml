@@ -104,7 +104,7 @@ jobs:
             ~/.cargo/git
           key: ${{ runner.os }}-cargo-bin
       - name: install cargo-qtest
-        run: cargo install --git https://github.com/xoviat/cargo-qemu-test --force
+        run: cargo install cargo-qemu-test --version 0.4.0 --locked --force
       - name: run suites under QEMU (one fresh boot per test)
         run: |
           cargo qtest --target ${{ matrix.target }} --release --features embassy-all --test embassy_suites --verbose
@@ -142,7 +142,7 @@ jobs:
       - name: Add QEMU to PATH
         run: echo "/opt/qemu-xtensa" >> "$GITHUB_PATH"
       - name: Install cargo-qtest
-        run: cargo install --git https://github.com/xoviat/cargo-qemu-test --force
+        run: cargo install cargo-qemu-test --version 0.4.0 --locked --force
       - name: Cross-compile check for ESP32 (LX6)
         env:
           CARGO_UNSTABLE_BUILD_STD: core
